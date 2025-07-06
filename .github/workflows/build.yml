@@ -1,0 +1,43 @@
+name: Build and Upload Artifacts
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24" # Use a recent stable Go version
+
+      - name: Build
+        run: |
+          BINARY_NAME=localgo-cli
+          BUILD_DIR=cmd/localgo-cli
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          go build -ldflags "-X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev") -X main.GitCommit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") -X main.BuildDate=$(date -u +'%Y-%m-%d_%H:%M:%S')" -o $BINARY_NAME ./$BUILD_DIR
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: localgo-cli-${{ matrix.os }}
+          path: |
+            localgo-cli*
+            !localgo-cli*.test
