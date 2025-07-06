@@ -1,6 +1,6 @@
 # LocalGo
 
-A professional-grade Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
+A Go implementation of the LocalSend protocol for secure, cross-platform file sharing.
 
 [![Go Version](https://img.shields.io/badge/Go-1.19+-blue.svg)](https://golang.org)
 [![Protocol](https://img.shields.io/badge/Protocol-LocalSend%20v2.1-green.svg)](https://github.com/localsend/protocol)
@@ -14,20 +14,6 @@ A professional-grade Go implementation of the LocalSend v2.1 protocol for secure
 - ✅ **Multi-Platform Discovery** - Multicast UDP + HTTP fallback for reliable device detection
 - ✅ **Cross-Platform** - Works on Linux, macOS, and Windows
 - ✅ **High Performance** - Efficient file transfer with progress tracking
-
-### Professional CLI Experience
-- 🎯 **Comprehensive Help System** - Detailed help for every command with examples
-- 📊 **Multiple Output Formats** - Human-readable tables, JSON for scripting, quiet mode
-- ⚙️ **Flexible Configuration** - Environment variables, config files, command-line flags
-- 🔧 **System Integration** - Systemd service support with automatic installation
-- 💻 **Bash Completion** - Intelligent tab completion for commands, flags, and file paths
-- 🤖 **Automation Ready** - Perfect for scripts, CI/CD, and headless environments
-
-### Enterprise Features
-- 🛡️ **Security Hardened** - PIN protection, certificate validation, secure defaults
-- 📈 **Production Ready** - Systemd service, logging, monitoring support
-- 🔄 **Zero Configuration** - Works out of the box with sensible defaults
-- 🌐 **Network Resilient** - Handles NAT, firewalls, and complex network topologies
 
 ## 📦 Quick Start
 
@@ -453,8 +439,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🔗 Related Projects
 
 - [LocalSend](https://github.com/localsend/localsend) - Original Flutter implementation
-- [LocalSend CLI](https://github.com/localsend/localsend_cli) - Official CLI implementation
+- [LocalSend_rs](https://github.com/notjedi/localsend-rs) - A cli Rust implementation
 
 ---
-
-**LocalGo** - Professional file sharing for the modern era. Built with ❤️ in Go.
+thank you
