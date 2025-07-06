@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bet/localgo/pkg/config"
-	"github.com/bet/localgo/pkg/httputil"
-	"github.com/bet/localgo/pkg/model"
-	"github.com/bet/localgo/pkg/server/services"
+	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )

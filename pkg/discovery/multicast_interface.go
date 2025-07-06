@@ -4,7 +4,7 @@ package discovery
 import (
 	"context"
 
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/model"
 )
 
 // MulticastDiscoverer is an interface for multicast discovery.

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bet/localgo/pkg/config" // Import config
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/config" // Import config
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 

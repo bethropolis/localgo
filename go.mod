@@ -1,4 +1,4 @@
-module github.com/bet/localgo
+module github.com/bethropolis/localgo
 
 go 1.24
 

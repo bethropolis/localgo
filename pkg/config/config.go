@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bet/localgo/pkg/crypto"
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/crypto"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 

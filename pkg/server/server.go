@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bet/localgo/pkg/config"
-	"github.com/bet/localgo/pkg/server/handlers"
-	"github.com/bet/localgo/pkg/server/services"
+	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/server/handlers"
+	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 )

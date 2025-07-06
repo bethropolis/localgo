@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/bet/localgo/pkg/config"
-	"github.com/bet/localgo/pkg/httputil"
-	"github.com/bet/localgo/pkg/model"
-	"github.com/bet/localgo/pkg/server/services"
-	"github.com/bet/localgo/pkg/storage"
+	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/server/services"
+	"github.com/bethropolis/localgo/pkg/storage"
 	"github.com/sirupsen/logrus"
 )
 

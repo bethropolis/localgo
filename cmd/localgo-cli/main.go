@@ -10,14 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bet/localgo/pkg/cli"
-	"github.com/bet/localgo/pkg/config"
-	"github.com/bet/localgo/pkg/discovery"
-	"github.com/bet/localgo/pkg/logging"
-	"github.com/bet/localgo/pkg/model"
-	"github.com/bet/localgo/pkg/network"
-	"github.com/bet/localgo/pkg/send"
-	"github.com/bet/localgo/pkg/server"
+	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/logging"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
+	"github.com/bethropolis/localgo/pkg/send"
+	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/sirupsen/logrus"
 )
 

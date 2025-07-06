@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/google/uuid"
 )
 

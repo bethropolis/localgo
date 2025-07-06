@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/sirupsen/logrus"
 )
 

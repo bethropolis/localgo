@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bet/localgo/pkg/model"
-	"github.com/bet/localgo/pkg/network"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/sirupsen/logrus"
 )
 

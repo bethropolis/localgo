@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/model"
 )
 
 // OutputFormat represents the output format type

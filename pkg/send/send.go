@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bet/localgo/pkg/config"
-	"github.com/bet/localgo/pkg/discovery"
-	"github.com/bet/localgo/pkg/model"
-	"github.com/bet/localgo/pkg/network"
+	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )

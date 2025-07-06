@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bet/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/stretchr/testify/assert"
 )
 
