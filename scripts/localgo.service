@@ -1,0 +1,118 @@
+[Unit]
+Description=LocalGo - LocalSend v2.1 Protocol Implementation
+Documentation=https://github.com/bet/localgo
+After=network.target network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=localgo
+Group=localgo
+ExecStart=/usr/local/bin/localgo-cli serve
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=localgo
+
+# Environment configuration
+EnvironmentFile=-/etc/localgo/localgo.env
+WorkingDirectory=/var/lib/localgo
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/localgo /var/log/localgo
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+PrivateDevices=true
+
+# Network access
+IPAccounting=true
+IPAddressAllow=localhost
+IPAddressAllow=10.0.0.0/8
+IPAddressAllow=172.16.0.0/12
+IPAddressAllow=192.168.0.0/16
+IPAddressAllow=169.254.0.0/16
+IPAddressAllow=224.0.0.0/4
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryAccounting=true
+MemoryMax=512M
+
+# Capabilities
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+
+# Installation Instructions:
+#
+# 1. Copy this file to /etc/systemd/system/localgo.service
+#    sudo cp localgo.service /etc/systemd/system/
+#
+# 2. Create localgo user and group:
+#    sudo useradd --system --home /var/lib/localgo --shell /bin/false localgo
+#    sudo usermod -a -G localgo localgo
+#
+# 3. Create necessary directories:
+#    sudo mkdir -p /var/lib/localgo /var/log/localgo /etc/localgo
+#    sudo chown localgo:localgo /var/lib/localgo /var/log/localgo
+#    sudo chmod 755 /var/lib/localgo /var/log/localgo
+#
+# 4. Install the LocalGo binary:
+#    sudo cp localgo-cli /usr/local/bin/
+#    sudo chmod +x /usr/local/bin/localgo-cli
+#
+# 5. Create configuration file:
+#    sudo cp localgo.env.example /etc/localgo/localgo.env
+#    sudo chown root:localgo /etc/localgo/localgo.env
+#    sudo chmod 640 /etc/localgo/localgo.env
+#
+# 6. Edit configuration as needed:
+#    sudo editor /etc/localgo/localgo.env
+#
+# 7. Initialize security context:
+#    sudo -u localgo localgo-cli info
+#
+# 8. Enable and start the service:
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable localgo
+#    sudo systemctl start localgo
+#
+# 9. Check service status:
+#    sudo systemctl status localgo
+#    sudo journalctl -u localgo -f
+#
+# Configuration:
+# Edit /etc/localgo/localgo.env to customize settings:
+# - LOCALSEND_ALIAS="Server Name"
+# - LOCALSEND_PORT=53317
+# - LOCALSEND_DOWNLOAD_DIR="/var/lib/localgo/downloads"
+# - LOCALSEND_PIN="optional_pin"
+#
+# Useful commands:
+# sudo systemctl start localgo     # Start service
+# sudo systemctl stop localgo      # Stop service
+# sudo systemctl restart localgo   # Restart service
+# sudo systemctl reload localgo    # Reload configuration
+# sudo systemctl status localgo    # Check status
+# sudo journalctl -u localgo       # View logs
+# sudo journalctl -u localgo -f    # Follow logs
+#
+# Troubleshooting:
+# - Check logs: sudo journalctl -u localgo --since "1 hour ago"
+# - Test binary: sudo -u localgo /usr/local/bin/localgo-cli info
+# - Check permissions: ls -la /var/lib/localgo
+# - Verify network: sudo netstat -tlnp | grep localgo-cli
+# - Check firewall: sudo ufw status

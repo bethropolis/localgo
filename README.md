@@ -172,7 +172,7 @@ Each command supports specific flags:
 # Serve command
 localgo-cli serve --port 8080 --http --pin 123456 --alias "Server" --dir "/tmp" --verbose
 
-# Send command  
+# Send command
 localgo-cli send --file data.zip --to "Device" --port 8080 --timeout 60 --alias "Sender"
 
 # Discovery commands
@@ -359,11 +359,11 @@ localgo-cli serve --verbose
     # Start receiver
     localgo-cli serve --http --port 8080 &
     sleep 2
-    
+
     # Send test file
     echo "test data" > test.txt
     localgo-cli send --file test.txt --to "$(localgo-cli info --json | jq -r '.alias')"
-    
+
     # Verify transfer
     test -f downloads/test.txt
 ```
@@ -377,7 +377,7 @@ localgo-cli serve --verbose
 while true; do
     echo "=== LocalGo Network Scan $(date) ==="
     localgo-cli scan --json --timeout 10 | jq -r '
-        .devices[] | 
+        .devices[] |
         "\(.alias) (\(.deviceType)) - \(.ip):\(.port) - \(.protocol)"
     '
     echo
@@ -457,4 +457,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**LocalGo** - Professional file sharing for the modern era. Built with ❤️ in Go.# localgo
+**LocalGo** - Professional file sharing for the modern era. Built with ❤️ in Go.

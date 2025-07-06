@@ -1,0 +1,41 @@
+# Binaries
+/localgo-cli
+*.exe
+*.out
+*.test
+/tmp/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+*.a
+*.o
+
+# Output directories
+.localgo_security/
+downloads/
+scripts/*.log
+
+# Dependency directories (if vendoring)
+vendor/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.coverprofile
+coverage.*
+
+# AI files
+GEMINI.md
+FIX.md
