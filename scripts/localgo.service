@@ -1,6 +1,6 @@
 [Unit]
 Description=LocalGo - LocalSend v2.1 Protocol Implementation
-Documentation=https://github.com/bet/localgo
+Documentation=https://github.com/bethropolis/localgo
 After=network.target network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0

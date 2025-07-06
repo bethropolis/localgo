@@ -44,7 +44,7 @@ sudo ./scripts/install.sh --mode system --service --create-user
 
 **Option 2: Manual build**
 ```bash
-git clone https://github.com/bet/localgo.git
+git clone https://github.com/bethropolis/localgo.git
 cd localgo
 make build
 ```
