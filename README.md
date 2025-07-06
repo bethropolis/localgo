@@ -35,6 +35,11 @@ cd localgo
 make build
 ```
 
+**Option 3: Go global install**
+```bash
+go install github.com/bethropolis/localgo/cmd/localgo-cli@latest
+```
+
 ### Basic Usage
 
 ```bash
