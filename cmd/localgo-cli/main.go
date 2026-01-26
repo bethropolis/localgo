@@ -14,6 +14,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
@@ -58,7 +59,7 @@ func main() {
 
 	// Parse arguments
 	if len(os.Args) < 2 {
-		app.showUsage()
+		help.ShowMainUsage()
 		os.Exit(1)
 	}
 
@@ -68,13 +69,18 @@ func main() {
 	switch commandName {
 	case "help", "-h", "--help":
 		if len(os.Args) > 2 {
-			app.showCommandHelp(os.Args[2])
+			if cmdHelp := help.GetCommandHelp(os.Args[2]); cmdHelp != nil {
+				help.ShowCommandHelp(*cmdHelp)
+			} else {
+				fmt.Printf("Unknown command: %s\n", os.Args[2])
+				help.ShowMainUsage()
+			}
 		} else {
-			app.showUsage()
+			help.ShowMainUsage()
 		}
 		return
 	case "version", "-v", "--version":
-		app.showVersion()
+		help.ShowVersion(Version, GitCommit, BuildDate)
 		return
 	}
 
@@ -92,7 +98,7 @@ func main() {
 	cmd, exists := app.commands[commandName]
 	if !exists {
 		logrus.Errorf("Unknown command: %s", commandName)
-		app.showUsage()
+		help.ShowMainUsage()
 		os.Exit(1)
 	}
 
@@ -222,72 +228,7 @@ func (app *Application) registerCommands() {
 	}
 }
 
-func (app *Application) showUsage() {
-	fmt.Printf(`LocalGo CLI - LocalSend v2.1 Protocol Implementation
-
-USAGE:
-    localgo-cli <COMMAND> [OPTIONS]
-
-COMMANDS:
-    serve      Start the LocalGo server to receive files
-    discover   Discover devices using multicast
-    scan       Scan network for devices using HTTP
-    send       Send a file to another device
-    info       Show device information
-    help       Show help information
-    version    Show version information
-
-OPTIONS:
-    -h, --help     Show help
-    -v, --version  Show version
-
-EXAMPLES:
-    localgo-cli serve --port 8080 --http
-    localgo-cli discover --timeout 10
-    localgo-cli send --file document.pdf --to MyPhone
-    localgo-cli help send
-
-For more information about a specific command, use:
-    localgo-cli help <COMMAND>
-
-Environment Variables:
-    LOCALSEND_ALIAS          Device alias
-    LOCALSEND_PORT           Default port
-    LOCALSEND_DOWNLOAD_DIR   Download directory
-    LOCALSEND_MULTICAST_GROUP Multicast group address
-
-`)
-}
-
-func (app *Application) showCommandHelp(commandName string) {
-	cmd, exists := app.commands[commandName]
-	if !exists {
-		fmt.Printf("Unknown command: %s\n", commandName)
-		app.showUsage()
-		return
-	}
-
-	fmt.Printf("LocalGo CLI - %s\n\n", cmd.Description)
-	fmt.Printf("USAGE:\n    %s\n\n", cmd.Usage)
-
-	if len(cmd.Examples) > 0 {
-		fmt.Printf("EXAMPLES:\n")
-		for _, example := range cmd.Examples {
-			fmt.Printf("    %s\n", example)
-		}
-		fmt.Printf("\n")
-	}
-
-	fmt.Printf("OPTIONS:\n")
-	cmd.Flags.PrintDefaults()
-}
-
-func (app *Application) showVersion() {
-	fmt.Printf("LocalGo CLI %s\n", Version)
-	fmt.Printf("Git Commit: %s\n", GitCommit)
-	fmt.Printf("Build Date: %s\n", BuildDate)
-	fmt.Printf("Protocol: LocalSend v2.1\n")
-}
+// Help methods removed - now using pkg/help module
 
 func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool) error {
 	// Set log level
@@ -362,7 +303,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
-	
+
 	// Create HTTPDiscoverer for backchannel (HTTP response to multicast)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
