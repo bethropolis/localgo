@@ -94,3 +94,4 @@ fi
 - [Configuration Guide](CONFIGURATION.md) - Deep dive into flags and env vars.
 - [CLI Reference](CLI_REFERENCE.md) - Full command documentation.
 - [Library Guide](LIBRARY_GUIDE.md) - Embed LocalGo in your own Go apps.
+- [Code Walkthrough](CODE_WALKTHROUGH.md) - Step-by-step guide to understand the codebase.
