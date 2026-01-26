@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -53,19 +53,38 @@ func waitForDevice(ctx context.Context, alias string, port int, timeout time.Dur
 }
 
 func TestSendFile(t *testing.T) {
+	// Construct binary name based on OS
+	binName := "localgo-cli"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	
+	// Create temp dir for binary
+	tmpBinDir, err := os.MkdirTemp("", "localgo-bin-")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tmpBinDir)
+	
+	binPath := filepath.Join(tmpBinDir, binName)
+
 	// Build the binary first
-	buildCmd := exec.Command("go", "build", "-o", "/tmp/localgo-cli", "./cmd/localgo-cli")
-	buildCmd.Dir = "../.." // Adjust based on where the test is run from
-	err := buildCmd.Run()
-	assert.NoError(t, err, "Failed to build localgo-cli binary")
+	// We assume we are running from cmd/localgo-cli directory or root.
+	// If running via `go test ./...` from root, WD is the package dir.
+	
+	wd, _ := os.Getwd()
+	
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	buildCmd.Dir = wd // Build the package in current directory
+	
+	output, err := buildCmd.CombinedOutput()
+	assert.NoError(t, err, "Failed to build localgo-cli binary: %s", string(output))
 
 	// Create a temporary directory for downloads
-	tmpDownloadsDir, err := ioutil.TempDir("", "localgo-downloads-")
+	tmpDownloadsDir, err := os.MkdirTemp("", "localgo-downloads-")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tmpDownloadsDir)
 
 	// 1. Create a temporary file to send
-	tmpfile, err := ioutil.TempFile("", "testfile.txt")
+	tmpfile, err := os.CreateTemp("", "testfile.txt")
 	assert.NoError(t, err)
 	defer os.Remove(tmpfile.Name())
 
@@ -78,16 +97,23 @@ func TestSendFile(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	serverCmd := exec.CommandContext(ctx, "/tmp/localgo-cli", "serve", "--port", "53317", "--http")
+	serverCmd := exec.CommandContext(ctx, binPath, "serve", "--port", "53317", "--http")
 	serverCmd.Env = append(os.Environ(), fmt.Sprintf("LOCALSEND_DOWNLOAD_DIR=%s", tmpDownloadsDir), "LOCALSEND_ALIAS=GoDevice")
-	serverCmd.Stdout = os.Stdout
-	serverCmd.Stderr = os.Stderr
+	// Clean env to avoid interference? Maybe not needed.
+	
+	// Separate stdout/stderr for debugging if needed, or pipe to test output
+	// serverCmd.Stdout = os.Stdout 
+	// serverCmd.Stderr = os.Stderr
 
 	err = serverCmd.Start()
 	assert.NoError(t, err)
+	
+	// Ensure we kill the process
 	defer func() {
-		serverCmd.Process.Kill()
-		serverCmd.Wait()
+		if serverCmd.Process != nil {
+			_ = serverCmd.Process.Kill()
+			_ = serverCmd.Wait()
+		}
 	}()
 
 	// Wait for the server to be discoverable via HTTP
@@ -98,13 +124,11 @@ func TestSendFile(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// 3. Use the send command to send the file to the server
-	sendCmd := exec.CommandContext(ctx, "/tmp/localgo-cli", "send", "--file", tmpfile.Name(), "--to", "GoDevice", "--port", "53317")
+	sendCmd := exec.CommandContext(ctx, binPath, "send", "--file", tmpfile.Name(), "--to", "GoDevice", "--port", "53317")
 	sendCmd.Env = append(os.Environ(), "LOCALSEND_ALIAS=GoSender")
-	sendCmd.Stdout = os.Stdout
-	sendCmd.Stderr = os.Stderr
-
-	err = sendCmd.Run()
-	assert.NoError(t, err, "Send command failed")
+	
+	output, err = sendCmd.CombinedOutput()
+	assert.NoError(t, err, "Send command failed: %s", string(output))
 
 	// Allow some time for the file transfer to complete
 	time.Sleep(2 * time.Second)
@@ -113,7 +137,7 @@ func TestSendFile(t *testing.T) {
 	receivedFilePath := filepath.Join(tmpDownloadsDir, filepath.Base(tmpfile.Name()))
 	assert.FileExists(t, receivedFilePath)
 
-	receivedContent, err := ioutil.ReadFile(receivedFilePath)
+	receivedContent, err := os.ReadFile(receivedFilePath)
 	assert.NoError(t, err)
 	assert.Equal(t, content, receivedContent)
 }

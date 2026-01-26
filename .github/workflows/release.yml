@@ -69,10 +69,22 @@ jobs:
         with:
           path: artifacts
 
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Flatten Artifacts
+        run: |
+          mkdir dist
+          find artifacts -type f -exec cp '{}' dist/ \;
+          ls -R dist
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: artifacts/**/*
+          files: dist/*
           draft: false
           prerelease: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
