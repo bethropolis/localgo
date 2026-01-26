@@ -451,10 +451,14 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [LocalSend Project](https://github.com/localsend/localsend) - For the excellent protocol specification
 - [LocalSend Protocol](https://github.com/localsend/protocol) - For detailed protocol documentation
 
+
 ## 🔗 Related Projects
 
 - [LocalSend](https://github.com/localsend/localsend) - Original Flutter implementation
 - [LocalSend_rs](https://github.com/notjedi/localsend-rs) - A cli Rust implementation
+
+> [!NOTE]
+> This project was developed with the assistance of AI tools to enhance code quality and documentation.
 
 ---
 thank you
