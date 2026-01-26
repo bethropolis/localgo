@@ -37,8 +37,14 @@ LABEL org.opencontainers.image.title="LocalGo" \
 
 WORKDIR /app
 
-# Install runtime dependencies (ca-certificates for HTTPS)
-RUN apk add --no-cache ca-certificates tzdata
+# Install runtime dependencies:
+# 1. ca-certificates for HTTPS
+# 2. tzdata for timezones
+# 3. su-exec for stepping down from root to localgo user
+RUN apk add --no-cache ca-certificates tzdata su-exec
+
+# create the user
+RUN adduser -D -u 1000 -h /app localgo
 
 # Copy binary from builder
 COPY --from=builder /app/localgo-cli /usr/local/bin/localgo-cli

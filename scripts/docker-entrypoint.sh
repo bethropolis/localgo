@@ -2,28 +2,33 @@
 set -e
 
 # Docker entrypoint script for LocalGo
-# Automatically fixes volume permissions on startup
-
 echo "LocalGo Docker Entrypoint"
 echo "========================="
 
+# define user and group ids
+PUID=${PUID:-1000}
+PGID=${PGID:-1000}
+
+# Update localgo user UID/GID if they don't match environment variables
+# This allows matching host permissions
+if [ "$(id -u localgo)" != "$PUID" ]; then
+    sed -i "s/^localgo:x:[0-9]*:[0-9]*:/localgo:x:$PUID:$PGID:/" /etc/passwd
+    sed -i "s/^localgo:x:[0-9]*:/localgo:x:$PGID:/" /etc/group
+fi
+
 # Fix permissions for mounted volumes (running as root)
-# We use chmod 777 to ensure the localgo user (and host user) can read/write
-# regardless of UID mismatches between host and container
+echo "Fixing permissions (UID:$PUID GID:$PGID)..."
+
 if [ -d "/app/downloads" ]; then
-    echo "Fixing permissions for /app/downloads..."
-    chown -R localgo:localgo /app/downloads || echo "  Warning: chown failed for /app/downloads"
-    chmod -R 777 /app/downloads || echo "  Warning: chmod failed for /app/downloads"
+    chown -R localgo:localgo /app/downloads
 fi
 
 if [ -d "/app/config" ]; then
-    echo "Fixing permissions for /app/config..."
-    chown -R localgo:localgo /app/config || echo "  Warning: chown failed for /app/config"
-    chmod -R 777 /app/config || echo "  Warning: chmod failed for /app/config"
+    chown -R localgo:localgo /app/config
 fi
 
-echo "Permissions fixed. Starting LocalGo as user 'localgo'..."
+echo "Starting LocalGo as user 'localgo'..."
 echo ""
 
-# Switch to localgo user and execute the command
-exec "$@"
+# Execute the command as the localgo user
+exec su-exec localgo "$@"

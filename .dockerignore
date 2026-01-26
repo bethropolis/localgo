@@ -42,5 +42,6 @@ Thumbs.db
 # CI/CD
 .github/
 
-# Scripts (not needed in container)
-scripts/
+# Scripts
+scripts/*
+!scripts/docker-entrypoint.sh
