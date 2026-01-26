@@ -21,13 +21,28 @@ A Go implementation of the LocalSend protocol for secure, cross-platform file sh
 
 ### Installation
 
-**Option 1: One-command installation (Recommended)**
+**Option 1: Automatic installation (Recommended)**
 ```bash
-# User installation
+# Default user installation (no sudo required)
 ./scripts/install.sh
 
-# System-wide with service
+# User installation with systemd service (auto-starts on login)
+./scripts/install.sh --mode user --service
+
+# System-wide installation (requires sudo)
 sudo ./scripts/install.sh --mode system --service --create-user
+```
+
+### Uninstallation
+
+To remove LocalGo, run the uninstall script:
+
+```bash
+# Uninstall (will ask for confirmation)
+./scripts/uninstall.sh
+
+# Remove everything (config, data, user, etc.)
+./scripts/uninstall.sh --remove-config --remove-data
 ```
 
 **Option 2: Manual build**
@@ -183,8 +198,22 @@ sudo ./scripts/install.sh --mode system --service --create-user
 
 ### Service Management
 
+**User Service:**
 ```bash
-# Enable and start service
+# Enable and start
+systemctl --user enable localgo
+systemctl --user start localgo
+
+# check status
+systemctl --user status localgo
+
+# View logs
+journalctl --user -u localgo -f
+```
+
+**System Service:**
+```bash
+# Enable and start
 sudo systemctl enable localgo
 sudo systemctl start localgo
 
@@ -193,9 +222,6 @@ sudo systemctl status localgo
 
 # View logs
 sudo journalctl -u localgo -f
-
-# Restart service
-sudo systemctl restart localgo
 ```
 
 ### Service Configuration
@@ -342,23 +368,6 @@ export LOCALSEND_LOG_LEVEL="debug"
 localgo-cli serve --verbose
 ```
 
-### CI/CD Integration
-
-```yaml
-# GitHub Actions example
-- name: Test file transfer
-  run: |
-    # Start receiver
-    localgo-cli serve --http --port 8080 &
-    sleep 2
-
-    # Send test file
-    echo "test data" > test.txt
-    localgo-cli send --file test.txt --to "$(localgo-cli info --json | jq -r '.alias')"
-
-    # Verify transfer
-    test -f downloads/test.txt
-```
 
 ### Network Monitoring
 

@@ -168,7 +168,8 @@ safe_remove_dir() {
 detect_installation() {
     local system_binary="$SYSTEM_BIN_DIR/$BINARY_NAME"
     local user_binary="$USER_BIN_DIR/$BINARY_NAME"
-    local service_file="$SYSTEM_SERVICE_FILE"
+    local system_service="$SYSTEM_SERVICE_FILE"
+    local user_service="$HOME/.config/systemd/user/$SERVICE_NAME.service"
 
     local found_system=false
     local found_user=false
@@ -182,7 +183,7 @@ detect_installation() {
         found_user=true
     fi
 
-    if [[ -f "$service_file" ]]; then
+    if [[ -f "$system_service" ]] || [[ -f "$user_service" ]]; then
         found_service=true
     fi
 
@@ -191,33 +192,52 @@ detect_installation() {
 
 # Function to stop and disable service
 remove_service() {
-    if [[ -f "$SYSTEM_SERVICE_FILE" ]]; then
-        print_status "Found systemd service, removing..."
-
+    # System Service
+    if [[ -f "$SYSTEM_SERVICE_FILE" ]] || systemctl list-unit-files | grep -q "^$SERVICE_NAME.service"; then
+        print_status "Found system-wide service, removing..."
         if [[ "$DRY_RUN" != true ]]; then
-            # Stop service if running
-            if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-                print_action "Stop service: $SERVICE_NAME"
-                sudo systemctl stop "$SERVICE_NAME"
-            fi
-
-            # Disable service if enabled
-            if systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null; then
-                print_action "Disable service: $SERVICE_NAME"
-                sudo systemctl disable "$SERVICE_NAME"
-            fi
+            systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null && sudo systemctl stop "$SERVICE_NAME"
+            systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && sudo systemctl disable "$SERVICE_NAME"
         fi
-
-        # Remove service file
         safe_remove_file "$SYSTEM_SERVICE_FILE" true
+        [[ "$DRY_RUN" != true ]] && { sudo systemctl daemon-reload; sudo systemctl reset-failed; }
+        print_success "System service removed"
+    fi
 
+    # User Service
+    local systemd_config_home="$HOME/.config"
+    if command -v systemctl &>/dev/null; then
+         local systemd_env
+         systemd_env=$(systemctl --user show-environment 2>/dev/null)
+         
+         local sys_config=$(echo "$systemd_env" | grep "^XDG_CONFIG_HOME=" | cut -d= -f2)
+         local sys_home=$(echo "$systemd_env" | grep "^HOME=" | cut -d= -f2)
+         
+         if [[ -n "$sys_config" ]]; then
+             systemd_config_home="$sys_config"
+         elif [[ -n "$sys_home" ]]; then
+             systemd_config_home="$sys_home/.config"
+         fi
+    fi
+
+    local user_service_file="$systemd_config_home/systemd/user/$SERVICE_NAME.service"
+    if [[ -f "$user_service_file" ]] || systemctl --user list-unit-files | grep -q "^$SERVICE_NAME.service"; then
+        print_status "Found user-mode service, removing..."
         if [[ "$DRY_RUN" != true ]]; then
-            # Reload systemd
-            print_action "Reload systemd daemon"
-            sudo systemctl daemon-reload
+            systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null && systemctl --user stop "$SERVICE_NAME"
+            systemctl --user is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && systemctl --user disable "$SERVICE_NAME"
         fi
-
-        print_success "Service removed"
+        
+        # Remove the file (using the detected path)
+        if safe_remove_file "$user_service_file" false; then
+             : # Removed
+        else
+             # Fail-safe: try default location if detection mismatch
+             safe_remove_file "$HOME/.config/systemd/user/$SERVICE_NAME.service" false
+        fi
+        
+        [[ "$DRY_RUN" != true ]] && { systemctl --user daemon-reload; systemctl --user reset-failed; }
+        print_success "User service removed"
     fi
 }
 
@@ -242,24 +262,38 @@ remove_binaries() {
     fi
 }
 
-# Function to remove bash completion
+# Function to remove bash/fish completion
 remove_completion() {
     local removed=false
 
-    # Remove system completion
+    # Remove system completion (legacy cleanup)
     if safe_remove_file "$SYSTEM_COMPLETION_DIR/$BINARY_NAME" true; then
         print_success "Removed system bash completion"
         removed=true
     fi
 
-    # Remove user completion
+    # Remove user bash completion
     if safe_remove_file "$USER_COMPLETION_DIR/$BINARY_NAME" false; then
         print_success "Removed user bash completion"
         removed=true
     fi
 
+    # Remove system fish completion (legacy cleanup)
+    local fish_sys_completion="/usr/share/fish/vendor_completions.d/$BINARY_NAME.fish"
+    if safe_remove_file "$fish_sys_completion" true; then
+        print_success "Removed system fish completion"
+        removed=true
+    fi
+
+    # Remove user fish completion
+    local fish_user_completion="$HOME/.config/fish/completions/$BINARY_NAME.fish"
+    if safe_remove_file "$fish_user_completion" false; then
+        print_success "Removed user fish completion"
+        removed=true
+    fi
+
     if [[ "$removed" != true ]]; then
-        print_status "No bash completion found to remove"
+        print_status "No completion files found to remove"
     fi
 }
 
