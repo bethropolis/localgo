@@ -2,7 +2,7 @@
 
 # Variables
 BINARY_NAME = localgo-cli
-BINARY_PATH = /tmp/$(BINARY_NAME)
+BINARY_PATH = ./$(BINARY_NAME)
 BUILD_DIR = cmd/localgo-cli
 GO_FILES = $(shell find . -type f -name '*.go')
 VERSION = $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
