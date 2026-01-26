@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -361,6 +362,11 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
+	
+	// Create HTTPDiscoverer for backchannel (HTTP response to multicast)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	multicast.SetHTTPDiscoverer(httpDiscoverer)
+
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
 
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
@@ -478,14 +484,20 @@ func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jso
 	}
 
 	// Get local IPs
-	ips, err := network.GetLocalIPAddresses()
+	localIPs, err := network.GetLocalIPAddresses()
 	if err != nil {
 		return fmt.Errorf("failed to get local network IPs: %w", err)
 	}
 
+	var ips []net.IP
+	for _, ip := range localIPs {
+		subnetIPs := network.GetSubnetIPs(ip)
+		ips = append(ips, subnetIPs...)
+	}
+
 	if !*quiet {
 		logrus.Infof("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout)
-		logrus.Infof("  Scanning %d IP addresses...", len(ips))
+		logrus.Infof("  Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
 		logrus.Infof("  Protocols: HTTPS first, then HTTP fallback")
 	}
 
