@@ -23,6 +23,7 @@ type MulticastDiscovery struct {
 	handlers     []func(*model.Device)
 	conn         net.PacketConn
 	closed       bool
+	httpDiscoverer *HTTPDiscovery
 }
 
 // MulticastConfig contains settings for multicast discovery
@@ -137,7 +138,28 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 }
 
 // SendDiscoveryResponse sends a response to a specific address
-func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr) error {
+func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, targetDevice *model.Device) error {
+	// 1. Try HTTP Response first (if enabled and device info is available)
+	if md.httpDiscoverer != nil && targetDevice != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		logrus.Debugf("Attempting HTTP response to %s:%d", targetDevice.IP, targetDevice.Port)
+		// We use the RegisterWithDevice method from HTTPDiscovery
+		// Note: We need to make sure the HTTPDiscoverer has the correct DTO set
+		// But wait, HTTPDiscoverer is usually for *scanning* or *sending*.
+		// Here we are *responding* to an announcement.
+		// The response is a REGISTER request to the announcer.
+		
+		_, err := md.httpDiscoverer.RegisterWithDevice(ctx, net.ParseIP(targetDevice.IP), targetDevice.Port)
+		if err == nil {
+			logrus.Printf("Sent discovery response via HTTP to %s:%d", targetDevice.IP, targetDevice.Port)
+			return nil
+		}
+		logrus.Warnf("HTTP response failed: %v. Falling back to UDP.", err)
+	}
+
+	// 2. Fallback to UDP
 	// Create a copy of the DTO with announcement flag unset (response)
 	responseDto := md.dto
 	responseDto.Announce = false
@@ -161,7 +183,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr) err
 		return fmt.Errorf("failed to send discovery response: %w", err)
 	}
 
-	logrus.Printf("Sent discovery response to %s", targetAddr)
+	logrus.Printf("Sent discovery response via UDP to %s", targetAddr)
 	return nil
 }
 
@@ -244,7 +266,8 @@ func (md *MulticastDiscovery) handlePacket(data []byte, addr net.Addr) error {
 
 	// If this is an announcement (not a response), send a response
 	if dto.Announce {
-		if err := md.SendDiscoveryResponse(udpAddr); err != nil {
+		// Pass the discovered device so we can try HTTP response
+		if err := md.SendDiscoveryResponse(udpAddr, device); err != nil {
 			logrus.Printf("Failed to send discovery response: %v", err)
 		}
 	}
@@ -290,6 +313,11 @@ func (md *MulticastDiscovery) GetDevices() []*model.Device {
 // SetDto sets the DTO for the multicast discovery
 func (md *MulticastDiscovery) SetDto(dto model.MulticastDto) {
 	md.dto = dto
+}
+
+// SetHTTPDiscoverer sets the HTTP discovery instance for sending responses
+func (md *MulticastDiscovery) SetHTTPDiscoverer(hd *HTTPDiscovery) {
+	md.httpDiscoverer = hd
 }
 
 // getShortFingerprint returns a short version of the fingerprint for logging.

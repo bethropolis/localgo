@@ -32,6 +32,7 @@ type Config struct {
 	SecurityPath    string                        `json:"-"`
 	PIN             string                        `json:"-"`
 	DownloadDir     string                        `json:"-"`
+	RandomFingerprint string                      `json:"-"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -87,15 +88,16 @@ func LoadConfig() (*Config, error) {
 	deviceType := model.DeviceTypeDesktop
 
 	cfg := &Config{
-		Alias:           alias,
-		Port:            port,
-		MulticastGroup:  multicastGroup,
-		HttpsEnabled:    true,
-		SecurityContext: securityContext,
-		SecurityPath:    securityFilePath,
-		DeviceModel:     &deviceModel,
-		DeviceType:      deviceType,
-		DownloadDir:     downloadDir,
+		Alias:             alias,
+		Port:              port,
+		MulticastGroup:    multicastGroup,
+		HttpsEnabled:      true,
+		SecurityContext:   securityContext,
+		SecurityPath:      securityFilePath,
+		DeviceModel:       &deviceModel,
+		DeviceType:        deviceType,
+		DownloadDir:       downloadDir,
+		RandomFingerprint: generateRandomID(64),
 	}
 
 	return cfg, nil
@@ -132,15 +134,17 @@ func generateRandomID(length int) string {
 // ToRegisterDto converts Config to model.RegisterDto for discovery requests
 func (c *Config) ToRegisterDto() model.RegisterDto {
 	protocol := model.ProtocolTypeHTTP
+	fingerprint := c.RandomFingerprint
 	if c.HttpsEnabled {
 		protocol = model.ProtocolTypeHTTPS
+		fingerprint = c.SecurityContext.CertificateHash
 	}
 	return model.RegisterDto{
 		Alias:       c.Alias,
 		Version:     ProtocolVersion, // Use constant from this package
 		DeviceModel: c.DeviceModel,
 		DeviceType:  c.DeviceType,
-		Fingerprint: c.SecurityContext.CertificateHash,
+		Fingerprint: fingerprint,
 		Port:        c.Port,
 		Protocol:    protocol,
 		Download:    false, // Update later when download server is implemented
@@ -149,12 +153,16 @@ func (c *Config) ToRegisterDto() model.RegisterDto {
 
 // ToInfoDto converts Config to model.InfoDto for discovery requests
 func (c *Config) ToInfoDto() model.InfoDto {
+	fingerprint := c.RandomFingerprint
+	if c.HttpsEnabled {
+		fingerprint = c.SecurityContext.CertificateHash
+	}
 	return model.InfoDto{
 		Alias:       c.Alias,
 		Version:     ProtocolVersion,
 		DeviceModel: c.DeviceModel,
 		DeviceType:  c.DeviceType,
-		Fingerprint: c.SecurityContext.CertificateHash,
+		Fingerprint: fingerprint,
 		Download:    false, // Update later when download server is implemented
 	}
 }

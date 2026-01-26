@@ -30,6 +30,80 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 	}
 
 	var targetDevice *model.Device
+
+	// --- Multicast Discovery (Fast) ---
+	logrus.Info("Sending multicast announcement...")
+	
+	// Create multicast discovery DTO
+	discoverySvcConfig := discovery.DefaultServiceConfig()
+	discoverySvcConfig.MulticastConfig.Port = cfg.Port
+	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
+
+    // Set correct protocol for multicast
+    protocol_type := model.ProtocolTypeHTTP
+    if cfg.HttpsEnabled {
+        protocol_type = model.ProtocolTypeHTTPS
+    }
+
+	multicastDto := model.MulticastDto{
+		Alias:       cfg.Alias,
+		Version:     config.ProtocolVersion,
+		DeviceModel: cfg.DeviceModel,
+		DeviceType:  cfg.DeviceType,
+		Fingerprint: cfg.SecurityContext.CertificateHash,
+		Port:        cfg.Port,
+		Protocol:    protocol_type,
+		Download:    false,
+		Announce:    true,
+	}
+
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	multicast.SetHTTPDiscoverer(httpDiscoverer)
+	
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+
+	// Channel to catch the found device
+	foundChan := make(chan *model.Device, 1)
+	discoverySvc.AddDeviceHandler(func(device *model.Device) {
+		if device.Alias == recipientAlias {
+			select {
+			case foundChan <- device:
+			default:
+			}
+		}
+	})
+
+    // Start listening and announcing
+	// Use a short timeout for multicast-only phase (e.g., 1.5 seconds)
+	multicastCtx, cancelMulticast := context.WithTimeout(ctx, 1500*time.Millisecond)
+	
+	go func() {
+		defer cancelMulticast()
+		err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
+		if err != nil {
+			logrus.Warnf("Multicast start failed: %v", err)
+		}
+	}()
+
+	// Wait for multicast result
+	select {
+	case device := <-foundChan:
+		logrus.Infof("Discovered recipient via multicast: %s (%s)", device.Alias, device.IP)
+		targetDevice = device
+		discoverySvc.Stop()
+	case <-multicastCtx.Done():
+		logrus.Info("Multicast discovery timed out, falling back to HTTP scan...")
+		discoverySvc.Stop()
+	}
+
+	if targetDevice != nil {
+		return sendToDevice(ctx, targetDevice, filePath)
+	}
+
+	// --- Fallback: HTTP Scan Discovery ---
+	logrus.Info("Starting HTTP network scan...")
+
 	// Retry discovery for a few seconds
 	retryCtx, cancelRetry := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelRetry()
@@ -53,11 +127,17 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 			httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil)
 
 			// Get local IPs for scanning
-			ips, err := network.GetLocalIPAddresses()
+			localIPs, err := network.GetLocalIPAddresses()
 			if err != nil {
 				logrus.Warnf("Failed to get local IPs: %v", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
+			}
+
+			var ips []net.IP
+			for _, ip := range localIPs {
+				subnetIPs := network.GetSubnetIPs(ip)
+				ips = append(ips, subnetIPs...)
 			}
 
 			// Add localhost for testing
@@ -113,11 +193,28 @@ func sendToDevice(ctx context.Context, device *model.Device, filePath string) er
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
 
+	// Detect file type
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file for detection: %w", err)
+	}
+	
+	// Read first 512 bytes for content type detection
+	buffer := make([]byte, 512)
+	n, _ := file.Read(buffer)
+	contentType := http.DetectContentType(buffer[:n])
+	file.Close()
+
+	modTime := fileInfo.ModTime().Format(time.RFC3339)
+
 	fileDto := model.FileDto{
 		ID:       uuid.NewString(),
 		FileName: filepath.Base(filePath),
 		Size:     fileInfo.Size(),
-		FileType: http.DetectContentType([]byte{}), // This is not ideal, but we'll fix it later
+		FileType: contentType,
+		Metadata: &model.FileMetadata{
+			Modified: &modTime,
+		},
 	}
 
 	prepareDto := model.PrepareUploadRequestDto{
