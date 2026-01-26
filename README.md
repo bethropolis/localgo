@@ -274,19 +274,44 @@ fi
 
 ### Docker Integration
 
-```dockerfile
-FROM golang:1.19-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN make build
+LocalGo includes full Docker support with multi-stage builds, docker-compose orchestration, and volume persistence.
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/localgo-cli .
-COPY scripts/localgo.env.example localgo.env
-CMD ["./localgo-cli", "serve"]
+#### Quick Start with Docker Compose
+
+```bash
+# Clone the repository
+git clone https://github.com/bethropolis/localgo.git
+cd localgo
+
+# Start LocalGo with docker-compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Check status
+docker-compose ps
+
+# Stop the service
+docker-compose down
 ```
+
+#### Manual Docker Build
+
+```bash
+# Build the image
+docker build -t localgo:latest .
+
+# Run the container
+docker run -d \
+  --name localgo \
+  --network host \
+  -v ./downloads:/app/downloads \
+  -v ./config:/app/config \
+  -e LOCALSEND_ALIAS="My Docker Server" \
+  localgo:latest
+```
+
 
 ## 💻 Development
 
