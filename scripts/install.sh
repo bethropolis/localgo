@@ -349,6 +349,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=localgo-user
 
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictRealtime=true
+
 # Environment configuration
 EnvironmentFile=-$USER_CONFIG_DIR/localgo.env
 WorkingDirectory=$USER_DATA_DIR
@@ -362,6 +367,7 @@ EOF
         systemctl --user daemon-reload
         print_success "User service installed to $service_file"
         print_status "To enable and start the service:"
+
         echo "    systemctl --user enable $SERVICE_NAME"
         echo "    systemctl --user start $SERVICE_NAME"
         
