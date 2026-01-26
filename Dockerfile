@@ -1,6 +1,11 @@
 # Build Stage
 FROM golang:1.24-alpine AS builder
 
+# Build arguments for version information
+ARG VERSION=docker
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 WORKDIR /app
 
 # Install build dependencies
@@ -13,12 +18,22 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
+# Build the binary with version information
 # CGO_ENABLED=0 ensures a static binary
-RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo "docker") -X main.GitCommit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") -X main.BuildDate=$(date -u +'%Y-%m-%d_%H:%M:%S')" -o localgo-cli ./cmd/localgo-cli
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-s -w \
+    -X main.Version=${VERSION} \
+    -X main.GitCommit=${GIT_COMMIT} \
+    -X main.BuildDate=${BUILD_DATE}" \
+    -o localgo-cli ./cmd/localgo-cli
 
 # Runtime Stage
 FROM alpine:latest
+
+LABEL org.opencontainers.image.title="LocalGo" \
+      org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go" \
+      org.opencontainers.image.url="https://github.com/bethropolis/localgo" \
+      org.opencontainers.image.source="https://github.com/bethropolis/localgo"
 
 WORKDIR /app
 
@@ -31,9 +46,11 @@ RUN addgroup -S localgo && adduser -S localgo -G localgo
 # Copy binary from builder
 COPY --from=builder /app/localgo-cli /usr/local/bin/localgo-cli
 
-# Create directory structure and set permissions
-RUN mkdir -p /app/downloads /app/.localgo_security && \
-    chown -R localgo:localgo /app
+# Create directory structure with proper XDG-compliant paths
+RUN mkdir -p \
+    /app/downloads \
+    /app/config/.security \
+    && chown -R localgo:localgo /app
 
 # Switch to non-root user
 USER localgo
@@ -42,10 +59,15 @@ USER localgo
 EXPOSE 53317/tcp
 EXPOSE 53317/udp
 
-# Set environment variables
-ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads"
-ENV LOCALSEND_SECURITY_DIR="/app/.localgo_security"
-ENV LOCALSEND_ALIAS="LocalGo-Docker"
+# Set environment variables with XDG-compliant paths
+ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
+    LOCALSEND_SECURITY_DIR="/app/config/.security" \
+    LOCALSEND_ALIAS="LocalGo-Docker" \
+    LOCALSEND_PORT="53317"
+
+# Health check to ensure the service is running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD localgo-cli info || exit 1
 
 # Command to run
 CMD ["localgo-cli", "serve"]

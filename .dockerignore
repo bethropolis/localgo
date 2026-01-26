@@ -1,0 +1,46 @@
+# Build artifacts
+/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+localgo-cli
+*.swp
+*.swo
+*~
+
+# Test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# Downloads and data
+downloads/
+.localgo_security/
+config/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!protocol/*.md
+
+# CI/CD
+.github/
+
+# Scripts (not needed in container)
+scripts/

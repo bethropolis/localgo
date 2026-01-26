@@ -1,0 +1,76 @@
+services:
+  localgo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-latest}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    image: localgo:latest
+    container_name: localgo
+    restart: unless-stopped
+    
+    # Network mode: host allows multicast discovery to work properly
+    # On macOS/Windows, use bridge mode and map ports explicitly
+    network_mode: host
+    
+    # Alternative for macOS/Windows (comment out network_mode: host above)
+    # ports:
+    #   - "53317:53317/tcp"   # HTTPS/HTTP
+    #   - "53317:53317/udp"   # Multicast discovery
+    
+    environment:
+      # Device Configuration
+      - LOCALSEND_ALIAS=${LOCALSEND_ALIAS:-LocalGo-Docker}
+      - LOCALSEND_PORT=${LOCALSEND_PORT:-53317}
+      - LOCALSEND_DEVICE_TYPE=${LOCALSEND_DEVICE_TYPE:-server}
+      
+      # Network Configuration
+      - LOCALSEND_MULTICAST_GROUP=${LOCALSEND_MULTICAST_GROUP:-224.0.0.167}
+      - LOCALSEND_FORCE_HTTP=${LOCALSEND_FORCE_HTTP:-false}
+      
+      # Security Configuration
+      - LOCALSEND_PIN=${LOCALSEND_PIN:-}
+      
+      # Logging Configuration
+      - LOCALSEND_LOG_LEVEL=${LOCALSEND_LOG_LEVEL:-info}
+      - LOCALSEND_VERBOSE=${LOCALSEND_VERBOSE:-false}
+      
+      # Paths (configured via volumes)
+      - LOCALSEND_DOWNLOAD_DIR=/app/downloads
+      - LOCALSEND_SECURITY_DIR=/app/config/.security
+    
+    volumes:
+      # Persist downloads
+      - ./downloads:/app/downloads
+      
+      # Persist security certificates (important for consistent fingerprint)
+      - ./config:/app/config
+      
+      # Optional: Use a custom configuration file
+      # - ./localgo.env:/app/localgo.env
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "localgo-cli", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+# For isolated testing with custom network
+# Uncomment this section if you want to use a custom bridge network
+# networks:
+#   localgo-net:
+#     driver: bridge
