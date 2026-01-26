@@ -11,9 +11,11 @@ A Go implementation of the LocalSend protocol for secure, cross-platform file sh
 ### Core Functionality
 - ✅ **Complete LocalSend v2.1 Protocol** - Full compatibility with LocalSend ecosystem
 - ✅ **Secure File Transfer** - HTTPS with self-signed certificates and PIN protection
-- ✅ **Multi-Platform Discovery** - Multicast UDP + HTTP fallback for reliable device detection
+- ✅ **Bidirectional Discovery** - Multicast UDP + HTTP fallback for reliable device detection
+- ✅ **Smart Network Scanning** - Automatically scans full subnet (/24) to find devices that block multicast
 - ✅ **Cross-Platform** - Works on Linux, macOS, and Windows
-- ✅ **High Performance** - Efficient file transfer with progress tracking
+- ✅ **High Performance** - Efficient file transfer with metadata (timestamps) preservation
+- ✅ **Zero Config** - Works out of the box with auto-discovery
 
 ## 📦 Quick Start
 
@@ -57,7 +59,6 @@ localgo-cli help
 localgo-cli help send
 ```
 
-## 📖 Usage Guide
 
 ### Starting the Server
 
