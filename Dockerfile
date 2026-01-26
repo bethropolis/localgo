@@ -34,6 +34,8 @@ LABEL org.opencontainers.image.title="LocalGo" \
       org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go" \
       org.opencontainers.image.url="https://github.com/bethropolis/localgo" \
       org.opencontainers.image.source="https://github.com/bethropolis/localgo"
+      org.opencontainers.image.version="${VERSION}"
+      org.opencontainers.image.license="MIT"
 
 WORKDIR /app
 
