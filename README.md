@@ -171,6 +171,13 @@ editor localgo.env
 source localgo.env && localgo-cli serve
 ```
 
+**For detailed configuration options, see [docs/CONFIGURATION.md](docs/CONFIGURATION.md)** including:
+- All environment variables
+- Security directory paths (XDG-compliant)
+- Command-line flags reference
+- Migration from legacy paths
+
+
 ### Command-Line Flags
 
 Each command supports specific flags:
@@ -274,43 +281,35 @@ fi
 
 ### Docker Integration
 
-LocalGo includes full Docker support with multi-stage builds, docker-compose orchestration, and volume persistence.
+LocalGo includes full Docker support with docker-compose orchestration and volume persistence.
 
-#### Quick Start with Docker Compose
+#### Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/bethropolis/localgo.git
-cd localgo
-
-# Start LocalGo with docker-compose
+# Start with docker-compose
 docker-compose up -d
 
 # View logs
 docker-compose logs -f
 
-# Check status
-docker-compose ps
-
-# Stop the service
+# Stop
 docker-compose down
 ```
 
-#### Manual Docker Build
+#### Manual Build
 
 ```bash
-# Build the image
 docker build -t localgo:latest .
-
-# Run the container
-docker run -d \
-  --name localgo \
-  --network host \
-  -v ./downloads:/app/downloads \
-  -v ./config:/app/config \
-  -e LOCALSEND_ALIAS="My Docker Server" \
-  localgo:latest
+docker run -d --name localgo --network host localgo:latest
 ```
+
+**For detailed Docker documentation, see [docs/DOCKER.md](docs/DOCKER.md)** including:
+- Volume persistence and configuration
+- Environment variables
+- Network configuration (Linux/macOS/Windows)
+- Health checks and troubleshooting
+- Production deployment tips
+
 
 
 ## 💻 Development

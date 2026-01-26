@@ -42,11 +42,10 @@ Flags are specific to each command. Use `localgo-cli <command> --help` to see th
 
 You can set these globally to avoid repeating flags.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
 | `LOCALSEND_ALIAS` | Device name | Hostname |
 | `LOCALSEND_PORT` | Port number | `53317` |
 | `LOCALSEND_DOWNLOAD_DIR` | Save path | `./downloads` |
+| `LOCALSEND_SECURITY_DIR` | Security files path | (Auto-detected) |
 | `LOCALSEND_PIN` | Security PIN | (Empty) |
 | `LOCALSEND_MULTICAST_GROUP`| Multicast IP | `224.0.0.167` |
 | `LOCALSEND_LOG_LEVEL` | Log verbosity | `info` |
@@ -67,12 +66,36 @@ source .env && localgo-cli serve
 
 ## 🔧 Technical Details
 
-### Security Context
-LocalGo stores generated TLS certificates and config cache in:
-- **Linux/Mac**: Directory of the executable + `/.localgo_security/`
-- **Windows**: Directory of the executable + `\.localgo_security\`
+### Security Directory
 
-*Warning: Do not share the `context.json` file inside this directory, as it contains your private key.*
+LocalGo uses XDG-compliant paths for storing TLS certificates and fingerprints.
+
+**Directory resolution priority:**
+1. `$LOCALSEND_SECURITY_DIR` (if set - explicit override)
+2. `$XDG_CONFIG_HOME/localgo/.security` (Linux/Unix XDG standard)
+3. `$HOME/.config/localgo/.security` (XDG default when XDG_CONFIG_HOME not set)
+4. `$APPDATA/localgo/.security` (Windows)
+5. `$HOME/.localgo/.security` (fallback)
+6. `./.localgo_security` (legacy compatibility - executable directory)
+
+The security directory contains:
+- `context.json` - TLS certificate, private key, and fingerprint
+
+**Migration from legacy location:**
+
+If you have an existing `.localgo_security` directory in the executable directory, LocalGo will continue to use it for backward compatibility. To migrate to the XDG-compliant location:
+
+```bash
+# Create config directory
+mkdir -p ~/.config/localgo
+
+# Move security directory
+mv .localgo_security ~/.config/localgo/.security
+
+# Restart LocalGo - it will now use the new location
+```
+
+**Important:** Do not share the `context.json` file, as it contains your private key.
 
 ### Network Ports
 - **TCP 53317**: Main HTTP/S server for file transfers.

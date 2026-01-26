@@ -40,20 +40,17 @@ WORKDIR /app
 # Install runtime dependencies (ca-certificates for HTTPS)
 RUN apk add --no-cache ca-certificates tzdata
 
-# Create a non-root user
-RUN addgroup -S localgo && adduser -S localgo -G localgo
-
 # Copy binary from builder
 COPY --from=builder /app/localgo-cli /usr/local/bin/localgo-cli
+
+# Copy entrypoint script
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create directory structure with proper XDG-compliant paths
 RUN mkdir -p \
     /app/downloads \
-    /app/config/.security \
-    && chown -R localgo:localgo /app
-
-# Switch to non-root user
-USER localgo
+    /app/config/.security
 
 # Expose ports (TCP and UDP for discovery)
 EXPOSE 53317/tcp
@@ -68,6 +65,9 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 # Health check to ensure the service is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD localgo-cli info || exit 1
+
+# Use entrypoint script to fix permissions (runs as root)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Command to run
 CMD ["localgo-cli", "serve"]

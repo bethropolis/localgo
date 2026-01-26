@@ -43,10 +43,12 @@ services:
     
     volumes:
       # Persist downloads
-      - ./downloads:/app/downloads
+      # Note: Permissions are automatically fixed by the entrypoint script
+      # :z is required for SELinux compatibility (Fedora, RHEL, CentOS)
+      - ./downloads:/app/downloads:z
       
       # Persist security certificates (important for consistent fingerprint)
-      - ./config:/app/config
+      - ./config:/app/config:z
       
       # Optional: Use a custom configuration file
       # - ./localgo.env:/app/localgo.env
