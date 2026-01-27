@@ -342,7 +342,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=$USER_BIN_DIR/$BINARY_NAME serve
+ExecStart=$USER_BIN_DIR/$BINARY_NAME serve --quiet
 Restart=always
 RestartSec=5
 StandardOutput=journal
