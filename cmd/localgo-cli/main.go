@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Initialize logging first
-	logging.Init()
+	logging.Init(false)
 
 	// Register all commands
 	app.registerCommands()
@@ -233,7 +233,7 @@ func (app *Application) registerCommands() {
 func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool) error {
 	// Set log level
 	if *quiet {
-		logrus.SetLevel(logrus.WarnLevel)
+		logging.Init(true)
 	} else if *verbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
@@ -340,7 +340,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 
 func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput *bool, quiet *bool) error {
 	if *quiet {
-		logrus.SetLevel(logrus.WarnLevel)
+		logging.Init(true)
 	}
 
 	// Increase default timeout for better reliability
@@ -410,7 +410,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 
 func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jsonOutput *bool, quiet *bool) error {
 	if *quiet {
-		logrus.SetLevel(logrus.WarnLevel)
+		logging.Init(true)
 	}
 
 	// Increase default timeout for better reliability
