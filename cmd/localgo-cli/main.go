@@ -52,7 +52,7 @@ func main() {
 	}
 
 	// Initialize logging first
-	logging.Init(false)
+	logging.Init()
 
 	// Register all commands
 	app.registerCommands()
@@ -118,6 +118,7 @@ func (app *Application) registerCommands() {
 	serveDir := serveFlags.String("dir", "", "Download directory (default: from config)")
 	serveQuiet := serveFlags.Bool("quiet", false, "Quiet mode - minimal output")
 	serveVerbose := serveFlags.Bool("verbose", false, "Verbose mode - detailed output")
+	serveInterval := serveFlags.Int("interval", 30, "Discovery announcement interval in seconds")
 
 	app.commands["serve"] = &Command{
 		Name:        "serve",
@@ -128,11 +129,12 @@ func (app *Application) registerCommands() {
 			"localgo-cli serve --port 8080 --http",
 			"localgo-cli serve --pin 123456 --alias MyDevice",
 			"localgo-cli serve --dir /tmp/downloads --verbose",
+			"localgo-cli serve --quiet --interval 300",
 		},
 		Flags: serveFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			serveFlags.Parse(args)
-			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose)
+			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval)
 		},
 	}
 
@@ -230,10 +232,10 @@ func (app *Application) registerCommands() {
 
 // Help methods removed - now using pkg/help module
 
-func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool) error {
+func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int) error {
 	// Set log level
 	if *quiet {
-		logging.Init(true)
+		logging.SetQuiet()
 	} else if *verbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
@@ -284,6 +286,10 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
+
+	if *interval > 0 {
+		discoverySvcConfig.AnnounceInterval = time.Duration(*interval) * time.Second
+	}
 
 	protocol_type := model.ProtocolTypeHTTP
 	if cfg.HttpsEnabled {
@@ -340,7 +346,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 
 func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput *bool, quiet *bool) error {
 	if *quiet {
-		logging.Init(true)
+		logging.SetQuiet()
 	}
 
 	// Increase default timeout for better reliability
@@ -410,7 +416,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 
 func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jsonOutput *bool, quiet *bool) error {
 	if *quiet {
-		logging.Init(true)
+		logging.SetQuiet()
 	}
 
 	// Increase default timeout for better reliability
