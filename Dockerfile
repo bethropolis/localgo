@@ -30,12 +30,12 @@ RUN CGO_ENABLED=0 go build \
 # Runtime Stage
 FROM alpine:latest
 
-LABEL org.opencontainers.image.title="LocalGo" \
-      org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go" \
-      org.opencontainers.image.url="https://github.com/bethropolis/localgo" \
-      org.opencontainers.image.source="https://github.com/bethropolis/localgo" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.license="MIT"
+LABEL org.opencontainers.image.title="LocalGo"
+LABEL org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go"
+LABEL org.opencontainers.image.url="https://github.com/bethropolis/localgo"
+LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.license="MIT"
 
 WORKDIR /app
 
