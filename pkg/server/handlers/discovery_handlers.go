@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
+	"github.com/sirupsen/logrus"
 )
 
 // DiscoveryHandler handles /info and /register requests.
@@ -32,14 +32,14 @@ func NewDiscoveryHandler(cfg *config.Config, registryService *services.RegistryS
 // InfoHandler handles GET /info requests (v1 & v2 are identical here).
 func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	if h.config.SecurityContext == nil {
-		log.Println("Error: Security context not available for /info")
+		logrus.Println("Error: Security context not available for /info")
 		httputil.RespondError(w, http.StatusInternalServerError, "Internal Server Error: Security context missing")
 		return
 	}
 
 	senderFingerprint := r.URL.Query().Get("fingerprint")
 	if senderFingerprint != "" && senderFingerprint == h.config.SecurityContext.CertificateHash {
-		log.Println("Received /info request from self, ignoring.")
+		logrus.Println("Received /info request from self, ignoring.")
 		httputil.RespondError(w, http.StatusPreconditionFailed, "Self-discovered")
 		return
 	}
@@ -55,14 +55,14 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 		Download:    downloadCapable,
 	}
 
-	log.Printf("Responding to /info request from %s", r.RemoteAddr)
+	logrus.Printf("Responding to /info request from %s", r.RemoteAddr)
 	httputil.RespondJSON(w, http.StatusOK, dto)
 }
 
 // RegisterHandler handles POST /register requests (v1 & v2 are identical here).
 func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	if h.config.SecurityContext == nil {
-		log.Println("Error: Security context not available for /register")
+		logrus.Println("Error: Security context not available for /register")
 		httputil.RespondError(w, http.StatusInternalServerError, "Internal Server Error: Security context missing")
 		return
 	}
@@ -75,14 +75,14 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 	var requestDto model.RegisterDto
 	err := json.NewDecoder(r.Body).Decode(&requestDto)
 	if err != nil {
-		log.Printf("Error decoding /register request from %s: %v", r.RemoteAddr, err)
+		logrus.Printf("Error decoding /register request from %s: %v", r.RemoteAddr, err)
 		httputil.RespondError(w, http.StatusBadRequest, "Request body malformed")
 		return
 	}
 	defer r.Body.Close()
 
 	if requestDto.Fingerprint == h.config.SecurityContext.CertificateHash {
-		log.Println("Received /register request from self, ignoring.")
+		logrus.Println("Received /register request from self, ignoring.")
 		httputil.RespondError(w, http.StatusPreconditionFailed, "Self-discovered")
 		return
 	}
@@ -95,7 +95,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 	device := model.NewDevice(requestDto, net.ParseIP(ip), requestDto.Port, requestDto.Protocol == model.ProtocolTypeHTTPS)
 	h.registryService.RegisterDevice(device)
 
-	log.Printf("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, requestDto.Alias, requestDto.Fingerprint)
+	logrus.Printf("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, requestDto.Alias, requestDto.Fingerprint)
 
 	downloadCapable := h.sendService.GetSession() != nil
 

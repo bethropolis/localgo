@@ -163,7 +163,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	// --- File Saving ---
 	rawFileName := fileInfo.Dto.FileName
-	destinationPath := filepath.Join(h.config.DownloadDir, rawFileName)
+	destinationPath := resolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 
 	// Path traversal prevention: ensure the resolved path is still within DownloadDir
 	cleanPath := filepath.Clean(destinationPath)
@@ -280,4 +280,24 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		logrus.Warnf("Ignoring /cancel for unknown or mismatched session ID: %s", reqSessionId)
 		httputil.RespondError(w, http.StatusNotFound, "Session not found")
 	}
+}
+
+func resolveDuplicateFilename(dir, baseName string) string {
+	ext := filepath.Ext(baseName)
+	nameWithoutExt := strings.TrimSuffix(baseName, ext)
+
+	candidate := filepath.Join(dir, baseName)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate
+	}
+
+	for i := 1; i <= 999; i++ {
+		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
+		candidate = filepath.Join(dir, newName)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+
+	return filepath.Join(dir, baseName)
 }
