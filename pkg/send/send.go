@@ -81,7 +81,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	go func() {
 		defer cancelMulticast()
-		err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
+		err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
 		if err != nil {
 			logrus.Warnf("Multicast start failed: %v", err)
 		}
@@ -99,7 +99,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	if targetDevice != nil {
-		return sendToDevice(ctx, targetDevice, filePaths)
+		return sendToDevice(ctx, cfg, targetDevice, filePaths)
 	}
 
 	// --- Fallback: HTTP Scan Discovery ---
@@ -173,10 +173,10 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	logrus.Infof("Found recipient: %s", targetDevice.ToDebugString())
-	return sendToDevice(ctx, targetDevice, filePaths)
+	return sendToDevice(ctx, cfg, targetDevice, filePaths)
 }
 
-func sendToDevice(ctx context.Context, device *model.Device, filePaths []string) error {
+func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string) error {
 	client := &http.Client{}
 	scheme := "http"
 
@@ -228,12 +228,12 @@ func sendToDevice(ctx context.Context, device *model.Device, filePaths []string)
 
 	prepareDto := model.PrepareUploadRequestDto{
 		Info: model.InfoDto{
-			Alias:       device.Alias,
-			Version:     device.Version,
-			DeviceModel: device.DeviceModel,
-			DeviceType:  device.DeviceType,
-			Fingerprint: device.Fingerprint,
-			Download:    device.Download,
+			Alias:       cfg.Alias,
+			Version:     config.ProtocolVersion,
+			DeviceModel: cfg.DeviceModel,
+			DeviceType:  cfg.DeviceType,
+			Fingerprint: cfg.SecurityContext.CertificateHash,
+			Download:    true,
 		},
 		Files: filesDtoMap,
 	}
@@ -244,7 +244,13 @@ func sendToDevice(ctx context.Context, device *model.Device, filePaths []string)
 	}
 
 	url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/prepare-upload", scheme, device.IP, device.Port)
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create prepare request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send prepare request: %w", err)
 	}
@@ -285,12 +291,16 @@ func sendToDevice(ctx context.Context, device *model.Device, filePaths []string)
 	wg.Wait()
 	close(errCh)
 
+	var uploadErrors []error
 	for err := range errCh {
-		if err != nil {
-			return err
-		}
+		uploadErrors = append(uploadErrors, err)
 	}
 
+	if len(uploadErrors) > 0 {
+		return fmt.Errorf("encountered %d upload errors, first error: %w", len(uploadErrors), uploadErrors[0])
+	}
+
+	logrus.Info("All files uploaded successfully!")
 	return nil
 }
 
