@@ -390,22 +390,32 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		logrus.Infof("Device discovered: %s (%s)", device.Alias, device.IP)
 	})
 
-	// Start discovery service
+	// Start server first
+	srv := server.NewServer(cfg)
+
+	serverErrChan := make(chan error, 1)
 	go func() {
-		err := discoverySvc.Start(ctx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
-		if err != nil {
-			logrus.Errorf("Discovery service failed: %v", err)
-		}
+		serverErrChan <- srv.Start(ctx)
 	}()
 
-	// Start server
-	srv := server.NewServer(cfg)
+	// Wait for server to be ready (server.Start waits for port bind)
+	select {
+	case err := <-serverErrChan:
+		return fmt.Errorf("server failed: %w", err)
+	case <-time.After(3 * time.Second):
+	}
+
+	// Start discovery AFTER server is ready
+	err := discoverySvc.Start(ctx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
+	if err != nil {
+		return fmt.Errorf("discovery service failed: %w", err)
+	}
 
 	logrus.Infof("Server ready! Waiting for files...")
 	logrus.Infof("Press Ctrl+C to stop")
 
-	err := srv.Start(ctx)
-	if err != nil {
+	// Wait for server to finish
+	if err := <-serverErrChan; err != nil {
 		return fmt.Errorf("server failed: %w", err)
 	}
 
@@ -524,20 +534,30 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
 
-	// Start discovery service
+	// Start server first
+	serverErrChan := make(chan error, 1)
 	go func() {
-		err := discoverySvc.Start(ctx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
-		if err != nil {
-			logrus.Errorf("Discovery service failed: %v", err)
-		}
+		serverErrChan <- srv.Start(ctx)
 	}()
+
+	// Wait for server to be ready
+	select {
+	case err := <-serverErrChan:
+		return fmt.Errorf("server failed: %w", err)
+	case <-time.After(3 * time.Second):
+	}
+
+	// Start discovery AFTER server is ready
+	err = discoverySvc.Start(ctx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
+	if err != nil {
+		return fmt.Errorf("discovery service failed: %w", err)
+	}
 
 	logrus.Infof("Server ready! Waiting for connections...")
 	logrus.Infof("Press Ctrl+C to stop sharing")
 
-	// Start HTTP server
-	err = srv.Start(ctx)
-	if err != nil {
+	// Wait for server to finish
+	if err := <-serverErrChan; err != nil {
 		return fmt.Errorf("server failed: %w", err)
 	}
 
@@ -604,7 +624,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 	discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discoverTimeout)*time.Second)
 	defer cancel()
 
-	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
+	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
 	if err != nil && !*quiet {
 		logrus.Warnf("Discovery completed with warnings: %v", err)
 	}

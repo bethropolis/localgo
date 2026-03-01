@@ -72,12 +72,15 @@ func (s *Server) Start(ctx context.Context) error {
 
 	addr := fmt.Sprintf("0.0.0.0:%d", s.config.Port)
 	s.httpServer = &http.Server{
-		Addr:         addr,
-		Handler:      s.muxRouter,
-		ReadTimeout:  0,
-		WriteTimeout: 0,
-		IdleTimeout:  120 * time.Second,
+		Addr:              addr,
+		Handler:           s.muxRouter,
+		ReadTimeout:       0,
+		WriteTimeout:      0,
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
+
+	readyChan := make(chan error, 1)
 
 	if s.config.HttpsEnabled {
 		logrus.Infof("Starting HTTPS server on %s with alias %s", addr, s.config.Alias)
@@ -91,16 +94,24 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		go func() {
 			if err := s.httpServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				logrus.Fatalf("HTTPS server failed: %v", err)
+				readyChan <- err
 			}
 		}()
 	} else {
 		logrus.Infof("Starting HTTP server on %s with alias %s", addr, s.config.Alias)
 		go func() {
 			if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logrus.Fatalf("HTTP server failed: %v", err)
+				readyChan <- err
 			}
 		}()
+	}
+
+	// Wait for server to be ready (port bound)
+	select {
+	case err := <-readyChan:
+		return fmt.Errorf("server failed to start: %w", err)
+	case <-time.After(2 * time.Second):
+		// Server had time to bind to the port
 	}
 
 	<-ctx.Done()

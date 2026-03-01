@@ -19,6 +19,7 @@ type Service struct {
 	devices       map[string]*model.Device
 	devicesMutex  sync.RWMutex
 	handlers      []func(*model.Device)
+	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
 }
 
@@ -54,9 +55,13 @@ func NewService(config *ServiceConfig, multicast MulticastDiscoverer) *Service {
 }
 
 // Start initializes and starts the discovery service for listening and periodic announcements
-func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string) error {
+func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) error {
 	// Create UDP multicast discovery instance
 	// ** Important: Create the DTO needed for multicast here **
+	protocol := model.ProtocolTypeHTTP
+	if httpsEnabled {
+		protocol = model.ProtocolTypeHTTPS
+	}
 	multicastDto := model.MulticastDto{
 		Alias:       alias,
 		Version:     config.ProtocolVersion, // Use constant from config package
@@ -64,9 +69,9 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Port:        port,
-		Protocol:    model.ProtocolTypeHTTPS, // Assuming HTTPS, make configurable if needed
-		Download:    false,                   // Not implementing download server yet
-		Announce:    true,                    // Default Announce for DTO, can be overridden
+		Protocol:    protocol,
+		Download:    true,
+		Announce:    true, // Default Announce for DTO, can be overridden
 	}
 
 	s.multicast.SetDto(multicastDto)
@@ -115,10 +120,14 @@ func (s *Service) Stop() {
 // Discover performs a discovery scan and returns found devices.
 // It sends an announcement and listens for a short duration.
 // It requires the service to be configured but not necessarily fully "Start"ed (for listening).
-func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string) ([]*model.Device, error) {
+func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) ([]*model.Device, error) {
 	logrus.Println("Performing one-off discovery scan...")
 
 	// --- Create Multicast DTO for announcement ---
+	protocol := model.ProtocolTypeHTTP
+	if httpsEnabled {
+		protocol = model.ProtocolTypeHTTPS
+	}
 	multicastDto := model.MulticastDto{
 		Alias:       alias,
 		Version:     config.ProtocolVersion, // Use constant from config package
@@ -126,8 +135,8 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Port:        port,
-		Protocol:    model.ProtocolTypeHTTPS,
-		Download:    false,
+		Protocol:    protocol,
+		Download:    true,
 		Announce:    true, // We are announcing
 	}
 
@@ -194,6 +203,8 @@ func (s *Service) GetDevice(id string) *model.Device {
 
 // AddDeviceHandler adds a handler for device discovery events
 func (s *Service) AddDeviceHandler(handler func(*model.Device)) {
+	s.handlersMutex.Lock()
+	defer s.handlersMutex.Unlock()
 	s.handlers = append(s.handlers, handler)
 }
 
@@ -211,7 +222,12 @@ func (s *Service) updateDevice(device *model.Device) {
 		s.devices[device.Fingerprint] = device
 
 		// Notify handlers about new device
-		for _, handler := range s.handlers {
+		s.handlersMutex.RLock()
+		handlers := make([]func(*model.Device), len(s.handlers))
+		copy(handlers, s.handlers)
+		s.handlersMutex.RUnlock()
+
+		for _, handler := range handlers {
 			go handler(device)
 		}
 	}
