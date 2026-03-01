@@ -15,7 +15,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
+	"go.uber.org/zap"
 )
+
+var testLoggerSendErrors = zap.NewNop().Sugar()
 
 func TestSendFiles_UploadRejection(t *testing.T) {
 	tempDir := t.TempDir()
@@ -54,7 +57,7 @@ func TestSendFiles_UploadRejection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath})
+	err := sendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSendErrors)
 	if err == nil {
 		t.Fatalf("expected sendToDevice to fail on rejection, but it succeeded")
 	}
@@ -119,7 +122,7 @@ func TestSendFiles_PartialUploadError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath1, filePath2})
+	err := sendToDevice(ctx, cfg, device, []string{filePath1, filePath2}, testLoggerSendErrors)
 	if err == nil {
 		t.Fatalf("expected upload to fail, but it succeeded")
 	}

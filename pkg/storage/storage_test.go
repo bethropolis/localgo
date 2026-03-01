@@ -1,11 +1,14 @@
 package storage
 
 import (
+	"go.uber.org/zap"
 	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+var testLogger = zap.NewNop().Sugar()
 
 func TestEnsureDirExists(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -69,6 +72,7 @@ func TestSaveStreamToFileWithMetadata(t *testing.T) {
 		&modTime,
 		&accTime,
 		nil,
+		testLogger,
 	)
 	if err != nil {
 		t.Fatalf("SaveStreamToFileWithMetadata failed: %v", err)
@@ -138,6 +142,7 @@ func TestSaveStreamToFile_InvalidTimestamp(t *testing.T) {
 		&invalidTime,
 		nil,
 		nil,
+		testLogger,
 	)
 	if err != nil {
 		t.Fatalf("SaveStreamToFileWithMetadata failed: %v", err)

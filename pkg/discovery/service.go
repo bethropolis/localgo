@@ -9,7 +9,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/config" // Import config
 	"github.com/bethropolis/localgo/pkg/model"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // Service coordinates different discovery mechanisms
@@ -21,6 +21,7 @@ type Service struct {
 	handlers      []func(*model.Device)
 	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
+	logger        *zap.SugaredLogger
 }
 
 // ServiceConfig contains settings for the discovery service
@@ -42,15 +43,19 @@ func DefaultServiceConfig() *ServiceConfig {
 }
 
 // NewService creates a new discovery service
-func NewService(config *ServiceConfig, multicast MulticastDiscoverer) *Service {
+func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *zap.SugaredLogger) *Service {
 	if config == nil {
 		config = DefaultServiceConfig()
+	}
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
 	}
 
 	return &Service{
 		config:    config,
 		devices:   make(map[string]*model.Device),
 		multicast: multicast,
+		logger:    logger,
 	}
 }
 
@@ -86,7 +91,7 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 		// if !strings.Contains(err.Error(), "already listening") { // Example check
 		return fmt.Errorf("failed to start multicast discovery: %w", err)
 		// }
-		// logrus.Println("Multicast discovery already listening.") // Or log if needed
+		// already listening; ignore
 	}
 
 	// Start periodic announcements if enabled
@@ -96,7 +101,7 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 
 	// Send initial announcement
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
-		logrus.Errorf("Failed to send initial discovery announcement: %v", err)
+		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
 	}
 
 	return nil
@@ -104,7 +109,7 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 
 // Stop stops the discovery service
 func (s *Service) Stop() {
-	logrus.Println("Stopping discovery service...")
+	s.logger.Info("Stopping discovery service...")
 	// Stop multicast
 	if s.multicast != nil {
 		s.multicast.Stop()
@@ -114,14 +119,14 @@ func (s *Service) Stop() {
 	if s.announceTimer != nil {
 		s.announceTimer.Stop()
 	}
-	logrus.Println("Discovery service stopped.")
+	s.logger.Info("Discovery service stopped.")
 }
 
 // Discover performs a discovery scan and returns found devices.
 // It sends an announcement and listens for a short duration.
 // It requires the service to be configured but not necessarily fully "Start"ed (for listening).
 func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) ([]*model.Device, error) {
-	logrus.Println("Performing one-off discovery scan...")
+	s.logger.Info("Performing one-off discovery scan...")
 
 	// --- Create Multicast DTO for announcement ---
 	protocol := model.ProtocolTypeHTTP
@@ -144,7 +149,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 
 	// Send initial announcement
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
-		logrus.Errorf("Failed to send initial discovery announcement: %v", err)
+		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
 	}
 
 	// --- Wait for Responses ---
@@ -160,12 +165,12 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 	for {
 		select {
 		case <-ctx.Done():
-			logrus.Infof("Discovery scan finished. %d device(s) found.", len(lastDevices))
+			s.logger.Infof("Discovery scan finished. %d device(s) found.", len(lastDevices))
 			return lastDevices, nil
 		case <-ticker.C:
 			devices := s.GetDevices()
 			lastDevices = devices
-			logrus.Debugf("Discovery scan progress: %d device(s) found so far.", len(devices))
+			s.logger.Debugf("Discovery scan progress: %d device(s) found so far.", len(devices))
 		}
 	}
 }
@@ -244,7 +249,7 @@ func (s *Service) startAnnouncementLoop(ctx context.Context) {
 				return
 			case <-s.announceTimer.C:
 				if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
-					logrus.Errorf("Failed to send periodic announcement: %v", err)
+					s.logger.Errorf("Failed to send periodic announcement: %v", err)
 				}
 				s.announceTimer.Reset(s.config.AnnounceInterval)
 			}

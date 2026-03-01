@@ -5,10 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
+var testLogger = zap.NewNop().Sugar()
+
 func TestGenerateSecurityContext(t *testing.T) {
-	ctx, err := GenerateSecurityContext("test-device")
+	ctx, err := GenerateSecurityContext("test-device", testLogger)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
 	}
@@ -31,7 +35,7 @@ func TestGenerateSecurityContext(t *testing.T) {
 }
 
 func TestSaveAndLoadSecurityContext(t *testing.T) {
-	origCtx, err := GenerateSecurityContext("test-device")
+	origCtx, err := GenerateSecurityContext("test-device", testLogger)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
 	}
@@ -39,12 +43,12 @@ func TestSaveAndLoadSecurityContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpPath := filepath.Join(tmpDir, "security.json")
 
-	err = SaveSecurityContext(origCtx, tmpPath)
+	err = SaveSecurityContext(origCtx, tmpPath, testLogger)
 	if err != nil {
 		t.Fatalf("SaveSecurityContext failed: %v", err)
 	}
 
-	loadedCtx, err := LoadSecurityContext(tmpPath)
+	loadedCtx, err := LoadSecurityContext(tmpPath, testLogger)
 	if err != nil {
 		t.Fatalf("LoadSecurityContext failed: %v", err)
 	}
@@ -63,7 +67,7 @@ func TestSaveAndLoadSecurityContext(t *testing.T) {
 }
 
 func TestLoadSecurityContextNotExist(t *testing.T) {
-	_, err := LoadSecurityContext("/nonexistent/path/to/security.json")
+	_, err := LoadSecurityContext("/nonexistent/path/to/security.json", testLogger)
 	if err == nil {
 		t.Error("LoadSecurityContext should fail for nonexistent file")
 	}
@@ -76,14 +80,14 @@ func TestSaveSecurityContextInvalidPath(t *testing.T) {
 		CertificateHash: "test",
 	}
 
-	err := SaveSecurityContext(ctx, "/invalid/path/that/does/not/exist/security.json")
+	err := SaveSecurityContext(ctx, "/invalid/path/that/does/not/exist/security.json", testLogger)
 	if err == nil {
 		t.Error("SaveSecurityContext should fail for invalid path")
 	}
 }
 
 func TestSecurityContextFingerprintFormat(t *testing.T) {
-	ctx, err := GenerateSecurityContext("test")
+	ctx, err := GenerateSecurityContext("test", testLogger)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
 	}
@@ -96,12 +100,12 @@ func TestSecurityContextFingerprintFormat(t *testing.T) {
 }
 
 func TestGenerateSecurityContextDifferentAliases(t *testing.T) {
-	ctx1, err := GenerateSecurityContext("device1")
+	ctx1, err := GenerateSecurityContext("device1", testLogger)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
 	}
 
-	ctx2, err := GenerateSecurityContext("device2")
+	ctx2, err := GenerateSecurityContext("device2", testLogger)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
 	}

@@ -3,15 +3,16 @@ package storage
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // EnsureDirExists creates a directory if it doesn't exist.
 func EnsureDirExists(path string) error {
-	err := os.MkdirAll(path, 0755) // Use appropriate permissions
+	err := os.MkdirAll(path, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", path, err)
 	}
@@ -22,24 +23,22 @@ func EnsureDirExists(path string) error {
 // It creates necessary directories.
 // It reports progress via the onProgress callback (bytes written).
 func SaveStreamToFile(stream io.Reader, filePath string, onProgress func(bytesWritten int64)) error {
-	return SaveStreamToFileWithMetadata(stream, filePath, nil, nil, onProgress)
+	return SaveStreamToFileWithMetadata(stream, filePath, nil, nil, onProgress, nil)
 }
 
 // SaveStreamToFileWithMetadata saves an io.Reader stream and restores optional timestamps.
-func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *string, accessed *string, onProgress func(bytesWritten int64)) error {
+func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *string, accessed *string, onProgress func(bytesWritten int64), logger *zap.SugaredLogger) error {
 	dir := filepath.Dir(filePath)
 	if err := EnsureDirExists(dir); err != nil {
-		return err // Error creating directory
+		return err
 	}
 
-	// Create the destination file
 	outFile, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
 	defer outFile.Close()
 
-	// Use io.Copy with a custom writer to track progress
 	progressWriter := &ProgressWriter{
 		Writer:     outFile,
 		OnProgress: onProgress,
@@ -47,17 +46,17 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 
 	_, err = io.Copy(progressWriter, stream)
 	if err != nil {
-		// Attempt to remove partially written file on error
-		outFile.Close() // Close before removing
+		outFile.Close()
 		if removeErr := os.Remove(filePath); removeErr != nil {
-			log.Printf("Warning: Failed to remove partially written file %s: %v", filePath, removeErr)
+			if logger != nil {
+				logger.Warnw("Failed to remove partially written file", "path", filePath, "error", removeErr)
+			}
 		}
 		return fmt.Errorf("failed to copy stream to file %s: %w", filePath, err)
 	}
 
-	outFile.Close() // Ensure file is closed before changing times
+	outFile.Close()
 
-	// Apply timestamps if provided
 	if modified != nil || accessed != nil {
 		mtime := time.Now()
 		atime := time.Now()
@@ -66,7 +65,9 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 			if t, err := time.Parse(time.RFC3339, *modified); err == nil {
 				mtime = t
 			} else {
-				log.Printf("Warning: failed to parse modified time %s: %v", *modified, err)
+				if logger != nil {
+					logger.Warnw("Failed to parse modified time", "time", *modified, "error", err)
+				}
 			}
 		}
 
@@ -74,18 +75,24 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 			if t, err := time.Parse(time.RFC3339, *accessed); err == nil {
 				atime = t
 			} else if modified != nil {
-				atime = mtime // Fallback to modified time
+				atime = mtime
 			} else {
-				log.Printf("Warning: failed to parse accessed time %s: %v", *accessed, err)
+				if logger != nil {
+					logger.Warnw("Failed to parse accessed time", "time", *accessed, "error", err)
+				}
 			}
 		}
 
 		if err := os.Chtimes(filePath, atime, mtime); err != nil {
-			log.Printf("Warning: failed to apply timestamps to %s: %v", filePath, err)
+			if logger != nil {
+				logger.Warnw("Failed to apply timestamps", "path", filePath, "error", err)
+			}
 		}
 	}
 
-	log.Printf("Successfully saved stream to %s", filePath)
+	if logger != nil {
+		logger.Infow("Successfully saved stream", "path", filePath)
+	}
 	return nil
 }
 
@@ -101,7 +108,7 @@ func (pw *ProgressWriter) Write(p []byte) (n int, err error) {
 	n, err = pw.Writer.Write(p)
 	pw.BytesWritten += int64(n)
 	if pw.OnProgress != nil {
-		pw.OnProgress(pw.BytesWritten) // Report progress
+		pw.OnProgress(pw.BytesWritten)
 	}
 	return n, err
 }

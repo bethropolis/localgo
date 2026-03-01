@@ -14,7 +14,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // HTTPDiscoveryConfig contains settings for HTTP discovery
@@ -35,12 +35,16 @@ type HTTPDiscovery struct {
 	dto           model.RegisterDto
 	client        *http.Client
 	deviceHandler func(*model.Device) // New field for handling discovered devices
+	logger        *zap.SugaredLogger
 }
 
 // NewHTTPDiscovery creates a new HTTP discovery instance
-func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handler func(*model.Device)) *HTTPDiscovery {
+func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handler func(*model.Device), logger *zap.SugaredLogger) *HTTPDiscovery {
 	if config == nil {
 		config = DefaultHTTPDiscoveryConfig()
+	}
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
 	}
 
 	// Create HTTP client with custom transport for TLS
@@ -59,6 +63,7 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 		dto:           dto,
 		client:        client,
 		deviceHandler: handler,
+		logger:        logger,
 	}
 }
 
@@ -67,43 +72,43 @@ func (hd *HTTPDiscovery) fetchDeviceInfo(ctx context.Context, ip net.IP, port in
 	// Create URL for the info endpoint
 	url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/info", scheme, ip.String(), port)
 
-	logrus.Debugf("HTTPDiscovery: Fetching device info from URL: %s", url)
+	hd.logger.Debugf("HTTPDiscovery: Fetching device info from URL: %s", url)
 
 	// Create a request with context for cancellation
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		logrus.Debugf("Failed to create request for %s: %v", url, err)
+		hd.logger.Debugf("Failed to create request for %s: %v", url, err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Send the request
 	resp, err := hd.client.Do(req)
 	if err != nil {
-		logrus.Debugf("Failed to send request to %s: %v", url, err)
+		hd.logger.Debugf("Failed to send request to %s: %v", url, err)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		logrus.Debugf("Unexpected status code from %s: %d", url, resp.StatusCode)
+		hd.logger.Debugf("Unexpected status code from %s: %d", url, resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logrus.Debugf("Failed to read response body from %s: %v", url, err)
+		hd.logger.Debugf("Failed to read response body from %s: %v", url, err)
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var infoDto model.InfoDto
 	if err := json.Unmarshal(body, &infoDto); err != nil {
-		logrus.Debugf("Failed to parse response body from %s: %v", url, err)
+		hd.logger.Debugf("Failed to parse response body from %s: %v", url, err)
 		return nil, fmt.Errorf("failed to parse response body: %w", err)
 	}
 
-	logrus.Debugf("Successfully fetched device info from %s: %+v", url, infoDto)
+	hd.logger.Debugf("Successfully fetched device info from %s: %+v", url, infoDto)
 
 	// Create and return a device from the info
 	return &model.Device{
@@ -197,7 +202,7 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 	var wg sync.WaitGroup
 	deviceChan := make(chan *model.Device, len(ips))
 
-	logrus.Debugf("Scanning %d IPs on port %d", len(ips), port)
+	hd.logger.Debugf("Scanning %d IPs on port %d", len(ips), port)
 
 	for _, ip := range ips {
 		wg.Add(1)
@@ -207,16 +212,16 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 			// Try HTTPS first, as it's the secure default for the official app
 			device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
 			if err != nil {
-				logrus.Debugf("HTTPDiscovery: HTTPS fetch failed for %s:%d: %v", ip, port, err)
+				hd.logger.Debugf("HTTPDiscovery: HTTPS fetch failed for %s:%d: %v", ip, port, err)
 				// If HTTPS fails, fall back to HTTP
 				device, err = hd.fetchDeviceInfo(ctx, ip, port, "http")
 				if err != nil {
-					logrus.Debugf("HTTPDiscovery: Failed to fetch device info from %s:%d on both http and https: %v", ip, port, err)
+					hd.logger.Debugf("HTTPDiscovery: Failed to fetch device info from %s:%d on both http and https: %v", ip, port, err)
 					return
 				}
 			}
 
-			logrus.Debugf("HTTPDiscovery: Successfully discovered device at %s:%d - %s", ip, port, device.Alias)
+			hd.logger.Debugf("HTTPDiscovery: Successfully discovered device at %s:%d - %s", ip, port, device.Alias)
 			deviceChan <- device
 		}(ip)
 	}
@@ -228,7 +233,7 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 		devices = append(devices, device)
 	}
 
-	logrus.Debugf("Found %d devices total", len(devices))
+	hd.logger.Debugf("Found %d devices total", len(devices))
 	return devices, nil
 }
 
@@ -240,7 +245,7 @@ func (hd *HTTPDiscovery) ScanLocalNetwork(ctx context.Context, port int) ([]*mod
 	}
 	// Also add loopback for local testing
 	localIPs = append(localIPs, net.ParseIP("127.0.0.1"))
-	logrus.Debugf("Scanning local network on port %d: found %d IP addresses to check", port, len(localIPs))
+	hd.logger.Debugf("Scanning local network on port %d: found %d IP addresses to check", port, len(localIPs))
 
 	// Scan the network
 	return hd.ScanNetwork(ctx, localIPs, port)

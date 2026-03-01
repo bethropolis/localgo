@@ -22,7 +22,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/send"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // Version information (can be set during build)
@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// Initialize logging first
-	logging.Init()
+	logger := logging.Init(false)
 
 	// Register all commands
 	app.registerCommands()
@@ -99,26 +99,26 @@ func main() {
 	}
 
 	// Load configuration
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(logger)
 	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %v", err)
+		zap.S().Fatalf("Failed to load configuration: %v", err)
 	}
 	if cfg.SecurityContext == nil {
-		logrus.Fatalf("Security context is missing after loading config")
+		zap.S().Fatalf("Security context is missing after loading config")
 	}
 	app.cfg = cfg
 
 	// Find and execute command
 	cmd, exists := app.commands[commandName]
 	if !exists {
-		logrus.Errorf("Unknown command: %s", commandName)
+		zap.S().Errorf("Unknown command: %s", commandName)
 		help.ShowMainUsage()
 		os.Exit(1)
 	}
 
 	// Execute command
 	if err := cmd.Action(cfg, os.Args[2:]); err != nil {
-		logrus.Fatalf("Command failed: %v", err)
+		zap.S().Fatalf("Command failed: %v", err)
 	}
 }
 
@@ -300,13 +300,6 @@ func (app *Application) registerCommands() {
 // Help methods removed - now using pkg/help module
 
 func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool) error {
-	// Set log level
-	if *quiet {
-		logging.SetQuiet()
-	} else if *verbose {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
-
 	// Apply overrides
 	if *port > 0 {
 		cfg.Port = *port
@@ -338,15 +331,15 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		protocol = "HTTP"
 	}
 
-	logrus.Infof("Starting LocalGo server")
-	logrus.Infof("  Alias: %s", cfg.Alias)
-	logrus.Infof("  Protocol: %s", protocol)
-	logrus.Infof("  Port: %d", cfg.Port)
-	logrus.Infof("  Download Directory: %s", cfg.DownloadDir)
+	zap.S().Infof("Starting LocalGo server")
+	zap.S().Infof("  Alias: %s", cfg.Alias)
+	zap.S().Infof("  Protocol: %s", protocol)
+	zap.S().Infof("  Port: %d", cfg.Port)
+	zap.S().Infof("  Download Directory: %s", cfg.DownloadDir)
 	if cfg.PIN != "" {
-		logrus.Infof("  PIN Protection: Enabled")
+		zap.S().Infof("  PIN Protection: Enabled")
 	}
-	logrus.Infof("  Fingerprint: %s", cfg.SecurityContext.CertificateHash[:16]+"...")
+	zap.S().Infof("  Fingerprint: %s", cfg.SecurityContext.CertificateHash[:16]+"...")
 
 	// Context for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -378,20 +371,20 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		Announce:    true,
 	}
 
-	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
 
 	// Create HTTPDiscoverer for backchannel (HTTP response to multicast)
-	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, zap.S())
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
 
-	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
 
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
-		logrus.Infof("Device discovered: %s (%s)", device.Alias, device.IP)
+		zap.S().Infof("Device discovered: %s (%s)", device.Alias, device.IP)
 	})
 
 	// Start server first
-	srv := server.NewServer(cfg)
+	srv := server.NewServer(cfg, zap.S())
 
 	serverErrChan := make(chan error, 1)
 	serverReadyChan := make(chan struct{}, 1)
@@ -412,8 +405,8 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		return fmt.Errorf("discovery service failed: %w", err)
 	}
 
-	logrus.Infof("Server ready! Waiting for files...")
-	logrus.Infof("Press Ctrl+C to stop")
+	zap.S().Infof("Server ready! Waiting for files...")
+	zap.S().Infof("Press Ctrl+C to stop")
 
 	// Wait for server to finish
 	if err := <-serverErrChan; err != nil {
@@ -421,7 +414,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 
 	discoverySvc.Stop()
-	logrus.Infof("Server stopped")
+	zap.S().Infof("Server stopped")
 	return nil
 }
 
@@ -452,10 +445,10 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 		protocol = "HTTP"
 	}
 
-	logrus.Infof("Starting LocalGo Web Share")
-	logrus.Infof("  Alias: %s", cfg.Alias)
-	logrus.Infof("  Protocol: %s", protocol)
-	logrus.Infof("  Port: %d", cfg.Port)
+	zap.S().Infof("Starting LocalGo Web Share")
+	zap.S().Infof("  Alias: %s", cfg.Alias)
+	zap.S().Infof("  Protocol: %s", protocol)
+	zap.S().Infof("  Port: %d", cfg.Port)
 
 	// Verify and prepare files
 	filesMap := make(map[string]model.FileDto)
@@ -491,11 +484,11 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 
 		filesMap[id] = fileDto
 		pathsMap[id] = file
-		logrus.Infof("  Sharing: %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+		zap.S().Infof("  Sharing: %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 	}
 
 	// Create server
-	srv := server.NewServer(cfg)
+	srv := server.NewServer(cfg, zap.S())
 	sendService := srv.GetSendService()
 
 	// Register files in session
@@ -529,11 +522,11 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 		Announce:    true,
 	}
 
-	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
-	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, zap.S())
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
 
-	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
 
 	// Start server first
 	serverErrChan := make(chan error, 1)
@@ -555,8 +548,8 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 		return fmt.Errorf("discovery service failed: %w", err)
 	}
 
-	logrus.Infof("Server ready! Waiting for connections...")
-	logrus.Infof("Press Ctrl+C to stop sharing")
+	zap.S().Infof("Server ready! Waiting for connections...")
+	zap.S().Infof("Press Ctrl+C to stop sharing")
 
 	// Wait for server to finish
 	if err := <-serverErrChan; err != nil {
@@ -564,15 +557,11 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 	}
 
 	discoverySvc.Stop()
-	logrus.Infof("Web share stopped")
+	zap.S().Infof("Web share stopped")
 	return nil
 }
 
 func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput *bool, quiet *bool) error {
-	if *quiet {
-		logging.SetQuiet()
-	}
-
 	// Increase default timeout for better reliability
 	discoverTimeout := *timeout
 	if discoverTimeout < 10 {
@@ -580,10 +569,10 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 	}
 
 	if !*quiet {
-		logrus.Infof("Discovering devices (timeout: %ds)...", discoverTimeout)
-		logrus.Infof("  Multicast group: %s", cfg.MulticastGroup)
-		logrus.Infof("  Port: %d", cfg.Port)
-		logrus.Infof("  Protocol: %s", func() string {
+		zap.S().Infof("Discovering devices (timeout: %ds)...", discoverTimeout)
+		zap.S().Infof("  Multicast group: %s", cfg.MulticastGroup)
+		zap.S().Infof("  Port: %d", cfg.Port)
+		zap.S().Infof("  Protocol: %s", func() string {
 			if cfg.HttpsEnabled {
 				return "HTTPS"
 			}
@@ -613,12 +602,12 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 		Announce:    true,
 	}
 
-	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
-	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
 
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
 		if !*quiet {
-			logrus.Infof("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
+			zap.S().Infof("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
 		}
 	})
 
@@ -628,21 +617,17 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 
 	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
 	if err != nil && !*quiet {
-		logrus.Warnf("Discovery completed with warnings: %v", err)
+		zap.S().Warnf("Discovery completed with warnings: %v", err)
 	}
 
 	if !*quiet && len(foundDevices) == 0 {
-		logrus.Warnf("No devices discovered. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking UDP port %d\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", cfg.Port)
+		zap.S().Warnf("No devices discovered. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking UDP port %d\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", cfg.Port)
 	}
 
 	return app.displayDevices(foundDevices, *jsonOutput, *quiet, "multicast discovery")
 }
 
 func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jsonOutput *bool, quiet *bool) error {
-	if *quiet {
-		logging.SetQuiet()
-	}
-
 	// Increase default timeout for better reliability
 	scanTimeout := *timeout
 	if scanTimeout < 15 {
@@ -667,13 +652,13 @@ func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jso
 	}
 
 	if !*quiet {
-		logrus.Infof("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout)
-		logrus.Infof("  Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
-		logrus.Infof("  Protocols: HTTPS first, then HTTP fallback")
+		zap.S().Infof("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout)
+		zap.S().Infof("  Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
+		zap.S().Infof("  Protocols: HTTPS first, then HTTP fallback")
 	}
 
 	// Initialize HTTP discovery
-	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, zap.S())
 
 	// Perform scan
 	scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scanTimeout)*time.Second)
@@ -681,11 +666,11 @@ func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jso
 
 	foundDevices, err := httpDiscoverer.ScanNetwork(scanCtx, ips, scanPort)
 	if err != nil && !*quiet {
-		logrus.Warnf("Scan completed with warnings: %v", err)
+		zap.S().Warnf("Scan completed with warnings: %v", err)
 	}
 
 	if !*quiet && len(foundDevices) == 0 {
-		logrus.Warnf("No devices found during scan. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking TCP ports %d (HTTP/HTTPS)\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", scanPort)
+		zap.S().Warnf("No devices found during scan. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking TCP ports %d (HTTP/HTTPS)\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", scanPort)
 	}
 
 	return app.displayDevices(foundDevices, *jsonOutput, *quiet, "HTTP scan")
@@ -712,27 +697,27 @@ func (app *Application) runSend(cfg *config.Config, files []string, to *string, 
 		cfg.Alias = *alias
 	}
 
-	logrus.Infof("Sending %d files", len(files))
+	zap.S().Infof("Sending %d files", len(files))
 	for _, file := range files {
 		fileInfo, err := os.Stat(file)
 		if err == nil {
-			logrus.Infof("  - %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+			zap.S().Infof("  - %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 		}
 	}
-	logrus.Infof("  To: %s", *to)
-	logrus.Infof("  From: %s", cfg.Alias)
+	zap.S().Infof("  To: %s", *to)
+	zap.S().Infof("  From: %s", cfg.Alias)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timeout)*time.Second)
 	defer cancel()
 
 	// Send files
-	err := send.SendFiles(ctx, cfg, files, *to, *port)
+	err := send.SendFiles(ctx, cfg, files, *to, *port, zap.S())
 	if err != nil {
 		return fmt.Errorf("failed to send files: %w", err)
 	}
 
-	logrus.Infof("Files sent successfully!")
+	zap.S().Infof("Files sent successfully!")
 	return nil
 }
 

@@ -10,10 +10,11 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // StoredSecurityContext holds PEM-encoded cert/key for config/server
@@ -75,7 +76,7 @@ func calculateCertificateHash(certBytes []byte) string {
 }
 
 // GenerateSecurityContext creates a new security context with keys and a self-signed certificate.
-func GenerateSecurityContext(alias string) (*StoredSecurityContext, error) {
+func GenerateSecurityContext(alias string, logger *zap.SugaredLogger) (*StoredSecurityContext, error) {
 	privKey, err := generateKeys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate RSA keys: %w", err)
@@ -90,12 +91,14 @@ func GenerateSecurityContext(alias string) (*StoredSecurityContext, error) {
 		Certificate:     encodeCertificateToPem(certBytes),
 		CertificateHash: certHash,
 	}
-	log.Printf("Generated new Security Context. Fingerprint: %s", ctx.CertificateHash)
+	if logger != nil {
+		logger.Infow("Generated new Security Context", "fingerprint", ctx.CertificateHash)
+	}
 	return ctx, nil
 }
 
 // SaveSecurityContext saves the context as JSON to the specified path.
-func SaveSecurityContext(ctx *StoredSecurityContext, path string) error {
+func SaveSecurityContext(ctx *StoredSecurityContext, path string, logger *zap.SugaredLogger) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create security context file '%s': %w", path, err)
@@ -106,12 +109,14 @@ func SaveSecurityContext(ctx *StoredSecurityContext, path string) error {
 	if err := encoder.Encode(ctx); err != nil {
 		return fmt.Errorf("failed to encode security context to '%s': %w", path, err)
 	}
-	log.Printf("Saved security context to %s", path)
+	if logger != nil {
+		logger.Infow("Saved security context", "path", path)
+	}
 	return nil
 }
 
 // LoadSecurityContext loads the context from JSON from the specified path.
-func LoadSecurityContext(path string) (*StoredSecurityContext, error) {
+func LoadSecurityContext(path string, logger *zap.SugaredLogger) (*StoredSecurityContext, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -124,6 +129,8 @@ func LoadSecurityContext(path string) (*StoredSecurityContext, error) {
 	if err := json.NewDecoder(file).Decode(&ctx); err != nil {
 		return nil, fmt.Errorf("failed to decode security context from '%s': %w", path, err)
 	}
-	log.Printf("Loaded security context from %s. Fingerprint: %s", path, ctx.CertificateHash)
+	if logger != nil {
+		logger.Infow("Loaded security context", "path", path, "fingerprint", ctx.CertificateHash)
+	}
 	return &ctx, nil
 }

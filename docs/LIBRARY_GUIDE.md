@@ -63,9 +63,11 @@ import (
 	"time"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/model"
+	"go.uber.org/zap"
 )
 
 func DiscoverDevices() {
+	logger := zap.NewNop().Sugar()
 	// Setup
 	cfg := discovery.DefaultServiceConfig()
 	dto := model.MulticastDto{
@@ -74,8 +76,8 @@ func DiscoverDevices() {
 		// ... populate other fields
 	}
 	
-	multicast := discovery.NewMulticastDiscovery(cfg.MulticastConfig, dto)
-	service := discovery.NewService(cfg, multicast)
+multicast := discovery.NewMulticastDiscovery(cfg.MulticastConfig, dto, logger)
+service := discovery.NewService(cfg, multicast, logger)
 
 	// Callback
 	service.AddDeviceHandler(func(device *model.Device) {

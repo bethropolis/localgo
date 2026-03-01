@@ -3,8 +3,9 @@ package httputil
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 // Error represents an error response
@@ -23,14 +24,14 @@ func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 	// Marshal data to JSON
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Failed to marshal JSON response: %v", err)
+		zap.L().Error("Failed to marshal JSON response", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	// Write response
 	if _, err := w.Write(jsonData); err != nil {
-		log.Printf("Failed to write JSON response: %v", err)
+		zap.L().Error("Failed to write JSON response", zap.Error(err))
 	}
 }
 

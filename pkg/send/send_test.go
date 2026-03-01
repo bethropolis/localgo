@@ -16,7 +16,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
+	"go.uber.org/zap"
 )
+
+var testLoggerSend = zap.NewNop().Sugar()
 
 func TestSendFiles_HappyPath(t *testing.T) {
 	tempDir := t.TempDir()
@@ -106,7 +109,7 @@ func TestSendFiles_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath})
+	err := sendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSend)
 	if err != nil {
 		t.Fatalf("sendToDevice failed: %v", err)
 	}

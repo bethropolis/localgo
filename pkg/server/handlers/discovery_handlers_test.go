@@ -11,7 +11,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
+	"go.uber.org/zap"
 )
+
+var testLogger = zap.NewNop().Sugar()
 
 func TestDiscoveryHandler_InfoHandler(t *testing.T) {
 	secCtx := &crypto.StoredSecurityContext{
@@ -29,7 +32,7 @@ func TestDiscoveryHandler_InfoHandler(t *testing.T) {
 	registrySvc := services.NewRegistryService()
 	sendSvc := services.NewSendService()
 
-	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc)
+	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/info", nil)
 	w := httptest.NewRecorder()
@@ -77,7 +80,7 @@ func TestDiscoveryHandler_InfoHandler_WithSendSession(t *testing.T) {
 	files := map[string]model.FileDto{"file1": {ID: "file1", FileName: "test.txt"}}
 	sendSvc.CreateSession(files, map[string]string{"file1": "/path/to/test.txt"})
 
-	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc)
+	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/info", nil)
 	w := httptest.NewRecorder()
@@ -111,7 +114,7 @@ func TestDiscoveryHandler_RegisterHandler(t *testing.T) {
 	registrySvc := services.NewRegistryService()
 	sendSvc := services.NewSendService()
 
-	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc)
+	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc, testLogger)
 
 	registerDto := model.RegisterDto{
 		Alias:       "RemoteDevice",
@@ -157,7 +160,7 @@ func TestDiscoveryHandler_RegisterHandler_MalformedBody(t *testing.T) {
 	registrySvc := services.NewRegistryService()
 	sendSvc := services.NewSendService()
 
-	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc)
+	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader([]byte("not json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -184,7 +187,7 @@ func TestDiscoveryHandler_RegisterHandler_WrongMethod(t *testing.T) {
 	registrySvc := services.NewRegistryService()
 	sendSvc := services.NewSendService()
 
-	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc)
+	handler := NewDiscoveryHandler(cfg, registrySvc, sendSvc, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/register", nil)
 	w := httptest.NewRecorder()

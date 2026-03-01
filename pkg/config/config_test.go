@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"go.uber.org/zap"
 )
+
+var testLogger = zap.NewNop().Sugar()
 
 func TestLoadConfig_WithEnvVars(t *testing.T) {
 	origEnv := saveEnv()
@@ -25,7 +28,7 @@ func TestLoadConfig_WithEnvVars(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig(testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -72,7 +75,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig(testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -105,7 +108,7 @@ func TestToRegisterDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig(testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -144,7 +147,7 @@ func TestToInfoDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig(testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}

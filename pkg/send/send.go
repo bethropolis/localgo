@@ -18,12 +18,16 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // SendFile sends a file to a recipient.
-func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int) error {
-	logrus.Infof("Searching for recipient '%s'...", recipientAlias)
+func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger) error {
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
+	}
+
+	logger.Infof("Searching for recipient '%s'...", recipientAlias)
 
 	// Use default port if not specified
 	if recipientPort == 0 {
@@ -33,7 +37,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	var targetDevice *model.Device
 
 	// --- Multicast Discovery (Fast) ---
-	logrus.Info("Sending multicast announcement...")
+	logger.Info("Sending multicast announcement...")
 
 	// Create multicast discovery DTO
 	discoverySvcConfig := discovery.DefaultServiceConfig()
@@ -58,11 +62,11 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		Announce:    true,
 	}
 
-	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
-	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logger)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, logger)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
 
-	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logger)
 
 	// Channel to catch the found device
 	foundChan := make(chan *model.Device, 1)
@@ -83,27 +87,27 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		defer cancelMulticast()
 		err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
 		if err != nil {
-			logrus.Warnf("Multicast start failed: %v", err)
+			logger.Warnf("Multicast start failed: %v", err)
 		}
 	}()
 
 	// Wait for multicast result
 	select {
 	case device := <-foundChan:
-		logrus.Infof("Discovered recipient via multicast: %s (%s)", device.Alias, device.IP)
+		logger.Infof("Discovered recipient via multicast: %s (%s)", device.Alias, device.IP)
 		targetDevice = device
 		discoverySvc.Stop()
 	case <-multicastCtx.Done():
-		logrus.Info("Multicast discovery timed out, falling back to HTTP scan...")
+		logger.Info("Multicast discovery timed out, falling back to HTTP scan...")
 		discoverySvc.Stop()
 	}
 
 	if targetDevice != nil {
-		return sendToDevice(ctx, cfg, targetDevice, filePaths)
+		return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
 	// --- Fallback: HTTP Scan Discovery ---
-	logrus.Info("Starting HTTP network scan...")
+	logger.Info("Starting HTTP network scan...")
 
 	// Retry discovery for a few seconds
 	retryCtx, cancelRetry := context.WithTimeout(ctx, 15*time.Second)
@@ -125,12 +129,12 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 				Protocol:    model.ProtocolTypeHTTP, // Use HTTP for discovery
 			}
 
-			httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil)
+			httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
 
 			// Get local IPs for scanning
 			localIPs, err := network.GetLocalIPAddresses()
 			if err != nil {
-				logrus.Warnf("Failed to get local IPs: %v", err)
+				logger.Warnf("Failed to get local IPs: %v", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
@@ -149,16 +153,16 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 			cancel()
 
 			if err != nil {
-				logrus.Warnf("HTTP discovery failed: %v", err)
+				logger.Warnf("HTTP discovery failed: %v", err)
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
-			logrus.Infof("Found %d devices during scan attempt.", len(foundDevices))
+			logger.Infof("Found %d devices during scan attempt.", len(foundDevices))
 
 			// Find the target device
 			for _, device := range foundDevices {
-				logrus.Infof("Checking device: %s", device.ToDebugString())
+				logger.Infof("Checking device: %s", device.ToDebugString())
 				if device.Alias == recipientAlias {
 					targetDevice = device
 					break
@@ -166,17 +170,21 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 			}
 
 			if targetDevice == nil {
-				logrus.Infof("Recipient '%s' not found in this scan attempt. Retrying...", recipientAlias)
+				logger.Infof("Recipient '%s' not found in this scan attempt. Retrying...", recipientAlias)
 				time.Sleep(500 * time.Millisecond)
 			}
 		}
 	}
 
-	logrus.Infof("Found recipient: %s", targetDevice.ToDebugString())
-	return sendToDevice(ctx, cfg, targetDevice, filePaths)
+	logger.Infof("Found recipient: %s", targetDevice.ToDebugString())
+	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 }
 
-func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string) error {
+func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
+	}
+
 	client := &http.Client{}
 	scheme := "http"
 
@@ -272,17 +280,17 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	for fileID, token := range prepareResponse.Files {
 		filePath, exists := filePathMap[fileID]
 		if !exists {
-			logrus.Warnf("Server responded with unknown file ID: %s", fileID)
+			logger.Warnf("Server responded with unknown file ID: %s", fileID)
 			continue
 		}
 
 		wg.Add(1)
 		go func(fID, tkn, fPath string) {
 			defer wg.Done()
-			logrus.Infof("Uploading file: %s", filepath.Base(fPath))
-			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme)
+			logger.Infof("Uploading file: %s", filepath.Base(fPath))
+			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, logger)
 			if err != nil {
-				logrus.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
+				logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
 				errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
 			}
 		}(fileID, token, filePath)
@@ -300,11 +308,15 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("encountered %d upload errors, first error: %w", len(uploadErrors), uploadErrors[0])
 	}
 
-	logrus.Info("All files uploaded successfully!")
+	logger.Info("All files uploaded successfully!")
 	return nil
 }
 
-func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string) error {
+func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, logger *zap.SugaredLogger) error {
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -329,6 +341,6 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		return fmt.Errorf("upload request failed with status: %s", resp.Status)
 	}
 
-	logrus.Info("File sent successfully!")
+	logger.Info("File sent successfully!")
 	return nil
 }

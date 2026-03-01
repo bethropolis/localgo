@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // MulticastDiscovery implements UDP multicast-based device discovery
@@ -27,6 +27,7 @@ type MulticastDiscovery struct {
 	connMu         sync.Mutex
 	closed         atomic.Bool
 	httpDiscoverer *HTTPDiscovery
+	logger         *zap.SugaredLogger
 }
 
 // MulticastConfig contains settings for multicast discovery
@@ -48,15 +49,19 @@ func DefaultMulticastConfig() *MulticastConfig {
 }
 
 // NewMulticastDiscovery creates a new multicast discovery instance
-func NewMulticastDiscovery(config *MulticastConfig, dto model.MulticastDto) *MulticastDiscovery {
+func NewMulticastDiscovery(config *MulticastConfig, dto model.MulticastDto, logger *zap.SugaredLogger) *MulticastDiscovery {
 	if config == nil {
 		config = DefaultMulticastConfig()
+	}
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
 	}
 
 	return &MulticastDiscovery{
 		config:  config,
 		dto:     dto,
 		devices: make(map[string]*model.Device),
+		logger:  logger,
 	}
 }
 
@@ -92,8 +97,8 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 	// Start listening loop
 	go md.listenLoop(ctx)
 
-	logrus.Printf("Multicast discovery listening on %s", md.config.MulticastAddr)
-	logrus.Debugf("MulticastDiscovery: Listening with DTO: %+v", md.dto)
+	md.logger.Infof("Multicast discovery listening on %s", md.config.MulticastAddr)
+	md.logger.Debugf("MulticastDiscovery: Listening with DTO: %+v", md.dto)
 	return nil
 }
 
@@ -138,9 +143,9 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 		return fmt.Errorf("failed to send multicast announcement: %w", err)
 	}
 
-	logrus.Printf("Sent multicast announcement as %s (fingerprint: %s) to %s",
+	md.logger.Infof("Sent multicast announcement as %s (fingerprint: %s) to %s",
 		md.dto.Alias, getShortFingerprint(md.dto.Fingerprint), md.config.MulticastAddr)
-	logrus.Debugf("MulticastDiscovery: Announcement DTO: %+v", announcementDto)
+	md.logger.Debugf("MulticastDiscovery: Announcement DTO: %+v", announcementDto)
 	return nil
 }
 
@@ -151,7 +156,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		logrus.Debugf("Attempting HTTP response to %s:%d", targetDevice.IP, targetDevice.Port)
+		md.logger.Debugf("Attempting HTTP response to %s:%d", targetDevice.IP, targetDevice.Port)
 		// We use the RegisterWithDevice method from HTTPDiscovery
 		// Note: We need to make sure the HTTPDiscoverer has the correct DTO set
 		// But wait, HTTPDiscoverer is usually for *scanning* or *sending*.
@@ -165,10 +170,10 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 
 		_, err := md.httpDiscoverer.RegisterWithDevice(ctx, net.ParseIP(targetDevice.IP), targetDevice.Port, scheme)
 		if err == nil {
-			logrus.Printf("Sent discovery response via HTTP to %s:%d", targetDevice.IP, targetDevice.Port)
+			md.logger.Infof("Sent discovery response via HTTP to %s:%d", targetDevice.IP, targetDevice.Port)
 			return nil
 		}
-		logrus.Warnf("HTTP response failed: %v. Falling back to UDP.", err)
+		md.logger.Warnf("HTTP response failed: %v. Falling back to UDP.", err)
 	}
 
 	// 2. Fallback to UDP
@@ -195,7 +200,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		return fmt.Errorf("failed to send discovery response: %w", err)
 	}
 
-	logrus.Printf("Sent discovery response via UDP to %s", targetAddr)
+	md.logger.Infof("Sent discovery response via UDP to %s", targetAddr)
 	return nil
 }
 
@@ -226,7 +231,7 @@ func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
 
 		// Set read deadline for periodic context checking
 		if err := conn.SetReadDeadline(time.Now().Add(md.config.ListenTimeout)); err != nil {
-			logrus.Printf("Failed to set read deadline: %v", err)
+			md.logger.Warnf("Failed to set read deadline: %v", err)
 		}
 
 		// Read incoming packet
@@ -242,14 +247,14 @@ func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
 				return
 			}
 
-			logrus.Printf("Error reading from multicast: %v", err)
+			md.logger.Warnf("Error reading from multicast: %v", err)
 			continue
 		}
 
 		// Process the received data
-		logrus.Debugf("MulticastDiscovery: Received %d bytes from %v", n, addr)
+		md.logger.Debugf("MulticastDiscovery: Received %d bytes from %v", n, addr)
 		if err := md.handlePacket(buffer[:n], addr); err != nil {
-			logrus.Printf("Failed to handle multicast packet: %v", err)
+			md.logger.Warnf("Failed to handle multicast packet: %v", err)
 		}
 	}
 }
@@ -264,7 +269,7 @@ func (md *MulticastDiscovery) handlePacket(data []byte, addr net.Addr) error {
 
 	// Skip our own announcements
 	if dto.Fingerprint == md.dto.Fingerprint {
-		logrus.Debugf("MulticastDiscovery: Ignoring self-announcement (fingerprint: %s)", dto.Fingerprint)
+		md.logger.Debugf("MulticastDiscovery: Ignoring self-announcement (fingerprint: %s)", dto.Fingerprint)
 		return nil
 	}
 
@@ -277,9 +282,9 @@ func (md *MulticastDiscovery) handlePacket(data []byte, addr net.Addr) error {
 	// Create a device from the DTO
 	device := model.FromMulticastDto(dto, udpAddr.IP)
 
-	logrus.Printf("Discovered device via multicast: %s (%s) at %s:%d",
+	md.logger.Infof("Discovered device via multicast: %s (%s) at %s:%d",
 		device.Alias, getShortFingerprint(device.Fingerprint), device.IP, device.Port)
-	logrus.Debugf("MulticastDiscovery: Device DTO: %+v", dto)
+	md.logger.Debugf("MulticastDiscovery: Device DTO: %+v", dto)
 
 	// Update our device map
 	md.updateDevice(device)
@@ -288,7 +293,7 @@ func (md *MulticastDiscovery) handlePacket(data []byte, addr net.Addr) error {
 	if dto.Announce {
 		// Pass the discovered device so we can try HTTP response
 		if err := md.SendDiscoveryResponse(udpAddr, device); err != nil {
-			logrus.Printf("Failed to send discovery response: %v", err)
+			md.logger.Warnf("Failed to send discovery response: %v", err)
 		}
 	}
 

@@ -10,26 +10,28 @@ import (
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // DownloadHandler handles file downloading requests.
 type DownloadHandler struct {
 	config      *config.Config
 	sendService *services.SendService
+	logger      *zap.SugaredLogger
 }
 
 // NewDownloadHandler creates a new DownloadHandler.
-func NewDownloadHandler(cfg *config.Config, sendService *services.SendService) *DownloadHandler {
+func NewDownloadHandler(cfg *config.Config, sendService *services.SendService, logger *zap.SugaredLogger) *DownloadHandler {
 	return &DownloadHandler{
 		config:      cfg,
 		sendService: sendService,
+		logger:      logger,
 	}
 }
 
 // PrepareDownloadHandler handles POST /v2/prepare-download requests.
 func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.Request) {
-	logrus.Info("Received /prepare-download request")
+	h.logger.Info("Received /prepare-download request")
 
 	// --- PIN Check ---
 	if h.config.PIN != "" {
@@ -60,7 +62,7 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 
 // DownloadHandler handles GET /v2/download requests.
 func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
-	logrus.Info("Received /download request")
+	h.logger.Info("Received /download request")
 
 	// --- PIN Check ---
 	if h.config.PIN != "" {
@@ -100,7 +102,7 @@ func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request
 
 	file, err := os.Open(localPath)
 	if err != nil {
-		logrus.Errorf("Failed to open file for download: %v", err)
+		h.logger.Errorf("Failed to open file for download: %v", err)
 		httputil.RespondError(w, http.StatusInternalServerError, "Failed to read file")
 		return
 	}
@@ -113,8 +115,8 @@ func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request
 
 	_, err = io.Copy(w, file)
 	if err != nil {
-		logrus.Errorf("Failed to write file to response: %v", err)
+		h.logger.Errorf("Failed to write file to response: %v", err)
 	} else {
-		logrus.Infof("Successfully sent file: %s", fileDto.FileName)
+		h.logger.Infof("Successfully sent file: %s", fileDto.FileName)
 	}
 }

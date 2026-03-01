@@ -13,7 +13,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // Server manages the HTTP/S server lifecycle.
@@ -24,10 +24,11 @@ type Server struct {
 	receiveService  *services.ReceiveService
 	sendService     *services.SendService
 	registryService *services.RegistryService
+	logger          *zap.SugaredLogger
 }
 
 // NewServer creates a new Server instance.
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
 	router := mux.NewRouter()
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()
@@ -38,6 +39,7 @@ func NewServer(cfg *config.Config) *Server {
 		receiveService:  receiveService,
 		sendService:     sendService,
 		registryService: registryService,
+		logger:          logger,
 	}
 }
 
@@ -46,25 +48,25 @@ func (s *Server) configureRoutes() {
 	apiRouter := s.muxRouter.PathPrefix("/api/localsend").Subrouter()
 
 	// Discovery Handlers (Phase 1)
-	discoveryHandler := handlers.NewDiscoveryHandler(s.config, s.registryService, s.sendService)
+	discoveryHandler := handlers.NewDiscoveryHandler(s.config, s.registryService, s.sendService, s.logger)
 	apiRouter.HandleFunc("/v1/info", discoveryHandler.InfoHandler).Methods("GET")
 	apiRouter.HandleFunc("/v2/info", discoveryHandler.InfoHandler).Methods("GET")
 	apiRouter.HandleFunc("/v1/register", discoveryHandler.RegisterHandler).Methods("POST")
 	apiRouter.HandleFunc("/v2/register", discoveryHandler.RegisterHandler).Methods("POST")
 
 	// Receive Handlers (Phase 2)
-	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService)
+	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.logger)
 	apiRouter.HandleFunc("/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1).Methods("POST")
 	apiRouter.HandleFunc("/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2).Methods("POST")
 	apiRouter.HandleFunc("/v2/upload", receiveHandler.UploadHandlerV2).Methods("POST")
 	apiRouter.HandleFunc("/v2/cancel", receiveHandler.CancelHandler).Methods("POST")
 
 	// Download Handlers
-	downloadHandler := handlers.NewDownloadHandler(s.config, s.sendService)
+	downloadHandler := handlers.NewDownloadHandler(s.config, s.sendService, s.logger)
 	apiRouter.HandleFunc("/v2/prepare-download", downloadHandler.PrepareDownloadHandler).Methods("POST")
 	apiRouter.HandleFunc("/v2/download", downloadHandler.DownloadHandler).Methods("GET")
 
-	logrus.Info("Configured API routes.")
+	s.logger.Info("Configured API routes.")
 }
 
 // Start runs the HTTP/S server.
@@ -89,7 +91,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	serverErrChan := make(chan error, 1)
 
 	if s.config.HttpsEnabled {
-		logrus.Infof("Starting HTTPS server on %s with alias %s", addr, s.config.Alias)
+		s.logger.Infof("Starting HTTPS server on %s with alias %s", addr, s.config.Alias)
 		cert, err := tls.X509KeyPair([]byte(s.config.SecurityContext.Certificate), []byte(s.config.SecurityContext.PrivateKey))
 		if err != nil {
 			return fmt.Errorf("failed to load TLS key pair: %w", err)
@@ -107,7 +109,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 			}
 		}()
 	} else {
-		logrus.Infof("Starting HTTP server on %s with alias %s", addr, s.config.Alias)
+		s.logger.Infof("Starting HTTP server on %s with alias %s", addr, s.config.Alias)
 		go func() {
 			if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 				serverErrChan <- err
@@ -125,7 +127,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	case err := <-serverErrChan:
 		return fmt.Errorf("server failed to start: %w", err)
 	case <-ctx.Done():
-		logrus.Info("Server shutting down...")
+		s.logger.Info("Server shutting down...")
 		return s.Shutdown(context.Background())
 	}
 }
@@ -140,7 +142,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server shutdown failed: %w", err)
 	}
-	logrus.Info("Server stopped.")
+	s.logger.Info("Server stopped.")
 	s.httpServer = nil
 	return nil
 }

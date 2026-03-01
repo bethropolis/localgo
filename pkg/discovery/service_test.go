@@ -7,7 +7,10 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
+
+var testLoggerService = zap.NewNop().Sugar()
 
 // MockMulticastDiscovery is a mock implementation of the MulticastDiscovery for testing.
 
@@ -41,7 +44,7 @@ func (m *MockMulticastDiscovery) SetDto(dto model.MulticastDto) {
 func TestService_Start(t *testing.T) {
 	cfg := DefaultServiceConfig()
 	multicast := &MockMulticastDiscovery{}
-	service := NewService(cfg, multicast)
+	service := NewService(cfg, multicast, testLoggerService)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()

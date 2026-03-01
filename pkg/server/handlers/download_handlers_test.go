@@ -12,7 +12,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
+	"go.uber.org/zap"
 )
+
+var testLoggerDownload = zap.NewNop().Sugar()
 
 func setupDownloadHandler(t *testing.T, cfg *config.Config) (*handlers.DownloadHandler, *services.SendService, string) {
 	tempDir := t.TempDir()
@@ -23,7 +26,7 @@ func setupDownloadHandler(t *testing.T, cfg *config.Config) (*handlers.DownloadH
 	}
 
 	sendService := services.NewSendService()
-	handler := handlers.NewDownloadHandler(cfg, sendService)
+	handler := handlers.NewDownloadHandler(cfg, sendService, testLoggerDownload)
 	return handler, sendService, tempDir
 }
 

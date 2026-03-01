@@ -14,7 +14,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
+	"go.uber.org/zap"
 )
+
+var testLogger = zap.NewNop().Sugar()
 
 func setupReceiveHandler(t *testing.T, cfg *config.Config) (*handlers.ReceiveHandler, *services.ReceiveService, string) {
 	tempDir := t.TempDir()
@@ -28,7 +31,7 @@ func setupReceiveHandler(t *testing.T, cfg *config.Config) (*handlers.ReceiveHan
 	}
 
 	receiveService := services.NewReceiveService()
-	handler := handlers.NewReceiveHandler(cfg, receiveService)
+	handler := handlers.NewReceiveHandler(cfg, receiveService, testLogger)
 	return handler, receiveService, tempDir
 }
 

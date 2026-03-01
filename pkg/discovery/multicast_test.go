@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"go.uber.org/zap"
 )
+
+var testLoggerMulticast = zap.NewNop().Sugar()
 
 // We use a different multicast address for testing to avoid conflicting with actual apps
 const testMulticastAddr = "224.0.0.254:53318"
@@ -24,7 +27,7 @@ func TestMulticastDiscovery_Lifecycle(t *testing.T) {
 		Port:        53318,
 	}
 
-	md := NewMulticastDiscovery(config, dto)
+	md := NewMulticastDiscovery(config, dto, testLoggerMulticast)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -54,7 +57,7 @@ func TestMulticastDiscovery_ReceiveAnnouncement(t *testing.T) {
 		Port:        53318,
 	}
 
-	receiver := NewMulticastDiscovery(config1, receiverDto)
+	receiver := NewMulticastDiscovery(config1, receiverDto, testLoggerMulticast)
 
 	deviceFoundCh := make(chan *model.Device, 1)
 	receiver.AddDeviceHandler(func(d *model.Device) {
@@ -81,7 +84,7 @@ func TestMulticastDiscovery_ReceiveAnnouncement(t *testing.T) {
 		Announce:    true,
 	}
 
-	sender := NewMulticastDiscovery(config1, senderDto)
+	sender := NewMulticastDiscovery(config1, senderDto, testLoggerMulticast)
 	err = sender.SendDiscoveryAnnouncement()
 	if err != nil {
 		t.Fatalf("sender failed to announce: %v", err)
@@ -116,7 +119,7 @@ func TestMulticastDiscovery_IgnoreSelf(t *testing.T) {
 		Port:        53318,
 	}
 
-	md := NewMulticastDiscovery(config, dto)
+	md := NewMulticastDiscovery(config, dto, testLoggerMulticast)
 
 	deviceFoundCh := make(chan *model.Device, 1)
 	md.AddDeviceHandler(func(d *model.Device) {
@@ -149,7 +152,7 @@ func TestMulticastDiscovery_IgnoreSelf(t *testing.T) {
 func TestMulticastDiscovery_HandlePacket(t *testing.T) {
 	md := NewMulticastDiscovery(nil, model.MulticastDto{
 		Fingerprint: "my-fp",
-	})
+	}, testLoggerMulticast)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

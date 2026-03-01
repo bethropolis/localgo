@@ -10,7 +10,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 const (
@@ -45,7 +45,7 @@ type Config struct {
 func getSecurityDir() string {
 	// Check for explicit override via environment variable
 	if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
-		logrus.Infof("Using security directory from LOCALSEND_SECURITY_DIR: %s", envDir)
+		zap.S().Infof("Using security directory from LOCALSEND_SECURITY_DIR: %s", envDir)
 		return envDir
 	}
 
@@ -53,7 +53,7 @@ func getSecurityDir() string {
 	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
 		dir := filepath.Join(configHome, "localgo", ".security")
 		if testDirWritable(dir) {
-			logrus.Debugf("Using XDG config directory for security: %s", dir)
+			zap.S().Debugf("Using XDG config directory for security: %s", dir)
 			return dir
 		}
 	}
@@ -62,7 +62,7 @@ func getSecurityDir() string {
 	if home := os.Getenv("HOME"); home != "" {
 		dir := filepath.Join(home, ".config", "localgo", ".security")
 		if testDirWritable(dir) {
-			logrus.Debugf("Using HOME/.config directory for security: %s", dir)
+			zap.S().Debugf("Using HOME/.config directory for security: %s", dir)
 			return dir
 		}
 	}
@@ -71,7 +71,7 @@ func getSecurityDir() string {
 	if appData := os.Getenv("APPDATA"); appData != "" {
 		dir := filepath.Join(appData, "localgo", ".security")
 		if testDirWritable(dir) {
-			logrus.Debugf("Using APPDATA directory for security: %s", dir)
+			zap.S().Debugf("Using APPDATA directory for security: %s", dir)
 			return dir
 		}
 	}
@@ -80,7 +80,7 @@ func getSecurityDir() string {
 	if home := os.Getenv("HOME"); home != "" {
 		dir := filepath.Join(home, ".localgo", ".security")
 		if testDirWritable(dir) {
-			logrus.Debugf("Using HOME/.localgo directory for security: %s", dir)
+			zap.S().Debugf("Using HOME/.localgo directory for security: %s", dir)
 			return dir
 		}
 	}
@@ -88,16 +88,16 @@ func getSecurityDir() string {
 	// Final fallback: Current directory (for compatibility with older versions)
 	exePath, err := os.Executable()
 	if err != nil {
-		logrus.Warnf("Could not get executable path, using current directory for security: %v", err)
+		zap.S().Warnf("Could not get executable path, using current directory for security: %v", err)
 		exePath = "."
 	}
 	dir := filepath.Join(filepath.Dir(exePath), DefaultSecurityDir)
-	logrus.Warnf("Using fallback security directory (current/executable dir): %s", dir)
+	zap.S().Warnf("Using fallback security directory (current/executable dir): %s", dir)
 
 	// Check if old location exists and provide migration hint
 	if _, err := os.Stat(dir); err == nil {
-		logrus.Infof("Found existing security directory at %s", dir)
-		logrus.Infof("Consider moving to ~/.config/localgo/.security for better XDG compliance")
+		zap.S().Infof("Found existing security directory at %s", dir)
+		zap.S().Infof("Consider moving to ~/.config/localgo/.security for better XDG compliance")
 	}
 
 	return dir
@@ -130,7 +130,7 @@ func testDirWritable(dir string) bool {
 	return true
 }
 
-func LoadConfig() (*Config, error) {
+func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 	alias := os.Getenv("LOCALSEND_ALIAS")
 	if alias == "" {
 		alias = generateDefaultAlias()
@@ -162,7 +162,7 @@ func LoadConfig() (*Config, error) {
 		if size, err := strconv.ParseInt(maxBodySizeStr, 10, 64); err == nil {
 			maxBodySize = size
 		} else {
-			logrus.Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
+			zap.S().Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
 		}
 	}
 
@@ -170,19 +170,19 @@ func LoadConfig() (*Config, error) {
 	forceHTTP := os.Getenv("LOCALSEND_FORCE_HTTP") == "true" || os.Getenv("LOCALSEND_FORCE_HTTP") == "1"
 	HttpsEnabled := !forceHTTP
 
-	securityContext, err := crypto.LoadSecurityContext(securityFilePath)
+	securityContext, err := crypto.LoadSecurityContext(securityFilePath, logger)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logrus.Infof("Security context not found at %s, generating new one...", securityFilePath)
-			securityContext, err = crypto.GenerateSecurityContext(alias)
+			zap.S().Infof("Security context not found at %s, generating new one...", securityFilePath)
+			securityContext, err = crypto.GenerateSecurityContext(alias, logger)
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate security context: %w", err)
 			}
 			if err := os.MkdirAll(securityDirPath, 0700); err != nil {
-				logrus.Warnf("Could not create security directory '%s': %v", securityDirPath, err)
+				zap.S().Warnf("Could not create security directory '%s': %v", securityDirPath, err)
 			}
-			if err := crypto.SaveSecurityContext(securityContext, securityFilePath); err != nil {
-				logrus.Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
+			if err := crypto.SaveSecurityContext(securityContext, securityFilePath, logger); err != nil {
+				zap.S().Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
 			}
 		} else {
 			return nil, fmt.Errorf("failed to load security context from '%s': %w", securityFilePath, err)
@@ -225,7 +225,7 @@ func LoadConfig() (*Config, error) {
 func generateDefaultAlias() string {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" {
-		logrus.Info("Could not get hostname, generating random alias suffix.")
+		zap.S().Infow("Could not get hostname, generating random alias suffix.")
 		hostname = "LocalGo"
 	}
 	return hostname
