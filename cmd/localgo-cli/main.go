@@ -394,15 +394,16 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	srv := server.NewServer(cfg)
 
 	serverErrChan := make(chan error, 1)
+	serverReadyChan := make(chan struct{}, 1)
 	go func() {
-		serverErrChan <- srv.Start(ctx)
+		serverErrChan <- srv.Start(ctx, serverReadyChan)
 	}()
 
 	// Wait for server to be ready (server.Start waits for port bind)
 	select {
 	case err := <-serverErrChan:
 		return fmt.Errorf("server failed: %w", err)
-	case <-time.After(3 * time.Second):
+	case <-serverReadyChan:
 	}
 
 	// Start discovery AFTER server is ready
@@ -536,15 +537,16 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 
 	// Start server first
 	serverErrChan := make(chan error, 1)
+	serverReadyChan := make(chan struct{}, 1)
 	go func() {
-		serverErrChan <- srv.Start(ctx)
+		serverErrChan <- srv.Start(ctx, serverReadyChan)
 	}()
 
 	// Wait for server to be ready
 	select {
 	case err := <-serverErrChan:
 		return fmt.Errorf("server failed: %w", err)
-	case <-time.After(3 * time.Second):
+	case <-serverReadyChan:
 	}
 
 	// Start discovery AFTER server is ready

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -67,7 +68,7 @@ func (s *Server) configureRoutes() {
 }
 
 // Start runs the HTTP/S server.
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	s.configureRoutes()
 
 	addr := fmt.Sprintf("0.0.0.0:%d", s.config.Port)
@@ -80,7 +81,12 @@ func (s *Server) Start(ctx context.Context) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	readyChan := make(chan error, 1)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to bind port %d: %w", s.config.Port, err)
+	}
+
+	serverErrChan := make(chan error, 1)
 
 	if s.config.HttpsEnabled {
 		logrus.Infof("Starting HTTPS server on %s with alias %s", addr, s.config.Alias)
@@ -92,31 +98,36 @@ func (s *Server) Start(ctx context.Context) error {
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   tls.VersionTLS12,
 		}
+
+		tlsListener := tls.NewListener(ln, s.httpServer.TLSConfig)
+
 		go func() {
-			if err := s.httpServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				readyChan <- err
+			if err := s.httpServer.Serve(tlsListener); err != nil && err != http.ErrServerClosed {
+				serverErrChan <- err
 			}
 		}()
 	} else {
 		logrus.Infof("Starting HTTP server on %s with alias %s", addr, s.config.Alias)
 		go func() {
-			if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				readyChan <- err
+			if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+				serverErrChan <- err
 			}
 		}()
 	}
 
-	// Wait for server to be ready (port bound)
-	select {
-	case err := <-readyChan:
-		return fmt.Errorf("server failed to start: %w", err)
-	case <-time.After(2 * time.Second):
-		// Server had time to bind to the port
+	// Signal that the port is successfully bound
+	if readyChan != nil {
+		readyChan <- struct{}{}
 	}
 
-	<-ctx.Done()
-	logrus.Info("Server shutting down...")
-	return s.Shutdown(context.Background())
+	// Wait for context cancellation or server error
+	select {
+	case err := <-serverErrChan:
+		return fmt.Errorf("server failed to start: %w", err)
+	case <-ctx.Done():
+		logrus.Info("Server shutting down...")
+		return s.Shutdown(context.Background())
+	}
 }
 
 // Shutdown gracefully shuts down the server.
