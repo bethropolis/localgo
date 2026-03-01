@@ -1,4 +1,3 @@
-
 package discovery
 
 import (
@@ -13,10 +12,10 @@ import (
 // MockMulticastDiscovery is a mock implementation of the MulticastDiscovery for testing.
 
 type MockMulticastDiscovery struct {
-	startListeningCalled    bool
+	startListeningCalled   bool
 	sendAnnouncementCalled bool
-	dto                     model.MulticastDto
-	stopped                 bool
+	dto                    model.MulticastDto
+	stopped                bool
 }
 
 func (m *MockMulticastDiscovery) AddDeviceHandler(handler func(*model.Device)) {}
@@ -47,7 +46,7 @@ func TestService_Start(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx, "test-alias", 12345, "test-fingerprint", model.DeviceTypeDesktop, nil)
+	err := service.Start(ctx, "test-alias", 12345, "test-fingerprint", model.DeviceTypeDesktop, nil, false)
 
 	assert.NoError(t, err)
 	assert.True(t, multicast.startListeningCalled)

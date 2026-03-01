@@ -131,19 +131,16 @@ func (hd *HTTPDiscovery) FetchDeviceInfo(ctx context.Context, ip net.IP, port in
 	}
 	return device, err
 }
-func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port int) (*model.Device, error) {
+func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port int, scheme string) (*model.Device, error) {
 	// Create request body with this device's info
 	jsonData, err := json.Marshal(hd.dto)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	// Create URL for the register endpoint
-	scheme := "http"
-	// This part is tricky as we don't know the remote protocol.
-	// The best way is to try https first, then http.
-	// For now, this is not used by the test, so we keep it simple.
-	// A more robust implementation would be needed for a feature-complete client.
+	if scheme == "" {
+		scheme = "http"
+	}
 	url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", scheme, ip.String(), port)
 
 	// Create a request with context for cancellation

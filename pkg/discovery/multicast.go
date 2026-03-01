@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
@@ -16,13 +17,15 @@ import (
 
 // MulticastDiscovery implements UDP multicast-based device discovery
 type MulticastDiscovery struct {
-	config       *MulticastConfig
-	dto          model.MulticastDto
-	devices      map[string]*model.Device
-	devicesMutex sync.RWMutex
-	handlers     []func(*model.Device)
-	conn         net.PacketConn
-	closed       bool
+	config         *MulticastConfig
+	dto            model.MulticastDto
+	devices        map[string]*model.Device
+	devicesMutex   sync.RWMutex
+	handlers       []func(*model.Device)
+	handlersMu     sync.RWMutex
+	conn           net.PacketConn
+	connMu         sync.Mutex
+	closed         atomic.Bool
 	httpDiscoverer *HTTPDiscovery
 }
 
@@ -59,6 +62,8 @@ func NewMulticastDiscovery(config *MulticastConfig, dto model.MulticastDto) *Mul
 
 // AddDeviceHandler adds a handler function that will be called when a device is discovered
 func (md *MulticastDiscovery) AddDeviceHandler(handler func(*model.Device)) {
+	md.handlersMu.Lock()
+	defer md.handlersMu.Unlock()
 	md.handlers = append(md.handlers, handler)
 }
 
@@ -94,11 +99,13 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 
 // Stop stops the multicast discovery
 func (md *MulticastDiscovery) Stop() {
-	md.closed = true
+	md.closed.Store(true)
+	md.connMu.Lock()
 	if md.conn != nil {
 		md.conn.Close()
 		md.conn = nil
 	}
+	md.connMu.Unlock()
 }
 
 // SendDiscoveryAnnouncement sends a multicast announcement
@@ -150,8 +157,13 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		// But wait, HTTPDiscoverer is usually for *scanning* or *sending*.
 		// Here we are *responding* to an announcement.
 		// The response is a REGISTER request to the announcer.
-		
-		_, err := md.httpDiscoverer.RegisterWithDevice(ctx, net.ParseIP(targetDevice.IP), targetDevice.Port)
+
+		scheme := "http"
+		if targetDevice.Protocol == model.ProtocolTypeHTTPS {
+			scheme = "https"
+		}
+
+		_, err := md.httpDiscoverer.RegisterWithDevice(ctx, net.ParseIP(targetDevice.IP), targetDevice.Port, scheme)
 		if err == nil {
 			logrus.Printf("Sent discovery response via HTTP to %s:%d", targetDevice.IP, targetDevice.Port)
 			return nil
@@ -200,17 +212,25 @@ func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
 			// Continue
 		}
 
-		if md.closed || md.conn == nil {
+		if md.closed.Load() {
+			return
+		}
+
+		md.connMu.Lock()
+		conn := md.conn
+		md.connMu.Unlock()
+
+		if conn == nil {
 			return
 		}
 
 		// Set read deadline for periodic context checking
-		if err := md.conn.SetReadDeadline(time.Now().Add(md.config.ListenTimeout)); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(md.config.ListenTimeout)); err != nil {
 			logrus.Printf("Failed to set read deadline: %v", err)
 		}
 
 		// Read incoming packet
-		n, addr, err := md.conn.ReadFrom(buffer)
+		n, addr, err := conn.ReadFrom(buffer)
 		if err != nil {
 			// Handle timeout (not a real error)
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -291,7 +311,12 @@ func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 		md.devices[key] = device
 
 		// Notify all handlers about the new device
-		for _, handler := range md.handlers {
+		md.handlersMu.RLock()
+		handlers := make([]func(*model.Device), len(md.handlers))
+		copy(handlers, md.handlers)
+		md.handlersMu.RUnlock()
+
+		for _, handler := range handlers {
 			go handler(device)
 		}
 	}
