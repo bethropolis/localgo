@@ -62,6 +62,15 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	logrus.Info("Received /download request")
 
+	// --- PIN Check ---
+	if h.config.PIN != "" {
+		pin := r.URL.Query().Get("pin")
+		if pin != h.config.PIN {
+			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
+			return
+		}
+	}
+
 	query := r.URL.Query()
 	sessionId := query.Get("sessionId")
 	fileId := query.Get("fileId")

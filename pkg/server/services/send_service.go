@@ -18,7 +18,7 @@ type ActiveSendSession struct {
 // SendService manages file sending sessions.
 type SendService struct {
 	currentSession *ActiveSendSession
-	sessionMutex   sync.Mutex
+	sessionMutex   sync.RWMutex
 }
 
 // NewSendService creates a new SendService.
@@ -46,18 +46,48 @@ func (s *SendService) CreateSession(files map[string]model.FileDto, filePaths ma
 }
 
 // GetSession returns the current active session.
+// Returns a shallow copy to prevent map races
 func (s *SendService) GetSession() *ActiveSendSession {
-	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
-	return s.currentSession
+	s.sessionMutex.RLock()
+	defer s.sessionMutex.RUnlock()
+
+	if s.currentSession == nil {
+		return nil
+	}
+
+	copySession := &ActiveSendSession{
+		SessionID: s.currentSession.SessionID,
+		Files:     make(map[string]model.FileDto, len(s.currentSession.Files)),
+		FilePaths: make(map[string]string, len(s.currentSession.FilePaths)),
+	}
+	for k, v := range s.currentSession.Files {
+		copySession.Files[k] = v
+	}
+	for k, v := range s.currentSession.FilePaths {
+		copySession.FilePaths[k] = v
+	}
+	return copySession
 }
 
 // GetSessionByID returns the session if the ID matches.
+// Returns a shallow copy to prevent map races
 func (s *SendService) GetSessionByID(sessionID string) *ActiveSendSession {
-	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
+	s.sessionMutex.RLock()
+	defer s.sessionMutex.RUnlock()
+
 	if s.currentSession != nil && s.currentSession.SessionID == sessionID {
-		return s.currentSession
+		copySession := &ActiveSendSession{
+			SessionID: s.currentSession.SessionID,
+			Files:     make(map[string]model.FileDto, len(s.currentSession.Files)),
+			FilePaths: make(map[string]string, len(s.currentSession.FilePaths)),
+		}
+		for k, v := range s.currentSession.Files {
+			copySession.Files[k] = v
+		}
+		for k, v := range s.currentSession.FilePaths {
+			copySession.FilePaths[k] = v
+		}
+		return copySession
 	}
 	return nil
 }

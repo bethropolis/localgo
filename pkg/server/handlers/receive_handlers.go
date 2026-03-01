@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -161,16 +162,33 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- File Saving ---
-	destinationPath := filepath.Join(h.config.DownloadDir, fileInfo.Dto.FileName) // Example path
+	rawFileName := fileInfo.Dto.FileName
+	destinationPath := filepath.Join(h.config.DownloadDir, rawFileName)
+
+	// Path traversal prevention: ensure the resolved path is still within DownloadDir
+	cleanPath := filepath.Clean(destinationPath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
+		cleanPath != filepath.Clean(h.config.DownloadDir) {
+		logrus.Errorf("Path traversal attempt detected: %s -> %s", rawFileName, cleanPath)
+		httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
+		return
+	}
 
 	logrus.Infof("Starting save for file: %s (ID: %s) to %s", fileInfo.Dto.FileName, reqFileId, destinationPath)
 
-	// Define progress callback
+	// --- Progress Callback ---
 	onProgress := func(bytesWritten int64) {
 		if bytesWritten%(1024*1024) == 0 || bytesWritten == fileInfo.Dto.Size {
 			logrus.Infof("Progress for %s (%s): %d / %d bytes", fileInfo.Dto.FileName, reqFileId, bytesWritten, fileInfo.Dto.Size)
 		}
 	}
+
+	// --- Body Size Limit ---
+	maxBodySize := h.config.MaxBodySize
+	if maxBodySize <= 0 {
+		maxBodySize = 100 * 1024 * 1024 * 1024 // 100GB default
+	}
+	bodyReader := http.MaxBytesReader(w, r.Body, maxBodySize)
 
 	var modified, accessed *string
 	if fileInfo.Dto.Metadata != nil {
@@ -178,7 +196,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		accessed = fileInfo.Dto.Metadata.Accessed
 	}
 
-	err := storage.SaveStreamToFileWithMetadata(r.Body, destinationPath, modified, accessed, onProgress)
+	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, modified, accessed, onProgress)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -216,18 +234,24 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 
 	fmt.Fprintf(os.Stderr, "\nAccept transfer? [Y/n] (auto-rejects in 30s): ")
 
-	// Read with timeout
-	ch := make(chan string)
+	// Read with timeout - use context to prevent goroutine leak
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ch := make(chan string, 1)
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
-		ch <- strings.TrimSpace(strings.ToLower(input))
+		select {
+		case ch <- strings.TrimSpace(strings.ToLower(input)):
+		case <-ctx.Done():
+		}
 	}()
 
 	select {
 	case input := <-ch:
 		return input == "" || input == "y" || input == "yes"
-	case <-time.After(30 * time.Second):
+	case <-ctx.Done():
 		fmt.Fprintf(os.Stderr, "\nTransfer auto-rejected (timeout).\n")
 		return false
 	}
