@@ -57,14 +57,17 @@ func (f *File) ToFileDto() FileDto {
 	if f.SHA256 != "" {
 		sha256Ptr = &f.SHA256 // Assign address if SHA256 is calculated
 	}
-	// TODO: Populate Metadata field if needed
+
+	modTime := time.Unix(0, f.LastModified).Format(time.RFC3339)
 	return FileDto{
 		ID:       f.ID,
 		FileName: f.Name,
 		Size:     f.Size,
 		FileType: f.Type,
-		SHA256:   sha256Ptr, // Use the pointer
-		// LastModified removed as it's no longer in FileDto
+		SHA256:   sha256Ptr,
+		Metadata: &FileMetadata{
+			Modified: &modTime,
+		},
 	}
 }
 

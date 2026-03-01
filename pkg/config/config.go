@@ -34,6 +34,7 @@ type Config struct {
 	DownloadDir       string                        `json:"-"`
 	AutoAccept        bool                          `json:"-"`
 	RandomFingerprint string                        `json:"-"`
+	MaxBodySize       int64                         `json:"-"`
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -155,6 +156,16 @@ func LoadConfig() (*Config, error) {
 		downloadDir = "./downloads"
 	}
 
+	maxBodySizeStr := os.Getenv("LOCALSEND_MAX_BODY_SIZE")
+	maxBodySize := int64(0)
+	if maxBodySizeStr != "" {
+		if size, err := strconv.ParseInt(maxBodySizeStr, 10, 64); err == nil {
+			maxBodySize = size
+		} else {
+			logrus.Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
+		}
+	}
+
 	// Parse LOCALSEND_FORCE_HTTP
 	forceHTTP := os.Getenv("LOCALSEND_FORCE_HTTP") == "true" || os.Getenv("LOCALSEND_FORCE_HTTP") == "1"
 	HttpsEnabled := !forceHTTP
@@ -205,6 +216,7 @@ func LoadConfig() (*Config, error) {
 		DownloadDir:       downloadDir,
 		AutoAccept:        autoAccept,
 		RandomFingerprint: generateRandomID(64),
+		MaxBodySize:       maxBodySize,
 	}
 
 	return cfg, nil
@@ -254,7 +266,7 @@ func (c *Config) ToRegisterDto() model.RegisterDto {
 		Fingerprint: fingerprint,
 		Port:        c.Port,
 		Protocol:    protocol,
-		Download:    false, // Update later when download server is implemented
+		Download:    true,
 	}
 }
 
@@ -270,6 +282,6 @@ func (c *Config) ToInfoDto() model.InfoDto {
 		DeviceModel: c.DeviceModel,
 		DeviceType:  c.DeviceType,
 		Fingerprint: fingerprint,
-		Download:    false, // Update later when download server is implemented
+		Download:    true,
 	}
 }

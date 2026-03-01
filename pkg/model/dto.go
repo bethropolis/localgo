@@ -1,7 +1,7 @@
 // Package model contains the data structures used throughout the LocalGo application
 package model
 
-const DefaultPort = 8080
+const DefaultPort = 53317
 
 // DeviceType defines the type of the device.
 type DeviceType string
