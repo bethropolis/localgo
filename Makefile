@@ -232,3 +232,100 @@ demo: build create-test-file
 	@LOCALSEND_ALIAS=DemoSender $(BINARY_PATH) send --file /tmp/test-file.txt --to DemoDevice --port 8080 || true
 	@echo "Demo complete"
 	@pkill -f "$(BINARY_PATH) serve" || true
+
+# =============================================================================
+# Docker / Podman Targets
+# =============================================================================
+
+# Docker build
+.PHONY: docker-build
+docker-build:
+	@echo "Building Docker image..."
+	docker build -t localgo:latest .
+
+# Docker run (foreground with logs)
+.PHONY: docker-run
+docker-run:
+	@echo "Running Docker container..."
+	docker run --network=host -v $$(pwd)/downloads:/app/downloads -v $$(pwd)/config:/app/config localgo:latest
+
+# Docker run in background
+.PHONY: docker-run-d
+docker-run-d:
+	@echo "Starting Docker container in background..."
+	docker run -d --network=host --name localgo \
+		-v $$(pwd)/downloads:/app/downloads \
+		-v $$(pwd)/config:/app/config \
+		localgo:latest
+
+# Docker stop
+.PHONY: docker-stop
+docker-stop:
+	@echo "Stopping Docker container..."
+	docker stop localgo 2>/dev/null || true
+	docker rm localgo 2>/dev/null || true
+
+# Docker clean
+.PHONY: docker-clean
+docker-clean:
+	@echo "Cleaning Docker build..."
+	docker rmi localgo:latest 2>/dev/null || true
+
+# Podman build
+.PHONY: podman-build
+podman-build:
+	@echo "Building Podman image..."
+	podman build -f Containerfile -t localgo:latest .
+
+# Podman run (rootless with host network)
+.PHONY: podman-run
+podman-run:
+	@echo "Running Podman container..."
+	podman run --userns=keep-id --network=host \
+		-v $$(pwd)/downloads:/app/downloads \
+		-v $$(pwd)/config:/app/config \
+		localgo:latest
+
+# Podman run in background
+.PHONY: podman-run-d
+podman-run-d:
+	@echo "Starting Podman container in background..."
+	podman run -d --userns=keep-id --network=host --name localgo \
+		-v $$(pwd)/downloads:/app/downloads \
+		-v $$(pwd)/config:/app/config \
+		localgo:latest
+
+# Podman stop
+.PHONY: podman-stop
+podman-stop:
+	@echo "Stopping Podman container..."
+	podman stop localgo 2>/dev/null || true
+	podman rm localgo 2>/dev/null || true
+
+# Podman clean
+.PHONY: podman-clean
+podman-clean:
+	@echo "Cleaning Podman build..."
+	podman rmi localgo:latest 2>/dev/null || true
+
+# Docker Compose up
+.PHONY: compose-up
+compose-up:
+	@echo "Starting LocalGo with Docker Compose..."
+	PUID=$$(id -u) PGID=$$(id -g) docker-compose up -d
+
+# Docker Compose down
+.PHONY: compose-down
+compose-down:
+	@echo "Stopping LocalGo with Docker Compose..."
+	docker-compose down
+
+# Docker Compose logs
+.PHONY: compose-logs
+compose-logs:
+	docker-compose logs -f
+
+# Docker Compose rebuild
+.PHONY: compose-rebuild
+compose-rebuild:
+	PUID=$$(id -u) PGID=$$(id -g) docker-compose up -d --build

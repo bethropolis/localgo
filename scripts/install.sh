@@ -78,7 +78,7 @@ EXAMPLES:
     $0 --mode system --service --create-user  # Full system setup
 
 REQUIREMENTS:
-    - Go 1.19+ (for building)
+    - Go 1.24+ (for building)
     - systemd (for service installation)
     - sudo access (for system installation)
 
@@ -91,7 +91,7 @@ check_prerequisites() {
 
     # Check if Go is installed
     if ! command -v go &> /dev/null; then
-        print_error "Go is not installed. Please install Go 1.19+ first."
+        print_error "Go is not installed. Please install Go 1.24+ first."
         exit 1
     fi
 
@@ -100,8 +100,8 @@ check_prerequisites() {
     MAJOR=$(echo $GO_VERSION | cut -d. -f1)
     MINOR=$(echo $GO_VERSION | cut -d. -f2)
 
-    if [[ $MAJOR -lt 1 ]] || [[ $MAJOR -eq 1 && $MINOR -lt 19 ]]; then
-        print_error "Go version $GO_VERSION is too old. Please install Go 1.19+ first."
+    if [[ $MAJOR -lt 1 ]] || [[ $MAJOR -eq 1 && $MINOR -lt 24 ]]; then
+        print_error "Go version $GO_VERSION is too old. Please install Go 1.24+ first."
         exit 1
     fi
 
@@ -332,8 +332,12 @@ install_service() {
         
         mkdir -p "$user_systemd_dir"
         
-        # Generate user service file dynamically
-        cat > "$service_file" <<EOF
+        # Use the tracked user service file from scripts directory
+        if [[ -f "$SCRIPT_DIR/localgo-user.service" ]]; then
+            cp "$SCRIPT_DIR/localgo-user.service" "$service_file"
+        else
+            # Fallback: generate user service file dynamically
+            cat > "$service_file" <<EOF
 [Unit]
 Description=LocalGo (User Service)
 Documentation=https://github.com/bethropolis/localgo
@@ -361,6 +365,7 @@ WorkingDirectory=$USER_DATA_DIR
 [Install]
 WantedBy=default.target
 EOF
+        fi
         chmod 644 "$service_file"
         
         # Force a reload to ensure systemd sees the file in the new location

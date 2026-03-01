@@ -10,57 +10,82 @@ services:
     image: localgo:latest
     container_name: localgo
     restart: unless-stopped
-    
-    # Network mode: host allows multicast discovery to work properly
-    # On macOS/Windows, use bridge mode and map ports explicitly
+
+    # =========================================================================
+    # NETWORK CONFIGURATION
+    # =========================================================================
+    # Linux: Use host network for multicast discovery to work properly
+    # (required for LocalSend device discovery on LAN)
     network_mode: host
-    
-    # Alternative for macOS/Windows (comment out network_mode: host above)
+
+    # macOS/Windows: Podman runs in a VM, so use bridge mode with port mapping
+    # 1. Comment out network_mode: host above
+    # 2. Uncomment the ports section below
     # ports:
     #   - "53317:53317/tcp"   # HTTPS/HTTP
     #   - "53317:53317/udp"   # Multicast discovery
-    
+
+    # =========================================================================
+    # PODMAN ROOTLESS NOTES
+    # =========================================================================
+    # For rootless Podman with proper multicast support:
+    #   podman run -d --userns=keep-id --network=host localgo
+    #
+    # For rootless Podman on macOS/Windows (VM-based):
+    #   podman machine start  # Start the Podman machine first
+    #   podman run -d -p 53317:53317/tcp -p 53317:53317/udp localgo
+
+    # =========================================================================
+    # USER PERMISSION CONFIGURATION
+    # =========================================================================
+    # Set PUID/PGID to match your host user for proper file ownership
+    # Default: 1000 (common default for first user)
+    # Usage: PUID=$(id -u) PGID=$(id -g) docker-compose up -d
     environment:
+      # User/Group ID mapping (handled by entrypoint)
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+
       # Device Configuration
       - LOCALSEND_ALIAS=${LOCALSEND_ALIAS:-LocalGo-Docker}
       - LOCALSEND_PORT=${LOCALSEND_PORT:-53317}
       - LOCALSEND_DEVICE_TYPE=${LOCALSEND_DEVICE_TYPE:-server}
-      
+
       # Network Configuration
       - LOCALSEND_MULTICAST_GROUP=${LOCALSEND_MULTICAST_GROUP:-224.0.0.167}
       - LOCALSEND_FORCE_HTTP=${LOCALSEND_FORCE_HTTP:-false}
-      
+
       # Security Configuration
       - LOCALSEND_PIN=${LOCALSEND_PIN:-}
-      
+
       # Logging Configuration
       - LOCALSEND_LOG_LEVEL=${LOCALSEND_LOG_LEVEL:-info}
       - LOCALSEND_VERBOSE=${LOCALSEND_VERBOSE:-false}
-      
+
       # Paths (configured via volumes)
       - LOCALSEND_DOWNLOAD_DIR=/app/downloads
       - LOCALSEND_SECURITY_DIR=/app/config/.security
-    
+
     volumes:
       # Persist downloads
       # Note: Permissions are automatically fixed by the entrypoint script
       # :z is required for SELinux compatibility (Fedora, RHEL, CentOS)
       - ./downloads:/app/downloads:z
-      
+
       # Persist security certificates (important for consistent fingerprint)
       - ./config:/app/config:z
-      
+
       # Optional: Use a custom configuration file
       # - ./localgo.env:/app/localgo.env
-    
-    # Health check
+
+    # Health check using HTTP endpoint (faster than CLI)
     healthcheck:
-      test: ["CMD", "localgo-cli", "info"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:53317/api/localsend/v2/info"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 5s
-    
+
     # Resource limits (adjust as needed)
     deploy:
       resources:

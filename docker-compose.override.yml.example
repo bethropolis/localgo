@@ -1,0 +1,41 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml and customize for development
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   docker-compose up -d
+#
+# This override enables development-friendly settings
+
+services:
+  localgo:
+    # Use HTTP instead of HTTPS for local development
+    environment:
+      - LOCALSEND_FORCE_HTTP=true
+      - LOCALSEND_VERBOSE=true
+      - LOCALSEND_LOG_LEVEL=debug
+      - LOCALSEND_ALIAS=LocalGo-Dev
+
+    # Override ports to use non-standard port
+    # (comment out network_mode when using ports)
+    # network_mode: bridge
+    ports:
+      - "8080:8080/tcp"
+      - "8080:8080/udp"
+
+    # Larger resource limits for development
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Keep container running for debugging
+    # command: ["sleep", "infinity"]
+
+    # Volume mount for live code reloading (if mounting binary)
+    # volumes:
+    #   ./localgo-cli:/usr/local/bin/localgo-cli:ro

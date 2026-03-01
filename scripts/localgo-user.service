@@ -1,0 +1,29 @@
+[Unit]
+Description=LocalGo - LocalSend v2.1 Protocol Implementation (User Service)
+Documentation=https://github.com/bethropolis/localgo
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/localgo-cli serve --quiet
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=localgo-user
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictRealtime=true
+
+# Environment configuration
+EnvironmentFile=-%E/localgo/localgo.env
+WorkingDirectory=%h/.local/share/localgo
+
+# Allow lingering for background operation
+# Run: loginctl enable-linger $USER to enable
+
+[Install]
+WantedBy=default.target

@@ -155,6 +155,10 @@ func LoadConfig() (*Config, error) {
 		downloadDir = "./downloads"
 	}
 
+	// Parse LOCALSEND_FORCE_HTTP
+	forceHTTP := os.Getenv("LOCALSEND_FORCE_HTTP") == "true" || os.Getenv("LOCALSEND_FORCE_HTTP") == "1"
+	HttpsEnabled := !forceHTTP
+
 	securityContext, err := crypto.LoadSecurityContext(securityFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -177,13 +181,23 @@ func LoadConfig() (*Config, error) {
 	deviceModel := "GoDevice"
 	deviceType := model.DeviceTypeDesktop
 
+	// Parse LOCALSEND_DEVICE_MODEL
+	if envDeviceModel := os.Getenv("LOCALSEND_DEVICE_MODEL"); envDeviceModel != "" {
+		deviceModel = envDeviceModel
+	}
+
+	// Parse LOCALSEND_DEVICE_TYPE
+	if envDeviceType := os.Getenv("LOCALSEND_DEVICE_TYPE"); envDeviceType != "" {
+		deviceType = model.DeviceType(envDeviceType)
+	}
+
 	autoAccept := os.Getenv("LOCALSEND_AUTO_ACCEPT") == "true" || os.Getenv("LOCALSEND_AUTO_ACCEPT") == "1"
 
 	cfg := &Config{
 		Alias:             alias,
 		Port:              port,
 		MulticastGroup:    multicastGroup,
-		HttpsEnabled:      true,
+		HttpsEnabled:      HttpsEnabled,
 		SecurityContext:   securityContext,
 		SecurityPath:      securityFilePath,
 		DeviceModel:       &deviceModel,
