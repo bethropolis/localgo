@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/config"
@@ -21,7 +22,7 @@ import (
 )
 
 // SendFile sends a file to a recipient.
-func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipientAlias string, recipientPort int) error {
+func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int) error {
 	logrus.Infof("Searching for recipient '%s'...", recipientAlias)
 
 	// Use default port if not specified
@@ -33,17 +34,17 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 
 	// --- Multicast Discovery (Fast) ---
 	logrus.Info("Sending multicast announcement...")
-	
+
 	// Create multicast discovery DTO
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
 
-    // Set correct protocol for multicast
-    protocol_type := model.ProtocolTypeHTTP
-    if cfg.HttpsEnabled {
-        protocol_type = model.ProtocolTypeHTTPS
-    }
+	// Set correct protocol for multicast
+	protocol_type := model.ProtocolTypeHTTP
+	if cfg.HttpsEnabled {
+		protocol_type = model.ProtocolTypeHTTPS
+	}
 
 	multicastDto := model.MulticastDto{
 		Alias:       cfg.Alias,
@@ -60,7 +61,7 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
-	
+
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
 
 	// Channel to catch the found device
@@ -74,10 +75,10 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 		}
 	})
 
-    // Start listening and announcing
+	// Start listening and announcing
 	// Use a short timeout for multicast-only phase (e.g., 1.5 seconds)
 	multicastCtx, cancelMulticast := context.WithTimeout(ctx, 1500*time.Millisecond)
-	
+
 	go func() {
 		defer cancelMulticast()
 		err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
@@ -98,7 +99,7 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 	}
 
 	if targetDevice != nil {
-		return sendToDevice(ctx, targetDevice, filePath)
+		return sendToDevice(ctx, targetDevice, filePaths)
 	}
 
 	// --- Fallback: HTTP Scan Discovery ---
@@ -172,10 +173,10 @@ func SendFile(ctx context.Context, cfg *config.Config, filePath string, recipien
 	}
 
 	logrus.Infof("Found recipient: %s", targetDevice.ToDebugString())
-	return sendToDevice(ctx, targetDevice, filePath)
+	return sendToDevice(ctx, targetDevice, filePaths)
 }
 
-func sendToDevice(ctx context.Context, device *model.Device, filePath string) error {
+func sendToDevice(ctx context.Context, device *model.Device, filePaths []string) error {
 	client := &http.Client{}
 	scheme := "http"
 
@@ -188,33 +189,41 @@ func sendToDevice(ctx context.Context, device *model.Device, filePath string) er
 		client.Transport = tr
 	}
 
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
+	filesDtoMap := make(map[string]model.FileDto)
+	filePathMap := make(map[string]string) // fileId to original path
 
-	// Detect file type
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file for detection: %w", err)
-	}
-	
-	// Read first 512 bytes for content type detection
-	buffer := make([]byte, 512)
-	n, _ := file.Read(buffer)
-	contentType := http.DetectContentType(buffer[:n])
-	file.Close()
+	for _, filePath := range filePaths {
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to get file info for %s: %w", filePath, err)
+		}
 
-	modTime := fileInfo.ModTime().Format(time.RFC3339)
+		// Detect file type
+		file, err := os.Open(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to open file for detection %s: %w", filePath, err)
+		}
 
-	fileDto := model.FileDto{
-		ID:       uuid.NewString(),
-		FileName: filepath.Base(filePath),
-		Size:     fileInfo.Size(),
-		FileType: contentType,
-		Metadata: &model.FileMetadata{
-			Modified: &modTime,
-		},
+		// Read first 512 bytes for content type detection
+		buffer := make([]byte, 512)
+		n, _ := file.Read(buffer)
+		contentType := http.DetectContentType(buffer[:n])
+		file.Close()
+
+		modTime := fileInfo.ModTime().Format(time.RFC3339)
+
+		fileDto := model.FileDto{
+			ID:       uuid.NewString(),
+			FileName: filepath.Base(filePath),
+			Size:     fileInfo.Size(),
+			FileType: contentType,
+			Metadata: &model.FileMetadata{
+				Modified: &modTime,
+			},
+		}
+
+		filesDtoMap[fileDto.ID] = fileDto
+		filePathMap[fileDto.ID] = filePath
 	}
 
 	prepareDto := model.PrepareUploadRequestDto{
@@ -226,9 +235,7 @@ func sendToDevice(ctx context.Context, device *model.Device, filePath string) er
 			Fingerprint: device.Fingerprint,
 			Download:    device.Download,
 		},
-		Files: map[string]model.FileDto{
-			fileDto.ID: fileDto,
-		},
+		Files: filesDtoMap,
 	}
 
 	jsonData, err := json.Marshal(prepareDto)
@@ -252,7 +259,39 @@ func sendToDevice(ctx context.Context, device *model.Device, filePath string) er
 		return fmt.Errorf("failed to decode prepare response: %w", err)
 	}
 
-	return uploadFile(ctx, client, device, filePath, fileDto.ID, prepareResponse.SessionID, prepareResponse.Files[fileDto.ID], scheme)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(prepareResponse.Files))
+
+	// Iterate and upload each file returned in prepareResponse.Files
+	for fileID, token := range prepareResponse.Files {
+		filePath, exists := filePathMap[fileID]
+		if !exists {
+			logrus.Warnf("Server responded with unknown file ID: %s", fileID)
+			continue
+		}
+
+		wg.Add(1)
+		go func(fID, tkn, fPath string) {
+			defer wg.Done()
+			logrus.Infof("Uploading file: %s", filepath.Base(fPath))
+			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme)
+			if err != nil {
+				logrus.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
+				errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
+			}
+		}(fileID, token, filePath)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string) error {

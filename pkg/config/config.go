@@ -32,6 +32,7 @@ type Config struct {
 	SecurityPath      string                        `json:"-"`
 	PIN               string                        `json:"-"`
 	DownloadDir       string                        `json:"-"`
+	AutoAccept        bool                          `json:"-"`
 	RandomFingerprint string                        `json:"-"`
 }
 
@@ -176,6 +177,8 @@ func LoadConfig() (*Config, error) {
 	deviceModel := "GoDevice"
 	deviceType := model.DeviceTypeDesktop
 
+	autoAccept := os.Getenv("LOCALSEND_AUTO_ACCEPT") == "true" || os.Getenv("LOCALSEND_AUTO_ACCEPT") == "1"
+
 	cfg := &Config{
 		Alias:             alias,
 		Port:              port,
@@ -186,6 +189,7 @@ func LoadConfig() (*Config, error) {
 		DeviceModel:       &deviceModel,
 		DeviceType:        deviceType,
 		DownloadDir:       downloadDir,
+		AutoAccept:        autoAccept,
 		RandomFingerprint: generateRandomID(64),
 	}
 

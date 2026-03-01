@@ -1,4 +1,3 @@
-
 package services
 
 import (
@@ -13,6 +12,7 @@ import (
 type ActiveSendSession struct {
 	SessionID string
 	Files     map[string]model.FileDto
+	FilePaths map[string]string // Maps fileID to local absolute path
 }
 
 // SendService manages file sending sessions.
@@ -27,7 +27,7 @@ func NewSendService() *SendService {
 }
 
 // CreateSession creates a new send session.
-func (s *SendService) CreateSession(files map[string]model.FileDto) (*ActiveSendSession, error) {
+func (s *SendService) CreateSession(files map[string]model.FileDto, filePaths map[string]string) (*ActiveSendSession, error) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 
@@ -39,6 +39,7 @@ func (s *SendService) CreateSession(files map[string]model.FileDto) (*ActiveSend
 	s.currentSession = &ActiveSendSession{
 		SessionID: sessionId,
 		Files:     files,
+		FilePaths: filePaths,
 	}
 
 	return s.currentSession, nil

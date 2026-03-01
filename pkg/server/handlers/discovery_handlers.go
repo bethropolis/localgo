@@ -4,21 +4,29 @@ package handlers
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/server/services"
 )
 
 // DiscoveryHandler handles /info and /register requests.
 type DiscoveryHandler struct {
-	config *config.Config
+	config          *config.Config
+	registryService *services.RegistryService
+	sendService     *services.SendService
 }
 
 // NewDiscoveryHandler creates a new DiscoveryHandler.
-func NewDiscoveryHandler(cfg *config.Config) *DiscoveryHandler {
-	return &DiscoveryHandler{config: cfg}
+func NewDiscoveryHandler(cfg *config.Config, registryService *services.RegistryService, sendService *services.SendService) *DiscoveryHandler {
+	return &DiscoveryHandler{
+		config:          cfg,
+		registryService: registryService,
+		sendService:     sendService,
+	}
 }
 
 // InfoHandler handles GET /info requests (v1 & v2 are identical here).
@@ -36,7 +44,7 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	downloadCapable := false // TODO: update in Phase 3 (Web Share)
+	downloadCapable := h.sendService.GetSession() != nil // True if we have an active send session
 
 	dto := model.InfoDto{
 		Alias:       h.config.Alias,
@@ -79,10 +87,17 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TODO: Implement device registration logic using DiscoveryService (Phase 1)
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+
+	device := model.NewDevice(requestDto, net.ParseIP(ip), requestDto.Port, requestDto.Protocol == model.ProtocolTypeHTTPS)
+	h.registryService.RegisterDevice(device)
+
 	log.Printf("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, requestDto.Alias, requestDto.Fingerprint)
 
-	downloadCapable := false // TODO: update in Phase 3
+	downloadCapable := h.sendService.GetSession() != nil
 
 	responseDto := model.InfoDto{
 		Alias:       h.config.Alias,

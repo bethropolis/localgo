@@ -17,11 +17,12 @@ import (
 
 // Server manages the HTTP/S server lifecycle.
 type Server struct {
-	config         *config.Config
-	httpServer     *http.Server
-	muxRouter      *mux.Router
-	receiveService *services.ReceiveService
-	sendService    *services.SendService
+	config          *config.Config
+	httpServer      *http.Server
+	muxRouter       *mux.Router
+	receiveService  *services.ReceiveService
+	sendService     *services.SendService
+	registryService *services.RegistryService
 }
 
 // NewServer creates a new Server instance.
@@ -29,11 +30,13 @@ func NewServer(cfg *config.Config) *Server {
 	router := mux.NewRouter()
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()
+	registryService := services.NewRegistryService()
 	return &Server{
-		config:         cfg,
-		muxRouter:      router,
-		receiveService: receiveService,
-		sendService:    sendService,
+		config:          cfg,
+		muxRouter:       router,
+		receiveService:  receiveService,
+		sendService:     sendService,
+		registryService: registryService,
 	}
 }
 
@@ -42,7 +45,7 @@ func (s *Server) configureRoutes() {
 	apiRouter := s.muxRouter.PathPrefix("/api/localsend").Subrouter()
 
 	// Discovery Handlers (Phase 1)
-	discoveryHandler := handlers.NewDiscoveryHandler(s.config)
+	discoveryHandler := handlers.NewDiscoveryHandler(s.config, s.registryService, s.sendService)
 	apiRouter.HandleFunc("/v1/info", discoveryHandler.InfoHandler).Methods("GET")
 	apiRouter.HandleFunc("/v2/info", discoveryHandler.InfoHandler).Methods("GET")
 	apiRouter.HandleFunc("/v1/register", discoveryHandler.RegisterHandler).Methods("POST")
@@ -118,4 +121,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	logrus.Info("Server stopped.")
 	s.httpServer = nil
 	return nil
+}
+
+// GetSendService returns the SendService instance.
+func (s *Server) GetSendService() *services.SendService {
+	return s.sendService
 }

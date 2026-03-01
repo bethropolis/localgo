@@ -1,15 +1,15 @@
-
 package handlers
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,25 +40,17 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 		}
 	}
 
-	// For now, we'll just create a session with a dummy file.
-	// In the future, this will be triggered by a `send` command.
-	dummyFiles := map[string]model.FileDto{
-		uuid.NewString(): {
-			ID:       "dummy-file-id",
-			FileName: "dummy.txt",
-			Size:     12,
-			FileType: "text/plain",
-		},
-	}
-
-	session, err := h.sendService.CreateSession(dummyFiles)
-	if err != nil {
-		httputil.RespondError(w, http.StatusConflict, "Blocked by another session")
+	session := h.sendService.GetSession()
+	if session == nil {
+		httputil.RespondError(w, http.StatusNotFound, "No active sharing session")
 		return
 	}
 
+	info := h.config.ToInfoDto()
+	info.Download = true
+
 	response := model.ReceiveRequestResponseDto{
-		Info:      h.config.ToInfoDto(),
+		Info:      info,
 		SessionID: session.SessionID,
 		Files:     session.Files,
 	}
@@ -85,17 +77,35 @@ func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	file, ok := session.Files[fileId]
+	fileDto, ok := session.Files[fileId]
 	if !ok {
-		httputil.RespondError(w, http.StatusNotFound, "File not found")
+		httputil.RespondError(w, http.StatusNotFound, "File not found in session")
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", file.FileName))
-	w.Header().Set("Content-Type", file.FileType)
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", file.Size))
+	localPath, ok := session.FilePaths[fileId]
+	if !ok {
+		httputil.RespondError(w, http.StatusInternalServerError, "File path mapping missing")
+		return
+	}
 
-	// For now, just send a dummy file.
-	// In the future, this will read the actual file from storage.
-	fmt.Fprint(w, "Hello, World")
+	file, err := os.Open(localPath)
+	if err != nil {
+		logrus.Errorf("Failed to open file for download: %v", err)
+		httputil.RespondError(w, http.StatusInternalServerError, "Failed to read file")
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileDto.FileName))
+	w.Header().Set("Content-Type", fileDto.FileType)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileDto.Size))
+	w.WriteHeader(http.StatusOK)
+
+	_, err = io.Copy(w, file)
+	if err != nil {
+		logrus.Errorf("Failed to write file to response: %v", err)
+	} else {
+		logrus.Infof("Successfully sent file: %s", fileDto.FileName)
+	}
 }

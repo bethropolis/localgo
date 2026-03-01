@@ -1,12 +1,17 @@
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -79,6 +84,16 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		DeviceType:  requestDto.Info.DeviceType,
 		Fingerprint: requestDto.Info.Fingerprint,
 		IP:          senderIP,
+	}
+
+	// --- Interactive Accept/Reject Prompt ---
+	if !h.config.AutoAccept {
+		accepted := h.promptUserForAcceptance(sender, requestDto.Files)
+		if !accepted {
+			logrus.Infof("Transfer rejected by user")
+			httputil.RespondError(w, http.StatusForbidden, "Rejected") // 403 Forbidden
+			return
+		}
 	}
 
 	// --- Simulate Acceptance & Create Session ---
@@ -157,7 +172,13 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	err := storage.SaveStreamToFile(r.Body, destinationPath, onProgress)
+	var modified, accessed *string
+	if fileInfo.Dto.Metadata != nil {
+		modified = fileInfo.Dto.Metadata.Modified
+		accessed = fileInfo.Dto.Metadata.Accessed
+	}
+
+	err := storage.SaveStreamToFileWithMetadata(r.Body, destinationPath, modified, accessed, onProgress)
 	defer r.Body.Close()
 
 	if err != nil {
@@ -178,6 +199,38 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.Request) {
 	// This is a simplified version for V1. It will be removed in the future.
 	h.PrepareUploadHandlerV2(w, r)
+}
+
+func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
+	// Output to stderr to avoid interfering with stdout
+	fmt.Fprintf(os.Stderr, "\n%s Incoming file transfer %s\n", cli.ColorYellow, cli.ColorReset)
+	fmt.Fprintf(os.Stderr, "From: %s%s%s (IP: %s)\n", cli.ColorCyan, sender.Alias, cli.ColorReset, sender.IP)
+
+	var totalSize int64
+	fmt.Fprintf(os.Stderr, "Files:\n")
+	for _, file := range files {
+		fmt.Fprintf(os.Stderr, "  - %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+		totalSize += file.Size
+	}
+	fmt.Fprintf(os.Stderr, "Total size: %s\n", cli.FormatBytes(totalSize))
+
+	fmt.Fprintf(os.Stderr, "\nAccept transfer? [Y/n] (auto-rejects in 30s): ")
+
+	// Read with timeout
+	ch := make(chan string)
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		ch <- strings.TrimSpace(strings.ToLower(input))
+	}()
+
+	select {
+	case input := <-ch:
+		return input == "" || input == "y" || input == "yes"
+	case <-time.After(30 * time.Second):
+		fmt.Fprintf(os.Stderr, "\nTransfer auto-rejected (timeout).\n")
+		return false
+	}
 }
 
 // CancelHandler handles POST /v2/cancel requests.
@@ -204,4 +257,3 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		httputil.RespondError(w, http.StatusNotFound, "Session not found")
 	}
 }
-

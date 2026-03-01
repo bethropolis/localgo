@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
 	"github.com/bethropolis/localgo/pkg/server"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,6 +31,18 @@ var (
 	GitCommit = "unknown"
 	BuildDate = "unknown"
 )
+
+// StringSliceFlag is a custom flag type that allows multiple occurrences
+type StringSliceFlag []string
+
+func (s *StringSliceFlag) String() string {
+	return fmt.Sprintf("%v", *s)
+}
+
+func (s *StringSliceFlag) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
 
 // Command represents a CLI command
 type Command struct {
@@ -187,7 +201,8 @@ func (app *Application) registerCommands() {
 
 	// Send command
 	sendFlags := flag.NewFlagSet("send", flag.ExitOnError)
-	sendFile := sendFlags.String("file", "", "File to send (required)")
+	var sendFiles StringSliceFlag
+	sendFlags.Var(&sendFiles, "file", "File or directory to send (can be specified multiple times)")
 	sendTo := sendFlags.String("to", "", "Target device alias (required)")
 	sendPort := sendFlags.Int("port", 0, "Target device port (default: auto-detect)")
 	sendTimeout := sendFlags.Int("timeout", 30, "Send timeout in seconds")
@@ -200,13 +215,38 @@ func (app *Application) registerCommands() {
 		Examples: []string{
 			"localgo-cli send --file document.pdf --to MyPhone",
 			"localgo-cli send --file /path/to/file.txt --to 'John\\'s Laptop'",
-			"localgo-cli send --file image.jpg --to MyDevice --port 8080",
+			"localgo-cli send --file image.jpg --file text.txt --to MyDevice",
 			"localgo-cli send --file data.zip --to RemotePC --timeout 60",
 		},
 		Flags: sendFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			sendFlags.Parse(args)
-			return app.runSend(cfg, sendFile, sendTo, sendPort, sendTimeout, sendAlias)
+			return app.runSend(cfg, sendFiles, sendTo, sendPort, sendTimeout, sendAlias)
+		},
+	}
+
+	// Share command
+	shareFlags := flag.NewFlagSet("share", flag.ExitOnError)
+	var shareFiles StringSliceFlag
+	shareFlags.Var(&shareFiles, "file", "File or directory to share (can be specified multiple times)")
+	sharePort := shareFlags.Int("port", 0, "Port to run the server on (default: from config)")
+	shareHTTP := shareFlags.Bool("http", false, "Use HTTP instead of HTTPS")
+	sharePin := shareFlags.String("pin", "", "PIN for authentication")
+	shareAlias := shareFlags.String("alias", "", "Device alias (default: from config)")
+
+	app.commands["share"] = &Command{
+		Name:        "share",
+		Description: "Share files so others can download them",
+		Usage:       "localgo-cli share --file FILE [OPTIONS]",
+		Examples: []string{
+			"localgo-cli share --file document.pdf",
+			"localgo-cli share --file image.jpg --file text.txt",
+			"localgo-cli share --file data.zip --pin 1234",
+		},
+		Flags: shareFlags,
+		Action: func(cfg *config.Config, args []string) error {
+			shareFlags.Parse(args)
+			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias)
 		},
 	}
 
@@ -226,6 +266,29 @@ func (app *Application) registerCommands() {
 		Action: func(cfg *config.Config, args []string) error {
 			infoFlags.Parse(args)
 			return app.runInfo(cfg, infoJSON)
+		},
+	}
+
+	// Devices command
+	devicesFlags := flag.NewFlagSet("devices", flag.ExitOnError)
+	devicesJSON := devicesFlags.Bool("json", false, "Output in JSON format")
+
+	app.commands["devices"] = &Command{
+		Name:        "devices",
+		Description: "Show all recently discovered devices on the network",
+		Usage:       "localgo-cli devices [OPTIONS]",
+		Examples: []string{
+			"localgo-cli devices",
+			"localgo-cli devices --json",
+		},
+		Flags: devicesFlags,
+		Action: func(cfg *config.Config, args []string) error {
+			devicesFlags.Parse(args)
+			// For CLI command 'devices', run a quick 2s discovery instead of trying to query server
+			// This avoids needing complex IPC with the background server process
+			timeout := 2
+			quiet := true
+			return app.runDiscover(cfg, &timeout, devicesJSON, &quiet)
 		},
 	}
 }
@@ -341,6 +404,135 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 
 	discoverySvc.Stop()
 	logrus.Infof("Server stopped")
+	return nil
+}
+
+func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string) error {
+	if len(files) == 0 {
+		return fmt.Errorf("file parameter is required (use --file)")
+	}
+
+	// Apply overrides
+	if *port > 0 {
+		cfg.Port = *port
+	}
+	if *useHTTP {
+		cfg.HttpsEnabled = false
+	}
+	if *pin != "" {
+		cfg.PIN = *pin
+	}
+	if *alias != "" {
+		cfg.Alias = *alias
+	}
+
+	protocol := "HTTPS"
+	if !cfg.HttpsEnabled {
+		protocol = "HTTP"
+	}
+
+	logrus.Infof("Starting LocalGo Web Share")
+	logrus.Infof("  Alias: %s", cfg.Alias)
+	logrus.Infof("  Protocol: %s", protocol)
+	logrus.Infof("  Port: %d", cfg.Port)
+
+	// Verify and prepare files
+	filesMap := make(map[string]model.FileDto)
+	pathsMap := make(map[string]string)
+
+	for _, file := range files {
+		fileInfo, err := os.Stat(file)
+		if err != nil {
+			return fmt.Errorf("file not found: %s", file)
+		}
+
+		f, err := os.Open(file)
+		if err != nil {
+			return fmt.Errorf("failed to open file for detection: %w", err)
+		}
+		buffer := make([]byte, 512)
+		n, _ := f.Read(buffer)
+		contentType := http.DetectContentType(buffer[:n])
+		f.Close()
+
+		modTime := fileInfo.ModTime().Format(time.RFC3339)
+		id := uuid.NewString()
+
+		fileDto := model.FileDto{
+			ID:       id,
+			FileName: filepath.Base(file),
+			Size:     fileInfo.Size(),
+			FileType: contentType,
+			Metadata: &model.FileMetadata{
+				Modified: &modTime,
+			},
+		}
+
+		filesMap[id] = fileDto
+		pathsMap[id] = file
+		logrus.Infof("  Sharing: %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+	}
+
+	// Create server
+	srv := server.NewServer(cfg)
+	sendService := srv.GetSendService()
+
+	// Register files in session
+	_, err := sendService.CreateSession(filesMap, pathsMap)
+	if err != nil {
+		return fmt.Errorf("failed to create send session: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Initialize discovery service with Download: true
+	discoverySvcConfig := discovery.DefaultServiceConfig()
+	discoverySvcConfig.MulticastConfig.Port = cfg.Port
+	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
+
+	protocol_type := model.ProtocolTypeHTTP
+	if cfg.HttpsEnabled {
+		protocol_type = model.ProtocolTypeHTTPS
+	}
+
+	multicastDto := model.MulticastDto{
+		Alias:       cfg.Alias,
+		Version:     config.ProtocolVersion,
+		DeviceModel: cfg.DeviceModel,
+		DeviceType:  cfg.DeviceType,
+		Fingerprint: cfg.SecurityContext.CertificateHash,
+		Port:        cfg.Port,
+		Protocol:    protocol_type,
+		Download:    true,
+		Announce:    true,
+	}
+
+	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto)
+	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil)
+	multicast.SetHTTPDiscoverer(httpDiscoverer)
+
+	discoverySvc := discovery.NewService(discoverySvcConfig, multicast)
+
+	// Start discovery service
+	go func() {
+		err := discoverySvc.Start(ctx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel)
+		if err != nil {
+			logrus.Errorf("Discovery service failed: %v", err)
+		}
+	}()
+
+	logrus.Infof("Server ready! Waiting for connections...")
+	logrus.Infof("Press Ctrl+C to stop sharing")
+
+	// Start HTTP server
+	err = srv.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("server failed: %w", err)
+	}
+
+	discoverySvc.Stop()
+	logrus.Infof("Web share stopped")
 	return nil
 }
 
@@ -467,18 +659,20 @@ func (app *Application) runScan(cfg *config.Config, timeout *int, port *int, jso
 	return app.displayDevices(foundDevices, *jsonOutput, *quiet, "HTTP scan")
 }
 
-func (app *Application) runSend(cfg *config.Config, file *string, to *string, port *int, timeout *int, alias *string) error {
+func (app *Application) runSend(cfg *config.Config, files []string, to *string, port *int, timeout *int, alias *string) error {
 	// Validate required parameters
-	if *file == "" {
+	if len(files) == 0 {
 		return fmt.Errorf("file parameter is required (use --file)")
 	}
 	if *to == "" {
 		return fmt.Errorf("target device parameter is required (use --to)")
 	}
 
-	// Check if file exists
-	if _, err := os.Stat(*file); os.IsNotExist(err) {
-		return fmt.Errorf("file not found: %s", *file)
+	// Check if files exist
+	for _, file := range files {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			return fmt.Errorf("file not found: %s", file)
+		}
 	}
 
 	// Apply overrides
@@ -486,14 +680,13 @@ func (app *Application) runSend(cfg *config.Config, file *string, to *string, po
 		cfg.Alias = *alias
 	}
 
-	// Get file info for display
-	fileInfo, err := os.Stat(*file)
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
+	logrus.Infof("Sending %d files", len(files))
+	for _, file := range files {
+		fileInfo, err := os.Stat(file)
+		if err == nil {
+			logrus.Infof("  - %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+		}
 	}
-
-	logrus.Infof("Sending file: %s", filepath.Base(*file))
-	logrus.Infof("  Size: %s", cli.FormatBytes(fileInfo.Size()))
 	logrus.Infof("  To: %s", *to)
 	logrus.Infof("  From: %s", cfg.Alias)
 
@@ -501,13 +694,13 @@ func (app *Application) runSend(cfg *config.Config, file *string, to *string, po
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timeout)*time.Second)
 	defer cancel()
 
-	// Send file
-	err = send.SendFile(ctx, cfg, *file, *to, *port)
+	// Send files
+	err := send.SendFiles(ctx, cfg, files, *to, *port)
 	if err != nil {
-		return fmt.Errorf("failed to send file: %w", err)
+		return fmt.Errorf("failed to send files: %w", err)
 	}
 
-	logrus.Infof("File sent successfully!")
+	logrus.Infof("Files sent successfully!")
 	return nil
 }
 

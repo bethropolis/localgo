@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"path/filepath"
 	"time"
@@ -78,23 +79,18 @@ func generateID(path string) string {
 // determineFileType attempts to determine the file type from extension or content
 func determineFileType(path string) string {
 	ext := filepath.Ext(path)
+	if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+		return mimeType
+	}
+
+	// Fallbacks if mime package doesn't know the extension
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp":
-		return "image"
-	case ".mp4", ".mov", ".avi", ".mkv", ".webm":
-		return "video"
-	case ".mp3", ".wav", ".ogg", ".flac", ".aac":
-		return "audio"
-	case ".pdf":
-		return "pdf"
-	case ".txt", ".md", ".rtf":
-		return "text"
-	case ".zip", ".tar", ".gz", ".rar", ".7z":
-		return "archive"
+	case ".md":
+		return "text/markdown"
 	case ".apk":
-		return "app"
+		return "application/vnd.android.package-archive"
 	default:
-		return "unknown"
+		return "application/octet-stream"
 	}
 }
 
