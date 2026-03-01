@@ -133,6 +133,7 @@ func (app *Application) registerCommands() {
 	serveQuiet := serveFlags.Bool("quiet", false, "Quiet mode - minimal output")
 	serveVerbose := serveFlags.Bool("verbose", false, "Verbose mode - detailed output")
 	serveInterval := serveFlags.Int("interval", 30, "Discovery announcement interval in seconds")
+	serveAutoAccept := serveFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 
 	app.commands["serve"] = &Command{
 		Name:        "serve",
@@ -144,11 +145,12 @@ func (app *Application) registerCommands() {
 			"localgo-cli serve --pin 123456 --alias MyDevice",
 			"localgo-cli serve --dir /tmp/downloads --verbose",
 			"localgo-cli serve --quiet --interval 300",
+			"localgo-cli serve --auto-accept",
 		},
 		Flags: serveFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			serveFlags.Parse(args)
-			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval)
+			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval, serveAutoAccept)
 		},
 	}
 
@@ -233,6 +235,7 @@ func (app *Application) registerCommands() {
 	shareHTTP := shareFlags.Bool("http", false, "Use HTTP instead of HTTPS")
 	sharePin := shareFlags.String("pin", "", "PIN for authentication")
 	shareAlias := shareFlags.String("alias", "", "Device alias (default: from config)")
+	shareAutoAccept := shareFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 
 	app.commands["share"] = &Command{
 		Name:        "share",
@@ -242,11 +245,12 @@ func (app *Application) registerCommands() {
 			"localgo-cli share --file document.pdf",
 			"localgo-cli share --file image.jpg --file text.txt",
 			"localgo-cli share --file data.zip --pin 1234",
+			"localgo-cli share --file data.zip --auto-accept",
 		},
 		Flags: shareFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			shareFlags.Parse(args)
-			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias)
+			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias, shareAutoAccept)
 		},
 	}
 
@@ -295,7 +299,7 @@ func (app *Application) registerCommands() {
 
 // Help methods removed - now using pkg/help module
 
-func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int) error {
+func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool) error {
 	// Set log level
 	if *quiet {
 		logging.SetQuiet()
@@ -318,6 +322,9 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 	if *dir != "" {
 		cfg.DownloadDir = *dir
+	}
+	if *autoAccept {
+		cfg.AutoAccept = true
 	}
 
 	// Create download directory if it doesn't exist
@@ -407,7 +414,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	return nil
 }
 
-func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string) error {
+func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string, autoAccept *bool) error {
 	if len(files) == 0 {
 		return fmt.Errorf("file parameter is required (use --file)")
 	}
@@ -424,6 +431,9 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 	}
 	if *alias != "" {
 		cfg.Alias = *alias
+	}
+	if *autoAccept {
+		cfg.AutoAccept = true
 	}
 
 	protocol := "HTTPS"

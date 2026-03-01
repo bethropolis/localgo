@@ -68,6 +68,45 @@ localgo-cli scan [--port <port>] [flags]
 
 ---
 
+## `localgo-cli share`
+
+Shares files so other devices can download them. The server announces itself with `Download: true` over multicast.
+
+**Usage:**
+```bash
+localgo-cli share --file <path> [flags]
+```
+
+**Flags:**
+- `--file <path>` — File to share (required, can be repeated for multiple files)
+- `--port <port>` — Port to run the server on
+- `--http` — Use HTTP instead of HTTPS
+- `--pin <pin>` — Require PIN for incoming transfers
+- `--alias <name>` — Device alias
+- `--auto-accept` — Auto-accept incoming files without prompting
+
+**Example:**
+```bash
+localgo-cli share --file document.pdf --file image.jpg
+```
+
+---
+
+## `localgo-cli devices`
+
+Shows all recently discovered devices on the network.
+
+**Usage:**
+```bash
+localgo-cli devices [--json] [--quiet]
+```
+
+**Flags:**
+- `--json` — Output in JSON format
+- `--quiet` — Only show device aliases (no details)
+
+---
+
 ## `localgo-cli info`
 
 Prints the current configuration state.

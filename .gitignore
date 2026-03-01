@@ -39,5 +39,5 @@ coverage.*
 # AI files
 GEMINI.md
 FIX.md
-config/
+config/.security
 codebase.md

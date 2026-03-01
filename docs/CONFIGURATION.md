@@ -28,6 +28,8 @@ Flags are specific to each command. Use `localgo-cli <command> --help` to see th
 | `--dir` | Directory to save incoming files | `--dir "/mnt/storage"` |
 | `--pin` | Require PIN for incoming transfers | `--pin "9999"` |
 | `--http` | Disable HTTPS (use HTTP only) | `--http` |
+| `--auto-accept` | Auto-accept incoming files without prompting | `--auto-accept` |
+| `--interval` | Discovery announcement interval in seconds | `--interval 60` |
 
 ### `send` Flags
 | Flag | Description | Example |
@@ -35,6 +37,15 @@ Flags are specific to each command. Use `localgo-cli <command> --help` to see th
 | `--file` | Path to file to send (Required) | `--file "./doc.pdf"` |
 | `--to` | Exact alias of recipient (Required) | `--to "MyPhone"` |
 | `--timeout` | Transfer timeout in seconds | `--timeout 60` |
+
+### `share` Flags
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--file` | Path to file to share (Required, can be repeated) | `--file "./doc.pdf"` |
+| `--alias` | Device name visible to others | `--alias "FileServer"` |
+| `--pin` | Require PIN for incoming transfers | `--pin "9999"` |
+| `--http` | Disable HTTPS (use HTTP only) | `--http` |
+| `--auto-accept` | Auto-accept incoming files without prompting | `--auto-accept` |
 
 ---
 
@@ -48,7 +59,17 @@ You can set these globally to avoid repeating flags.
 | `LOCALSEND_SECURITY_DIR` | Security files path | (Auto-detected) |
 | `LOCALSEND_PIN` | Security PIN | (Empty) |
 | `LOCALSEND_MULTICAST_GROUP`| Multicast IP | `224.0.0.167` |
+| `LOCALSEND_FORCE_HTTP` | Disable HTTPS, use HTTP only | `false` |
+| `LOCALSEND_DEVICE_TYPE` | Device type (mobile/desktop/web/headless/server/laptop/tablet/other) | `server` |
+| `LOCALSEND_DEVICE_MODEL` | Device model string | `LocalGo` |
+| `LOCALSEND_AUTO_ACCEPT` | Auto-accept incoming files without prompting | `false` |
 | `LOCALSEND_LOG_LEVEL` | Log verbosity | `info` |
+
+### Docker-specific Variables
+| Variable | Description | Default |
+|---|---|---|
+| `PUID` | User ID for file ownership in container | `1000` |
+| `PGID` | Group ID for file ownership in container | `1000` |
 
 **Example `.env` file:**
 ```bash
