@@ -21,8 +21,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write # For Trivy
-      id-token: write # For provenance
+      security-events: write # For Trivy SARIF upload
+      id-token: write        # For provenance attestation
 
     steps:
       - name: Checkout repository
@@ -55,9 +55,11 @@ jobs:
 
       - name: Build and push Docker image
         id: build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
+          # Also export to Docker daemon so Trivy can scan the local image
+          load: ${{ github.event_name == 'pull_request' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -67,15 +69,22 @@ jobs:
           sbom: true
 
       - name: Run Trivy vulnerability scanner
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.30.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          # On push/tag: scan the pushed image by digest
+          # On PR: scan the locally loaded image (first tag)
+          image-ref: >-
+            ${{
+              github.event_name != 'pull_request'
+              && format('{0}/{1}@{2}', env.REGISTRY, env.IMAGE_NAME, steps.build.outputs.digest)
+              || fromJSON(steps.meta.outputs.json).tags[0]
+            }}
           format: 'sarif'
           output: 'trivy-results.sarif'
+          # Don't fail the build on vulnerabilities — report only
+          exit-code: '0'
 
-      - name: Upload Trivy results
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v4
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
