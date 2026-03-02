@@ -1,331 +1,325 @@
+# =============================================================================
 # LocalGo Makefile
+# =============================================================================
 
+# ---------------------------------------------------------------------------
 # Variables
-BINARY_NAME = localgo-cli
-BINARY_PATH = ./$(BINARY_NAME)
-BUILD_DIR = cmd/localgo-cli
-GO_FILES = $(shell find . -type f -name '*.go')
-VERSION = $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-GIT_COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_DATE = $(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS = -ldflags "-X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildDate=$(BUILD_DATE)"
+# ---------------------------------------------------------------------------
+BINARY_NAME    := localgo-cli
+BUILD_DIR      := ./cmd/localgo-cli
+DIST_DIR       := dist
+COVER_DIR      := .coverage
 
-# Default target
+GO             := go
+GOFLAGS        ?=
+
+VERSION        := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+LD_BASE        := -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildDate=$(BUILD_DATE)
+LDFLAGS        := -ldflags "$(LD_BASE)"
+LDFLAGS_STRIP  := -ldflags "-s -w $(LD_BASE)"
+
+# Cross-compile targets  (GOOS/GOARCH pairs)
+PLATFORMS := \
+	linux/amd64 \
+	linux/arm64 \
+	darwin/amd64 \
+	darwin/arm64 \
+	windows/amd64
+
+# Colour helpers — silently degrade when not a tty
+ifeq ($(TERM),)
+  _BOLD   :=
+  _RESET  :=
+  _GREEN  :=
+  _CYAN   :=
+  _YELLOW :=
+else
+  _BOLD   := $(shell tput bold    2>/dev/null)
+  _RESET  := $(shell tput sgr0    2>/dev/null)
+  _GREEN  := $(shell tput setaf 2 2>/dev/null)
+  _CYAN   := $(shell tput setaf 6 2>/dev/null)
+  _YELLOW := $(shell tput setaf 3 2>/dev/null)
+endif
+
+define log
+  @printf '%s==> %s%s\n' '$(_BOLD)$(_CYAN)' '$(1)' '$(_RESET)'
+endef
+
+# ---------------------------------------------------------------------------
+# Default
+# ---------------------------------------------------------------------------
+.DEFAULT_GOAL := help
+
 .PHONY: all
-all: build
+all: fmt vet build ## Format, vet, and build
 
-# Build the binary
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+##@ Build
+
 .PHONY: build
-build: $(BINARY_PATH)
+build: ## Build the binary for the current platform
+	$(call log,Building $(BINARY_NAME) $(VERSION))
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BINARY_NAME) $(BUILD_DIR)
+	@printf '%s  binary: ./%s%s\n' '$(_GREEN)' '$(BINARY_NAME)' '$(_RESET)'
 
-$(BINARY_PATH): $(GO_FILES)
-	@echo "Building $(BINARY_NAME)..."
-	go build $(LDFLAGS) -o $(BINARY_PATH) ./$(BUILD_DIR)
-	@echo "Binary built: $(BINARY_PATH)"
+.PHONY: build-fast
+build-fast: ## Build without ldflags (faster iteration, skips version embedding)
+	$(GO) build $(GOFLAGS) -o $(BINARY_NAME) $(BUILD_DIR)
 
-# Install dependencies
+.PHONY: release
+release: clean-dist ## Cross-compile for all platforms into dist/
+	$(call log,Cross-compiling release binaries)
+	@mkdir -p $(DIST_DIR)
+	@$(foreach P,$(PLATFORMS), \
+	  $(eval OS   := $(word 1,$(subst /, ,$(P)))) \
+	  $(eval ARCH := $(word 2,$(subst /, ,$(P)))) \
+	  $(eval EXT  := $(if $(filter windows,$(OS)),.exe,)) \
+	  $(eval OUT  := $(DIST_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)$(EXT)) \
+	  printf '  %-40s' '$(OS)/$(ARCH)'; \
+	  GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 \
+	    $(GO) build $(LDFLAGS_STRIP) -o $(OUT) $(BUILD_DIR) \
+	    && printf '%sdone%s\n' '$(_GREEN)' '$(_RESET)' \
+	    || printf '%sFAILED%s\n' '$(shell tput setaf 1 2>/dev/null)' '$(_RESET)'; \
+	)
+	@ls -lh $(DIST_DIR)/
+
+.PHONY: install
+install: ## Install binary to $(GOPATH)/bin
+	$(call log,Installing $(BINARY_NAME))
+	$(GO) install $(GOFLAGS) $(LDFLAGS) $(BUILD_DIR)
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+##@ Dependencies
+
 .PHONY: deps
-deps:
-	@echo "Installing dependencies..."
-	go mod download
-	go mod tidy
+deps: ## Download and tidy Go modules
+	$(call log,Syncing dependencies)
+	$(GO) mod download
+	$(GO) mod tidy
 
-# Run tests
-.PHONY: test
-test: build
-	@echo "Running tests..."
-	go test -v -timeout 60s ./...
+.PHONY: deps-upgrade
+deps-upgrade: ## Upgrade all direct dependencies to latest
+	$(call log,Upgrading dependencies)
+	$(GO) get -u ./...
+	$(GO) mod tidy
 
-# Run tests with coverage
-.PHONY: test-coverage
-test-coverage: build
-	@echo "Running tests with coverage..."
-	go test -v -timeout 60s -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
+# ---------------------------------------------------------------------------
+# Development
+# ---------------------------------------------------------------------------
+##@ Development
 
-# Run integration tests specifically
-.PHONY: test-integration
-test-integration: build
-	@echo "Running integration tests..."
-	go test -v -timeout 60s ./cmd/localgo-cli/
+.PHONY: dev
+dev: ## Live-reload dev server (requires: go install github.com/air-verse/air@latest)
+	$(call log,Starting dev server with live reload)
+	@command -v air >/dev/null 2>&1 || { \
+	  printf '%s air not found — install with: go install github.com/air-verse/air@latest%s\n' \
+	    '$(_YELLOW)' '$(_RESET)'; exit 1; }
+	air
 
-# Run unit tests only
-.PHONY: test-unit
-test-unit:
-	@echo "Running unit tests..."
-	go test -v ./pkg/...
+.PHONY: run
+run: build ## Build then run the server (HTTPS)
+	./$(BINARY_NAME) serve
 
-# Clean build artifacts
-.PHONY: clean
-clean:
-	@echo "Cleaning up..."
-	rm -f $(BINARY_PATH)
-	go clean -cache
-	go clean -testcache
+.PHONY: run-http
+run-http: build ## Build then run the server (HTTP, no TLS)
+	./$(BINARY_NAME) serve --http
 
-# Format code
+# ---------------------------------------------------------------------------
+# Code quality
+# ---------------------------------------------------------------------------
+##@ Code quality
+
 .PHONY: fmt
-fmt:
-	@echo "Formatting code..."
-	go fmt ./...
+fmt: ## Format all Go source files
+	$(call log,Formatting)
+	$(GO) fmt ./...
 
-# Lint code
+.PHONY: vet
+vet: ## Run go vet
+	$(call log,Vetting)
+	$(GO) vet ./...
+
 .PHONY: lint
-lint:
-	@echo "Linting code..."
+lint: ## Run golangci-lint (install: https://golangci-lint.run/usage/install/)
+	$(call log,Linting)
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+	  printf '%s golangci-lint not found — see https://golangci-lint.run/usage/install/%s\n' \
+	    '$(_YELLOW)' '$(_RESET)'; exit 1; }
 	golangci-lint run
 
-# Vet code
-.PHONY: vet
-vet:
-	@echo "Vetting code..."
-	go vet ./...
-
-# Run code quality checks
 .PHONY: check
-check: fmt vet lint
+check: fmt vet lint ## Run all code-quality checks (fmt + vet + lint)
 
-# Install the binary to GOPATH/bin
-.PHONY: install
-install:
-	@echo "Installing $(BINARY_NAME)..."
-	go install $(LDFLAGS) ./$(BUILD_DIR)
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+##@ Testing
 
-# Run the server
-.PHONY: serve
-serve: build
-	@echo "Starting LocalGo server..."
-	$(BINARY_PATH) serve
+.PHONY: test
+test: ## Run all tests with race detector
+	$(call log,Testing)
+	$(GO) test -race -timeout 60s ./...
 
-# Run the server with HTTP (for testing)
-.PHONY: serve-http
-serve-http: build
-	@echo "Starting LocalGo server with HTTP..."
-	$(BINARY_PATH) serve --http
+.PHONY: test-short
+test-short: ## Run tests, skipping slow ones (-short)
+	$(GO) test -short -race -timeout 30s ./...
 
-# Discover devices
-.PHONY: discover
-discover: build
-	@echo "Discovering devices..."
-	$(BINARY_PATH) discover
+.PHONY: test-verbose
+test-verbose: ## Run all tests with verbose output
+	$(GO) test -v -race -timeout 60s ./...
 
-# Scan network
-.PHONY: scan
-scan: build
-	@echo "Scanning network..."
-	$(BINARY_PATH) scan
+.PHONY: test-pkg
+test-pkg: ## Run unit tests for pkg/ only
+	$(call log,Testing pkg/)
+	$(GO) test -race -timeout 60s ./pkg/...
 
-# Send a test file (requires FILE and TO variables)
-.PHONY: send
-send: build
-	@if [ -z "$(FILE)" ] || [ -z "$(TO)" ]; then \
-		echo "Usage: make send FILE=<file_path> TO=<device_alias>"; \
-		exit 1; \
-	fi
-	@echo "Sending file $(FILE) to $(TO)..."
-	$(BINARY_PATH) send --file $(FILE) --to $(TO)
+.PHONY: test-cover
+test-cover: ## Run tests and generate HTML coverage report
+	$(call log,Coverage)
+	@mkdir -p $(COVER_DIR)
+	$(GO) test -race -timeout 60s \
+	  -coverprofile=$(COVER_DIR)/coverage.out \
+	  -covermode=atomic ./...
+	$(GO) tool cover -html=$(COVER_DIR)/coverage.out -o $(COVER_DIR)/coverage.html
+	@printf '%s  report: %s/coverage.html%s\n' '$(_GREEN)' '$(COVER_DIR)' '$(_RESET)'
 
-# Create a test file for sending
-.PHONY: create-test-file
-create-test-file:
-	@echo "Creating test file..."
-	echo "Hello from LocalGo!" > /tmp/test-file.txt
-	@echo "Test file created: /tmp/test-file.txt"
+.PHONY: test-cover-func
+test-cover-func: test-cover ## Show per-function coverage in the terminal
+	$(GO) tool cover -func=$(COVER_DIR)/coverage.out
 
-# Run a full test cycle (build, test, clean)
+.PHONY: bench
+bench: ## Run benchmarks
+	$(GO) test -run='^$$' -bench=. -benchmem ./...
+
+# ---------------------------------------------------------------------------
+# CI
+# ---------------------------------------------------------------------------
+##@ CI
+
 .PHONY: ci
-ci: deps check test clean
+ci: deps check test build ## Full CI pipeline: deps → check → test → build
 
-# Show help
-.PHONY: help
-help:
-	@echo "LocalGo Makefile"
-	@echo ""
-	@echo "Usage:"
-	@echo "  make [target]"
-	@echo ""
-	@echo "Build Targets:"
-	@echo "  build              Build the CLI binary"
-	@echo "  install            Install binary to GOPATH/bin"
-	@echo "  clean              Clean build artifacts"
-	@echo ""
-	@echo "Development Targets:"
-	@echo "  deps               Install dependencies"
-	@echo "  fmt                Format code"
-	@echo "  lint               Lint code (requires golangci-lint)"
-	@echo "  vet                Vet code"
-	@echo "  check              Run all code quality checks"
-	@echo ""
-	@echo "Testing Targets:"
-	@echo "  test               Run all tests"
-	@echo "  test-coverage      Run tests with coverage report"
-	@echo "  test-integration   Run integration tests only"
-	@echo "  test-unit          Run unit tests only"
-	@echo ""
-	@echo "Runtime Targets:"
-	@echo "  serve              Run the server (HTTPS)"
-	@echo "  serve-http         Run the server (HTTP)"
-	@echo "  discover           Discover devices"
-	@echo "  scan               Scan network"
-	@echo "  send               Send file (requires FILE and TO)"
-	@echo ""
-	@echo "Utility Targets:"
-	@echo "  create-test-file   Create a test file"
-	@echo "  info               Show build information"
-	@echo "  version            Show version"
-	@echo "  ci                 Run CI pipeline"
-	@echo "  help               Show this help message"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make build"
-	@echo "  make test-coverage"
-	@echo "  make serve-http"
-	@echo "  make send FILE=/tmp/test-file.txt TO=MyDevice"
-	@echo ""
-	@echo "Environment Variables:"
-	@echo "  LOCALSEND_ALIAS          Device alias"
-	@echo "  LOCALSEND_PORT           Default port"
-	@echo "  LOCALSEND_DOWNLOAD_DIR   Download directory"
+# ---------------------------------------------------------------------------
+# Clean
+# ---------------------------------------------------------------------------
+##@ Clean
 
-# Show version information
-.PHONY: version
-version: build
-	@$(BINARY_PATH) version
+.PHONY: clean
+clean: ## Remove local binary and coverage artefacts
+	@rm -f $(BINARY_NAME)
+	@rm -rf $(COVER_DIR)
+	$(GO) clean -testcache
 
-# Show build information
-.PHONY: info
-info:
-	@echo "Build Information:"
-	@echo "  Binary Name: $(BINARY_NAME)"
-	@echo "  Binary Path: $(BINARY_PATH)"
-	@echo "  Build Dir:   $(BUILD_DIR)"
-	@echo "  Version:     $(VERSION)"
-	@echo "  Git Commit:  $(GIT_COMMIT)"
-	@echo "  Build Date:  $(BUILD_DATE)"
-	@echo "  LDFLAGS:     $(LDFLAGS)"
-	@echo "  Go Files:    $(words $(GO_FILES)) files"
+.PHONY: clean-dist
+clean-dist: ## Remove dist/ directory
+	@rm -rf $(DIST_DIR)
 
-# Debug target to show variables
-.PHONY: debug
-debug: info
-	@echo ""
-	@echo "Detailed Information:"
-	@echo "  BINARY_NAME: $(BINARY_NAME)"
-	@echo "  BINARY_PATH: $(BINARY_PATH)"
-	@echo "  BUILD_DIR: $(BUILD_DIR)"
-	@echo "  VERSION: $(VERSION)"
-	@echo "  GIT_COMMIT: $(GIT_COMMIT)"
-	@echo "  BUILD_DATE: $(BUILD_DATE)"
-	@echo "  LDFLAGS: $(LDFLAGS)"
-	@echo "  GO_FILES: $(GO_FILES)"
+.PHONY: clean-all
+clean-all: clean clean-dist ## Remove everything (binary, coverage, dist, go build cache)
+	$(GO) clean -cache
 
-# Quick demo - start server and send a test file
-.PHONY: demo
-demo: build create-test-file
-	@echo "Starting demo..."
-	@echo "This will start a server and send a test file to itself"
-	@echo "Starting server in background..."
-	@LOCALSEND_ALIAS=DemoDevice $(BINARY_PATH) serve --http --port 8080 &
-	@sleep 3
-	@echo "Sending test file..."
-	@LOCALSEND_ALIAS=DemoSender $(BINARY_PATH) send --file /tmp/test-file.txt --to DemoDevice --port 8080 || true
-	@echo "Demo complete"
-	@pkill -f "$(BINARY_PATH) serve" || true
+# ---------------------------------------------------------------------------
+# Docker / Podman
+# ---------------------------------------------------------------------------
+##@ Docker / Podman
 
-# =============================================================================
-# Docker / Podman Targets
-# =============================================================================
+CONTAINER_IMAGE ?= localgo:latest
 
-# Docker build
 .PHONY: docker-build
-docker-build:
-	@echo "Building Docker image..."
-	docker build -t localgo:latest .
+docker-build: ## Build Docker image
+	$(call log,Building Docker image $(CONTAINER_IMAGE))
+	docker build -t $(CONTAINER_IMAGE) .
 
-# Docker run (foreground with logs)
 .PHONY: docker-run
-docker-run:
-	@echo "Running Docker container..."
-	docker run --network=host -v $$(pwd)/downloads:/app/downloads -v $$(pwd)/config:/app/config localgo:latest
+docker-run: ## Run Docker container in the foreground
+	docker run --rm --network=host \
+	  -v "$$(pwd)/downloads:/app/downloads" \
+	  -v "$$(pwd)/config:/app/config" \
+	  $(CONTAINER_IMAGE)
 
-# Docker run in background
-.PHONY: docker-run-d
-docker-run-d:
-	@echo "Starting Docker container in background..."
-	docker run -d --network=host --name localgo \
-		-v $$(pwd)/downloads:/app/downloads \
-		-v $$(pwd)/config:/app/config \
-		localgo:latest
+.PHONY: docker-up
+docker-up: ## Start via Docker Compose (detached)
+	PUID=$$(id -u) PGID=$$(id -g) docker compose up -d
 
-# Docker stop
-.PHONY: docker-stop
-docker-stop:
-	@echo "Stopping Docker container..."
-	docker stop localgo 2>/dev/null || true
-	docker rm localgo 2>/dev/null || true
+.PHONY: docker-down
+docker-down: ## Stop Docker Compose stack
+	docker compose down
 
-# Docker clean
+.PHONY: docker-logs
+docker-logs: ## Follow Docker Compose logs
+	docker compose logs -f
+
 .PHONY: docker-clean
-docker-clean:
-	@echo "Cleaning Docker build..."
-	docker rmi localgo:latest 2>/dev/null || true
+docker-clean: docker-down ## Stop stack and remove the image
+	docker rmi $(CONTAINER_IMAGE) 2>/dev/null || true
 
-# Podman build
 .PHONY: podman-build
-podman-build:
-	@echo "Building Podman image..."
-	podman build -f Containerfile -t localgo:latest .
+podman-build: ## Build Podman image (rootless)
+	$(call log,Building Podman image $(CONTAINER_IMAGE))
+	podman build -f Containerfile -t $(CONTAINER_IMAGE) .
 
-# Podman run (rootless with host network)
 .PHONY: podman-run
-podman-run:
-	@echo "Running Podman container..."
-	podman run --userns=keep-id --network=host \
-		-v $$(pwd)/downloads:/app/downloads \
-		-v $$(pwd)/config:/app/config \
-		localgo:latest
+podman-run: ## Run Podman container (rootless, foreground)
+	podman run --rm --userns=keep-id --network=host \
+	  -v "$$(pwd)/downloads:/app/downloads" \
+	  -v "$$(pwd)/config:/app/config" \
+	  $(CONTAINER_IMAGE)
 
-# Podman run in background
-.PHONY: podman-run-d
-podman-run-d:
-	@echo "Starting Podman container in background..."
-	podman run -d --userns=keep-id --network=host --name localgo \
-		-v $$(pwd)/downloads:/app/downloads \
-		-v $$(pwd)/config:/app/config \
-		localgo:latest
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+##@ Utilities
 
-# Podman stop
-.PHONY: podman-stop
-podman-stop:
-	@echo "Stopping Podman container..."
-	podman stop localgo 2>/dev/null || true
-	podman rm localgo 2>/dev/null || true
+.PHONY: discover
+discover: build ## Discover LocalGo devices on the network
+	./$(BINARY_NAME) discover
 
-# Podman clean
-.PHONY: podman-clean
-podman-clean:
-	@echo "Cleaning Podman build..."
-	podman rmi localgo:latest 2>/dev/null || true
+.PHONY: scan
+scan: build ## Scan network for LocalGo devices (HTTP)
+	./$(BINARY_NAME) scan
 
-# Docker Compose up
-.PHONY: compose-up
-compose-up:
-	@echo "Starting LocalGo with Docker Compose..."
-	PUID=$$(id -u) PGID=$$(id -g) docker-compose up -d
+.PHONY: send
+send: build ## Send a file  →  make send FILE=<path> TO=<alias>
+	@test -n "$(FILE)" || { echo 'Usage: make send FILE=<path> TO=<alias>'; exit 1; }
+	@test -n "$(TO)"   || { echo 'Usage: make send FILE=<path> TO=<alias>'; exit 1; }
+	./$(BINARY_NAME) send --file "$(FILE)" --to "$(TO)"
 
-# Docker Compose down
-.PHONY: compose-down
-compose-down:
-	@echo "Stopping LocalGo with Docker Compose..."
-	docker-compose down
+.PHONY: version
+version: build ## Print the binary version string
+	@./$(BINARY_NAME) version
 
-# Docker Compose logs
-.PHONY: compose-logs
-compose-logs:
-	docker-compose logs -f
+.PHONY: info
+info: ## Print Makefile build variables
+	@printf '%sBuild info%s\n' '$(_BOLD)' '$(_RESET)'
+	@printf '  %-16s %s\n' 'Binary'   '$(BINARY_NAME)'
+	@printf '  %-16s %s\n' 'Version'  '$(VERSION)'
+	@printf '  %-16s %s\n' 'Commit'   '$(GIT_COMMIT)'
+	@printf '  %-16s %s\n' 'Date'     '$(BUILD_DATE)'
+	@printf '  %-16s %s\n' 'GOFLAGS'  '$(GOFLAGS)'
+	@printf '  %-16s %s\n' 'LDFLAGS'  '$(LDFLAGS)'
 
-# Docker Compose rebuild
-.PHONY: compose-rebuild
-compose-rebuild:
-	PUID=$$(id -u) PGID=$$(id -g) docker-compose up -d --build
+# ---------------------------------------------------------------------------
+# Help  (auto-generated from ## / ##@ comments)
+# ---------------------------------------------------------------------------
+##@ Help
+
+.PHONY: help
+help: ## Show this help
+	@printf '\n%sLocalGo — available targets%s\n' '$(_BOLD)' '$(_RESET)'
+	@awk 'BEGIN {FS = ":.*##"} \
+	  /^##@/ { printf "\n%s%s%s\n", "$(_BOLD)", substr($$0, 5), "$(_RESET)"; next } \
+	  /^[a-zA-Z0-9_-]+:.*##/ { \
+	    printf "  %s%-20s%s %s\n", "$(_CYAN)", $$1, "$(_RESET)", $$2 }' \
+	  $(MAKEFILE_LIST)
+	@printf '\n%sVariables you can override:%s\n' '$(_BOLD)' '$(_RESET)'
+	@printf '  %s%-20s%s %s\n' '$(_CYAN)' 'GOFLAGS'         '$(_RESET)' 'Extra flags for go build / go test'
+	@printf '  %s%-20s%s %s\n' '$(_CYAN)' 'CONTAINER_IMAGE' '$(_RESET)' 'Docker/Podman image tag  (default: localgo:latest)'
+	@printf '  %s%-20s%s %s\n' '$(_CYAN)' 'FILE / TO'       '$(_RESET)' 'Required by: make send'
+	@printf '\n'

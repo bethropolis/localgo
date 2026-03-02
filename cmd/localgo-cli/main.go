@@ -65,28 +65,49 @@ func main() {
 		commands: make(map[string]*Command),
 	}
 
+	// Pre-parse global flags before subcommand dispatch so the logger is
+	// configured correctly from the very first log line.
+	// Global flags: --verbose / --json. They may appear anywhere in os.Args.
+	// We build a filtered args slice (globals stripped) for command resolution,
+	// but leave os.Args untouched so per-subcommand flag.FlagSet parsing still
+	// sees all arguments (subcommand flag sets ignore unknown flags gracefully).
+	globalVerbose := false
+	globalJSON := false
+	filteredArgs := make([]string, 0, len(os.Args))
+	filteredArgs = append(filteredArgs, os.Args[0]) // program name
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--verbose", "-verbose":
+			globalVerbose = true
+		case "--json", "-json":
+			globalJSON = true
+		default:
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+
 	// Initialize logging first
-	logger := logging.Init(false)
+	logger := logging.Init(globalVerbose, globalJSON)
 
 	// Register all commands
 	app.registerCommands()
 
-	// Parse arguments
-	if len(os.Args) < 2 {
+	// Parse arguments (use filteredArgs so global flags don't shadow the command)
+	if len(filteredArgs) < 2 {
 		help.ShowMainUsage()
 		os.Exit(1)
 	}
 
-	commandName := os.Args[1]
+	commandName := filteredArgs[1]
 
 	// Handle special commands
 	switch commandName {
 	case "help", "-h", "--help":
-		if len(os.Args) > 2 {
-			if cmdHelp := help.GetCommandHelp(os.Args[2]); cmdHelp != nil {
+		if len(filteredArgs) > 2 {
+			if cmdHelp := help.GetCommandHelp(filteredArgs[2]); cmdHelp != nil {
 				help.ShowCommandHelp(*cmdHelp)
 			} else {
-				fmt.Printf("Unknown command: %s\n", os.Args[2])
+				fmt.Printf("Unknown command: %s\n", filteredArgs[2])
 				help.ShowMainUsage()
 			}
 		} else {
@@ -116,8 +137,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Execute command
-	if err := cmd.Action(cfg, os.Args[2:]); err != nil {
+	// Execute command (pass subcommand args without the global flags)
+	if err := cmd.Action(cfg, filteredArgs[2:]); err != nil {
 		zap.S().Fatalf("Command failed: %v", err)
 	}
 }

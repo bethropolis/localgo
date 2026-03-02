@@ -1,0 +1,37 @@
+# air — live reload for Go
+# Docs: https://github.com/air-verse/air
+# Install: go install github.com/air-verse/air@latest
+
+root = "."
+tmp_dir = ".air"
+
+[build]
+  # Command run on each change
+  cmd = "go build -o .air/localgo-cli ./cmd/localgo-cli"
+  # Binary to run after a successful build
+  bin = ".air/localgo-cli"
+  # Arguments passed to the binary
+  args_bin = ["serve", "--http"]
+  # Files/directories to watch
+  include_ext = ["go"]
+  exclude_dir  = [".air", "dist", ".coverage", "downloads", "docs", "scripts", ".git"]
+  # Kill the running binary before rebuilding
+  kill_delay = "200ms"
+  # Delay before rerunning after a change
+  delay = 300 # ms
+  # Rerun on build error (shows error, does not restart)
+  rerun = false
+  # Send SIGTERM instead of SIGKILL
+  send_interrupt = true
+
+[log]
+  time = false
+
+[color]
+  main    = "magenta"
+  watcher = "cyan"
+  build   = "yellow"
+  runner  = "green"
+
+[misc]
+  clean_on_exit = true

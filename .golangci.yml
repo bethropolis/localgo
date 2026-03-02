@@ -1,0 +1,52 @@
+# golangci-lint configuration
+# Docs: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck       # check for unchecked errors
+    - gosimple       # suggest code simplifications
+    - govet          # report suspicious constructs
+    - ineffassign    # detect unused assignments
+    - staticcheck    # broad static analysis
+    - unused         # report unused code
+    - gofmt          # enforce gofmt formatting
+    - goimports      # enforce import grouping
+    - misspell       # fix common spelling mistakes
+    - gosec          # security checks
+    - revive         # general linter, fast drop-in for golint
+    - godot          # check comment endings
+    - noctx          # detect http calls without context
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/bethropolis/localgo
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: unused-parameter
+        disabled: false
+
+  gosec:
+    excludes:
+      - G304  # file path provided as taint input (common in CLI tools)
+      - G306  # file permissions (used intentionally in storage)
+
+  godot:
+    scope: declarations
+
+issues:
+  exclude-rules:
+    # Relax some rules in test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+
+  max-same-issues: 0
+  max-issues-per-linter: 0
