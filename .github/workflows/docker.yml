@@ -68,23 +68,4 @@ jobs:
           provenance: true
           sbom: true
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          # On push/tag: scan the pushed image by digest
-          # On PR: scan the locally loaded image (first tag)
-          image-ref: >-
-            ${{
-              github.event_name != 'pull_request'
-              && format('{0}/{1}@{2}', env.REGISTRY, env.IMAGE_NAME, steps.build.outputs.digest)
-              || fromJSON(steps.meta.outputs.json).tags[0]
-            }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          # Don't fail the build on vulnerabilities — report only
-          exit-code: '0'
-
-      - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
+      
