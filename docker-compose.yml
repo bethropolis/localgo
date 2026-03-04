@@ -49,7 +49,7 @@ services:
       # Device Configuration
       - LOCALSEND_ALIAS=${LOCALSEND_ALIAS:-LocalGo-Docker}
       - LOCALSEND_PORT=${LOCALSEND_PORT:-53317}
-      - LOCALSEND_DEVICE_TYPE=${LOCALSEND_DEVICE_TYPE:-server}
+      - LOCALSEND_DEVICE_TYPE=${LOCALSEND_DEVICE_TYPE:-desktop}
 
       # Network Configuration
       - LOCALSEND_MULTICAST_GROUP=${LOCALSEND_MULTICAST_GROUP:-224.0.0.167}
@@ -57,6 +57,7 @@ services:
 
       # Security Configuration
       - LOCALSEND_PIN=${LOCALSEND_PIN:-}
+      - LOCALSEND_AUTO_ACCEPT=${LOCALSEND_AUTO_ACCEPT:-true}
 
       # Logging Configuration
       - LOCALSEND_LOG_LEVEL=${LOCALSEND_LOG_LEVEL:-info}

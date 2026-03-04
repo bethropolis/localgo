@@ -70,7 +70,8 @@ EXPOSE 53317/udp
 ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
     LOCALSEND_SECURITY_DIR="/app/config/.security" \
     LOCALSEND_ALIAS="LocalGo-Docker" \
-    LOCALSEND_PORT="53317"
+    LOCALSEND_PORT="53317" \
+    LOCALSEND_AUTO_ACCEPT="true"
 
 # Graceful shutdown signal
 STOPSIGNAL SIGTERM

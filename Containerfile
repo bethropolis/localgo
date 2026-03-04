@@ -60,7 +60,8 @@ EXPOSE 53317/tcp
 ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
     LOCALSEND_SECURITY_DIR="/app/config/.security" \
     LOCALSEND_ALIAS="LocalGo-Podman" \
-    LOCALSEND_PORT="53317"
+    LOCALSEND_PORT="53317" \
+    LOCALSEND_AUTO_ACCEPT="true"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget -qO- http://localhost:53317/api/localsend/v2/info || exit 1
