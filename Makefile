@@ -21,15 +21,15 @@ LD_BASE        := -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X 
 LDFLAGS        := -ldflags "$(LD_BASE)"
 LDFLAGS_STRIP  := -ldflags "-s -w $(LD_BASE)"
 
-# Cross-compile targets  (GOOS/GOARCH pairs)
+# Cross-compile targets (GOOS/GOARCH pairs)
 PLATFORMS := \
-    linux/amd64 \
-    linux/arm64 \
-    darwin/amd64 \
-    darwin/arm64 \
-    windows/amd64 \
-    android/arm \
-    android/arm64
+	linux/amd64 \
+	linux/arm64 \
+	darwin/amd64 \
+	darwin/arm64 \
+	windows/amd64 \
+	android/arm \
+	android/arm64
 
 # Colour helpers — silently degrade when not a tty
 ifeq ($(TERM),)
@@ -77,24 +77,29 @@ build-fast: ## Build without ldflags (faster iteration, skips version embedding)
 release: clean-dist ## Cross-compile for all platforms into dist/
 	$(call log,Cross-compiling release binaries)
 	@mkdir -p $(DIST_DIR)
-	@$(foreach P,$(PLATFORMS), \
-  $(eval OS   := $(word 1,$(subst /, ,$(P)))) \
-  $(eval ARCH := $(word 2,$(subst /, ,$(P)))) \
-  $(eval OUT_OS := $(if $(filter darwin,$(OS)),macos,$(OS))) \
-  # Map output arch names for certain platforms (e.g. android arm -> armv7)
-  $(eval OUT_ARCH := $(ARCH)) \
-  $(if $(filter android,$(OS)),$(eval OUT_ARCH := $(if $(filter arm,$(ARCH)),armv7,$(if $(filter arm64,$(ARCH)),armv8,$(ARCH))))) \
-  # Extra environment for some targets (GOARM for android/arm)
-  $(eval EXTRA_ENV :=) \
-  $(if $(and $(filter android,$(OS)),$(filter arm,$(ARCH))),$(eval EXTRA_ENV := GOARM=7)) \
-  $(eval EXT  := $(if $(filter windows,$(OS)),.exe,)) \
-  $(eval OUT  := $(DIST_DIR)/$(BINARY_NAME)-$(OUT_OS)-$(OUT_ARCH)$(EXT)) \
-	  printf '  %-40s' '$(OS)/$(ARCH)'; \
-  $(EXTRA_ENV) GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 \
-    $(GO) build $(LDFLAGS_STRIP) -o $(OUT) $(BUILD_DIR) \
-	    && printf '%sdone%s\n' '$(_GREEN)' '$(_RESET)' \
-	    || printf '%sFAILED%s\n' '$(shell tput setaf 1 2>/dev/null)' '$(_RESET)'; \
-	)
+	@for p in $(PLATFORMS); do \
+		os=$${p%/*}; \
+		arch=$${p#*/}; \
+		out_os=$$os; \
+		out_arch=$$arch; \
+		ext=""; \
+		env=""; \
+		[ "$$os" = "darwin" ] && out_os="macos"; \
+		[ "$$os" = "windows" ] && ext=".exe"; \
+		if [ "$$os" = "android" ]; then \
+			if [ "$$arch" = "arm" ]; then \
+				out_arch="armv7"; env="GOARM=7"; \
+				os="linux"; \
+			elif [ "$$arch" = "arm64" ]; then \
+				out_arch="armv8"; \
+			fi; \
+		fi; \
+		out="$(DIST_DIR)/$(BINARY_NAME)-$${out_os}-$${out_arch}$${ext}"; \
+		printf '  %-40s' "$$p"; \
+		env $$env GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build $(LDFLAGS_STRIP) -o "$$out" $(BUILD_DIR) \
+		&& printf '%sdone%s\n' '$(_GREEN)' '$(_RESET)' \
+		|| printf '%sFAILED%s\n' '$(_YELLOW)' '$(_RESET)'; \
+	done
 	@ls -lh $(DIST_DIR)/
 
 .PHONY: install
