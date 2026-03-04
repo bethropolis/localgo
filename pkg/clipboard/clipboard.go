@@ -1,35 +1,43 @@
-// Package clipboard provides a thin wrapper around the system clipboard.
-// It attempts to write text to the clipboard using golang.design/x/clipboard,
-// and returns an error if the clipboard is unavailable (e.g. headless servers,
-// Android, or environments without a display server).
+// Package clipboard provides a thin wrapper for writing text to the system clipboard.
+// It uses platform-native CLI tools (xclip/xsel on Linux, pbcopy on macOS,
+// clip.exe on Windows) so that no CGO or display-server headers are required at
+// build time. Availability is determined at runtime by probing for the tools.
 package clipboard
 
 import (
 	"fmt"
-
-	"golang.design/x/clipboard"
+	"os/exec"
+	"strings"
 )
 
-// initialized tracks whether clipboard.Init() succeeded.
-var initialized bool
+// provider holds the resolved clipboard write command for this run.
+// nil means no clipboard tool was found.
+var provider *clipProvider
+
+type clipProvider struct {
+	cmd  string
+	args []string
+}
 
 func init() {
-	if err := clipboard.Init(); err == nil {
-		initialized = true
-	}
+	provider = detect()
 }
 
 // Write copies text to the system clipboard.
-// Returns an error when no clipboard is available (headless / no display server).
+// Returns an error when no suitable clipboard tool is available.
 func Write(text string) error {
-	if !initialized {
-		return fmt.Errorf("clipboard unavailable: no display server or unsupported platform")
+	if provider == nil {
+		return fmt.Errorf("clipboard unavailable: no supported tool found (install xclip, xsel, wl-copy, pbcopy, or clip.exe)")
 	}
-	clipboard.Write(clipboard.FmtText, []byte(text))
+	cmd := exec.Command(provider.cmd, provider.args...) //nolint:gosec
+	cmd.Stdin = strings.NewReader(text)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("clipboard write failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 
-// Available reports whether the clipboard is usable on this system.
+// Available reports whether a clipboard tool was found on this system.
 func Available() bool {
-	return initialized
+	return provider != nil
 }
