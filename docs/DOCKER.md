@@ -88,12 +88,15 @@ chown -R 1000:1000 ./downloads ./config
 | `LOCALSEND_PORT` | Port number | 53317 |
 | `LOCALSEND_PIN` | PIN for authentication | (none) |
 | `LOCALSEND_FORCE_HTTP` | Disable HTTPS | false |
-| `LOCALSEND_DEVICE_TYPE` | Device type (mobile/desktop/web/headless/server/laptop/tablet/other) | "server" |
+| `LOCALSEND_DEVICE_TYPE` | Device type (mobile/desktop/web/headless/server/laptop/tablet/other) | "desktop" |
 | `LOCALSEND_DEVICE_MODEL` | Device model string | "LocalGo" |
 | `LOCALSEND_AUTO_ACCEPT` | Auto-accept incoming files | false |
+| `LOCALSEND_NO_CLIPBOARD` | Save incoming text as a file instead of clipboard | false |
 | `LOCALSEND_LOG_LEVEL` | Log level (debug/info/warn/error) | "info" |
 | `PUID` | User ID for file ownership | 1000 |
 | `PGID` | Group ID for file ownership | 1000 |
+
+> **Note:** Clipboard integration is automatically disabled inside containers — no display server or clipboard tools (`xclip`, `wl-copy`, etc.) are present in the image. Incoming `text/plain` transfers are saved as `.txt` files in the download directory instead. This is equivalent to setting `LOCALSEND_NO_CLIPBOARD=true` and requires no extra configuration.
 
 ### Basic Usage
 
