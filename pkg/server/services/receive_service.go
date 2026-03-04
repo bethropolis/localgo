@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,13 +24,15 @@ type ActiveFile struct {
 
 // ReceiveService manages file receiving sessions.
 type ReceiveService struct {
-	currentSession *ActiveReceiveSession
-	sessionMutex   sync.RWMutex
+	sessions     map[string]*ActiveReceiveSession
+	sessionMutex sync.RWMutex
 }
 
 // NewReceiveService creates a new ReceiveService.
 func NewReceiveService() *ReceiveService {
-	s := &ReceiveService{}
+	s := &ReceiveService{
+		sessions: make(map[string]*ActiveReceiveSession),
+	}
 	go s.cleanupLoop()
 	return s
 }
@@ -41,8 +42,10 @@ func (s *ReceiveService) cleanupLoop() {
 	ticker := time.NewTicker(1 * time.Minute)
 	for range ticker.C {
 		s.sessionMutex.Lock()
-		if s.currentSession != nil && time.Since(s.currentSession.CreatedAt) > 10*time.Minute {
-			s.currentSession = nil
+		for id, session := range s.sessions {
+			if time.Since(session.CreatedAt) > 10*time.Minute {
+				delete(s.sessions, id)
+			}
 		}
 		s.sessionMutex.Unlock()
 	}
@@ -52,10 +55,6 @@ func (s *ReceiveService) cleanupLoop() {
 func (s *ReceiveService) CreateSession(sender model.DeviceInfo, files map[string]model.FileDto) (*ActiveReceiveSession, error) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
-
-	if s.currentSession != nil {
-		return nil, fmt.Errorf("session already active")
-	}
 
 	sessionId := uuid.NewString()
 	sessionFiles := make(map[string]ActiveFile)
@@ -67,36 +66,29 @@ func (s *ReceiveService) CreateSession(sender model.DeviceInfo, files map[string
 		}
 	}
 
-	s.currentSession = &ActiveReceiveSession{
+	session := &ActiveReceiveSession{
 		SessionID: sessionId,
 		Sender:    sender,
 		Files:     sessionFiles,
 		CreatedAt: time.Now(),
 	}
 
-	return s.currentSession, nil
+	s.sessions[sessionId] = session
+
+	return session, nil
 }
 
-// GetSession returns the current active session.
-// Returns a shallow copy of the session to prevent map data races during read.
+// GetSession returns a legacy session if one exists (for backward compatibility).
+// This is mostly deprecated and GetSessionByID should be used instead.
+// Returns the first active session found or nil.
 func (s *ReceiveService) GetSession() *ActiveReceiveSession {
 	s.sessionMutex.RLock()
 	defer s.sessionMutex.RUnlock()
-	if s.currentSession == nil {
-		return nil
-	}
 
-	// Return a copy to avoid data races on the Files map
-	copySession := &ActiveReceiveSession{
-		SessionID: s.currentSession.SessionID,
-		Sender:    s.currentSession.Sender,
-		Files:     make(map[string]ActiveFile, len(s.currentSession.Files)),
-		CreatedAt: s.currentSession.CreatedAt,
+	for _, session := range s.sessions {
+		return s.copySession(session)
 	}
-	for k, v := range s.currentSession.Files {
-		copySession.Files[k] = v
-	}
-	return copySession
+	return nil
 }
 
 // GetSessionByID returns the session if the ID matches.
@@ -104,37 +96,41 @@ func (s *ReceiveService) GetSession() *ActiveReceiveSession {
 func (s *ReceiveService) GetSessionByID(sessionID string) *ActiveReceiveSession {
 	s.sessionMutex.RLock()
 	defer s.sessionMutex.RUnlock()
-	if s.currentSession != nil && s.currentSession.SessionID == sessionID {
-		// Return a copy to avoid data races on the Files map
-		copySession := &ActiveReceiveSession{
-			SessionID: s.currentSession.SessionID,
-			Sender:    s.currentSession.Sender,
-			Files:     make(map[string]ActiveFile, len(s.currentSession.Files)),
-			CreatedAt: s.currentSession.CreatedAt,
-		}
-		for k, v := range s.currentSession.Files {
-			copySession.Files[k] = v
-		}
-		return copySession
+
+	if session, ok := s.sessions[sessionID]; ok {
+		return s.copySession(session)
 	}
 	return nil
 }
 
-// CloseSession closes the current session.
-func (s *ReceiveService) CloseSession() {
+func (s *ReceiveService) copySession(orig *ActiveReceiveSession) *ActiveReceiveSession {
+	copySession := &ActiveReceiveSession{
+		SessionID: orig.SessionID,
+		Sender:    orig.Sender,
+		Files:     make(map[string]ActiveFile, len(orig.Files)),
+		CreatedAt: orig.CreatedAt,
+	}
+	for k, v := range orig.Files {
+		copySession.Files[k] = v
+	}
+	return copySession
+}
+
+// CloseSession closes a specific session.
+func (s *ReceiveService) CloseSession(sessionID string) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
-	s.currentSession = nil
+	delete(s.sessions, sessionID)
 }
 
 // RemoveFileFromSession removes a file from the current session.
 func (s *ReceiveService) RemoveFileFromSession(sessionID, fileID string) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
-	if s.currentSession != nil && s.currentSession.SessionID == sessionID {
-		delete(s.currentSession.Files, fileID)
-		if len(s.currentSession.Files) == 0 {
-			s.currentSession = nil
+	if session, ok := s.sessions[sessionID]; ok {
+		delete(session.Files, fileID)
+		if len(session.Files) == 0 {
+			delete(s.sessions, sessionID)
 		}
 	}
 }

@@ -44,7 +44,7 @@ func TestReceiveService_CreateSession(t *testing.T) {
 	}
 }
 
-func TestReceiveService_CreateSession_AlreadyActive(t *testing.T) {
+func TestReceiveService_CreateSession_MultipleSessions(t *testing.T) {
 	svc := NewReceiveService()
 
 	sender := model.DeviceInfo{
@@ -57,14 +57,11 @@ func TestReceiveService_CreateSession_AlreadyActive(t *testing.T) {
 		"file1": {ID: "file1", FileName: "test.txt", Size: 1024},
 	}
 
-	_, err := svc.CreateSession(sender, files)
-	if err != nil {
-		t.Fatalf("First CreateSession failed: %v", err)
-	}
+	createdSession1, _ := svc.CreateSession(sender, files)
+	createdSession2, _ := svc.CreateSession(sender, files)
 
-	_, err = svc.CreateSession(sender, files)
-	if err == nil {
-		t.Error("Expected error when creating session while one is already active")
+	if createdSession1.SessionID == createdSession2.SessionID {
+		t.Error("Expected different session IDs for concurrent sessions")
 	}
 }
 
@@ -112,11 +109,11 @@ func TestReceiveService_CloseSession(t *testing.T) {
 	sender := model.DeviceInfo{Alias: "TestSender"}
 	files := map[string]model.FileDto{"file1": {ID: "file1", FileName: "test.txt"}}
 
-	svc.CreateSession(sender, files)
-	svc.CloseSession()
+	session, _ := svc.CreateSession(sender, files)
+	svc.CloseSession(session.SessionID)
 
-	session := svc.GetSession()
-	if session != nil {
+	closed := svc.GetSessionByID(session.SessionID)
+	if closed != nil {
 		t.Error("Expected nil session after closing")
 	}
 }

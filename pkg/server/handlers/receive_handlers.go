@@ -12,17 +12,21 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/bethropolis/localgo/pkg/storage"
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 )
 
@@ -35,14 +39,17 @@ type ReceiveHandler struct {
 	config         *config.Config
 	receiveService *services.ReceiveService
 	logger         *zap.SugaredLogger
+	historyLog     *history.Logger
+	promptMutex    sync.Mutex
 }
 
 // NewReceiveHandler creates a new ReceiveHandler.
-func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, logger *zap.SugaredLogger) *ReceiveHandler {
+func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, historyLog *history.Logger, logger *zap.SugaredLogger) *ReceiveHandler {
 	return &ReceiveHandler{
 		config:         cfg,
 		receiveService: receiveService,
 		logger:         logger,
+		historyLog:     historyLog,
 	}
 }
 
@@ -64,11 +71,7 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	}
 
 	// --- Basic Session Check ---
-	if h.receiveService.GetSession() != nil {
-		h.logger.Warnf("Blocking /prepare-upload from %s: Session already active (ID: %s)", r.RemoteAddr, h.receiveService.GetSession().SessionID)
-		httputil.RespondError(w, http.StatusConflict, "Blocked by another session") // 409 Conflict
-		return
-	}
+	// Concurrent sessions are now supported, so we no longer block if a session exists.
 
 	// --- Decode Request ---
 	// Limit request body to prevent memory exhaustion from massive JSON (1 MB limit)
@@ -102,7 +105,10 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 
 	// --- Interactive Accept/Reject Prompt ---
 	if !h.config.AutoAccept {
+		h.promptMutex.Lock()
 		accepted := h.promptUserForAcceptance(sender, requestDto.Files)
+		h.promptMutex.Unlock()
+
 		if !accepted {
 			h.logger.Infof("Transfer rejected by user")
 			httputil.RespondError(w, http.StatusForbidden, "Rejected") // 403 Forbidden
@@ -189,10 +195,32 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	h.logger.Infof("Starting save for file: %s (ID: %s) to %s", fileInfo.Dto.FileName, reqFileId, destinationPath)
 
+	var bar *progressbar.ProgressBar
+	if !h.config.Quiet {
+		desc := fileInfo.Dto.FileName
+		if len(desc) > 30 {
+			desc = desc[:27] + "..."
+		}
+		bar = progressbar.NewOptions64(
+			fileInfo.Dto.Size,
+			progressbar.OptionSetDescription(desc),
+			progressbar.OptionSetWriter(os.Stderr),
+			progressbar.OptionShowBytes(true),
+			progressbar.OptionSetWidth(20),
+			progressbar.OptionThrottle(65*time.Millisecond),
+			progressbar.OptionShowCount(),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Fprint(os.Stderr, "\n")
+			}),
+			progressbar.OptionSpinnerType(14),
+			progressbar.OptionSetRenderBlankState(true),
+		)
+	}
+
 	// --- Progress Callback ---
 	onProgress := func(bytesWritten int64) {
-		if bytesWritten%(1024*1024) == 0 || bytesWritten == fileInfo.Dto.Size {
-			h.logger.Infof("Progress for %s (%s): %d / %d bytes", fileInfo.Dto.FileName, reqFileId, bytesWritten, fileInfo.Dto.Size)
+		if bar != nil {
+			bar.Set64(bytesWritten)
 		}
 	}
 
@@ -238,6 +266,8 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			}
 			h.logger.Infof("Copied text to clipboard from %s: %q", fileInfo.Dto.FileName, preview)
 			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, "<clipboard>", int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusClipboard)
+			h.runExecHook("<clipboard>", rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
 			httputil.RespondJSON(w, http.StatusOK, struct{}{})
 			return
 		} else {
@@ -258,11 +288,14 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		)
 		if savErr != nil {
 			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)
+			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusFailed)
 			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save file")
 			return
 		}
 		h.logger.Infof("Saved text as file: %s", destinationPath)
 		h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+		h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusReceived)
+		h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
 		httputil.RespondJSON(w, http.StatusOK, struct{}{})
 		return
 	}
@@ -271,6 +304,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		h.logger.Errorf("Error saving file %s (ID: %s): %v", fileInfo.Dto.FileName, reqFileId, err)
+		h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, fileInfo.Dto.Size, fileInfo.Dto.FileType, history.StatusFailed)
 		httputil.RespondError(w, http.StatusInternalServerError, "Failed to save file")
 		return
 	}
@@ -279,6 +313,9 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	h.logger.Infof("Finished saving file: %s (ID: %s)", fileInfo.Dto.FileName, reqFileId)
 
 	h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+
+	h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, fileInfo.Dto.Size, fileInfo.Dto.FileType, history.StatusReceived)
+	h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, fileInfo.Dto.Size)
 
 	httputil.RespondJSON(w, http.StatusOK, struct{}{})
 }
@@ -351,6 +388,48 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 	}
 }
 
+func (h *ReceiveHandler) logTransfer(senderAlias, senderIP, fileName, filePath string, size int64, fileType, status string) {
+	if h.historyLog == nil {
+		return
+	}
+	entry := history.Entry{
+		SenderAlias: senderAlias,
+		SenderIP:    senderIP,
+		FileName:    fileName,
+		FilePath:    filePath,
+		FileSize:    size,
+		FileType:    fileType,
+		Status:      status,
+	}
+	if err := h.historyLog.Log(entry); err != nil {
+		h.logger.Errorf("Failed to log transfer history: %v", err)
+	}
+}
+
+func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP string, fileSize int64) {
+	if h.config.ExecHook == "" {
+		return
+	}
+
+	cmdStr := h.config.ExecHook
+	cmdStr = strings.ReplaceAll(cmdStr, "%f", filePath)
+	cmdStr = strings.ReplaceAll(cmdStr, "%n", fileName)
+	cmdStr = strings.ReplaceAll(cmdStr, "%s", fmt.Sprintf("%d", fileSize))
+	cmdStr = strings.ReplaceAll(cmdStr, "%a", senderAlias)
+	cmdStr = strings.ReplaceAll(cmdStr, "%i", senderIP)
+
+	go func() {
+		h.logger.Infof("Running exec hook: %s", cmdStr)
+		cmd := exec.Command("sh", "-c", cmdStr)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			h.logger.Errorf("Exec hook failed: %v, output: %s", err, string(output))
+		} else {
+			h.logger.Debugf("Exec hook completed, output: %s", string(output))
+		}
+	}()
+}
+
 // CancelHandler handles POST /v2/cancel requests.
 func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("Received /cancel request")
@@ -368,7 +447,7 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	session := h.receiveService.GetSessionByID(reqSessionId)
 	if session != nil {
 		h.logger.Infof("Canceling session %s at user request.", reqSessionId)
-		h.receiveService.CloseSession()
+		h.receiveService.CloseSession(reqSessionId)
 	} else {
 		// Session is already gone (completed or previously cancelled).
 		// The LocalSend protocol always sends /cancel as a cleanup step after a

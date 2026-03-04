@@ -36,6 +36,9 @@ type Config struct {
 	RandomFingerprint string                        `json:"-"`
 	MaxBodySize       int64                         `json:"-"`
 	NoClipboard       bool                          `json:"-"` // skip clipboard; save text as a file instead
+	HistoryFile       string                        `json:"-"` // path to transfer history jsonl file
+	Quiet             bool                          `json:"-"` // quiet mode - minimal output
+	ExecHook          string                        `json:"-"` // shell command to run after receiving file
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -205,6 +208,11 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 
 	autoAccept := os.Getenv("LOCALSEND_AUTO_ACCEPT") == "true" || os.Getenv("LOCALSEND_AUTO_ACCEPT") == "1"
 	noClipboard := os.Getenv("LOCALSEND_NO_CLIPBOARD") == "true" || os.Getenv("LOCALSEND_NO_CLIPBOARD") == "1"
+	quiet := os.Getenv("LOCALSEND_QUIET") == "true" || os.Getenv("LOCALSEND_QUIET") == "1"
+
+	historyFile := os.Getenv("LOCALSEND_HISTORY")
+
+	execHook := os.Getenv("LOCALSEND_EXEC")
 
 	cfg := &Config{
 		Alias:             alias,
@@ -220,6 +228,9 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 		RandomFingerprint: generateRandomID(64),
 		MaxBodySize:       maxBodySize,
 		NoClipboard:       noClipboard,
+		HistoryFile:       historyFile,
+		Quiet:             quiet,
+		ExecHook:          execHook,
 	}
 
 	return cfg, nil
