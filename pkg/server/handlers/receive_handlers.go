@@ -197,6 +197,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		maxBodySize = 100 * 1024 * 1024 * 1024 // 100GB default
 	}
 	bodyReader := http.MaxBytesReader(w, r.Body, maxBodySize)
+	defer r.Body.Close()
 
 	var modified, accessed *string
 	if fileInfo.Dto.Metadata != nil {
@@ -210,9 +211,8 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	// to disk.  On failure (headless / no display server) fall through to the
 	// normal file-save path so the content is never lost.
 	if strings.HasPrefix(fileInfo.Dto.FileType, "text/plain") && !h.config.NoClipboard {
-		limited := io.LimitReader(r.Body, maxTextSize+1)
+		limited := io.LimitReader(bodyReader, maxTextSize+1)
 		textBytes, readErr := io.ReadAll(limited)
-		defer r.Body.Close()
 
 		if readErr != nil {
 			h.logger.Errorf("Error reading text body for clipboard (file %s): %v", fileInfo.Dto.FileName, readErr)
@@ -263,7 +263,6 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, modified, accessed, onProgress, h.logger)
-	defer r.Body.Close()
 
 	if err != nil {
 		h.logger.Errorf("Error saving file %s (ID: %s): %v", fileInfo.Dto.FileName, reqFileId, err)
@@ -362,11 +361,13 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	if session != nil {
 		h.logger.Infof("Canceling session %s at user request.", reqSessionId)
 		h.receiveService.CloseSession()
-		httputil.RespondJSON(w, http.StatusOK, nil)
 	} else {
-		h.logger.Warnf("Ignoring /cancel for unknown or mismatched session ID: %s", reqSessionId)
-		httputil.RespondError(w, http.StatusNotFound, "Session not found")
+		// Session is already gone (completed or previously cancelled).
+		// The LocalSend protocol always sends /cancel as a cleanup step after a
+		// successful transfer, so this is the normal post-upload flow — return 200.
+		h.logger.Infof("/cancel received for already-closed session %s — treating as success.", reqSessionId)
 	}
+	httputil.RespondJSON(w, http.StatusOK, nil)
 }
 
 func resolveDuplicateFilename(dir, baseName string) string {

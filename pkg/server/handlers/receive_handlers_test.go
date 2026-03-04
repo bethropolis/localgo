@@ -240,6 +240,35 @@ func TestCancelHandler(t *testing.T) {
 	}
 }
 
+// TestCancelHandler_AfterSuccessfulUpload verifies that the LocalSend protocol's
+// post-transfer /cancel cleanup call returns 200 OK even though the session was
+// already removed when the last file was successfully uploaded.
+func TestCancelHandler_AfterSuccessfulUpload(t *testing.T) {
+	handler, receiveService, _ := setupReceiveHandler(t, nil)
+
+	// Create a session with one file.
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "hello.txt", Size: 5},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "192.168.1.100"}, files)
+
+	// Simulate the session being fully consumed (last file removed → session nil).
+	receiveService.RemoveFileFromSession(session.SessionID, "f1")
+	if receiveService.GetSession() != nil {
+		t.Fatal("expected session to be nil after last file removed")
+	}
+
+	// /cancel with the old sessionId must return 200, not 404.
+	req, _ := http.NewRequest(http.MethodPost, "/v2/cancel?sessionId="+session.SessionID, nil)
+	rr := httptest.NewRecorder()
+
+	handler.CancelHandler(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("expected 200 OK for post-upload /cancel, got %v (body: %s)", status, rr.Body.String())
+	}
+}
+
 // TestUploadHandlerV2_TextPlain_ClipboardFallback verifies that a text/plain
 // transfer is saved to a file when the clipboard is unavailable (NoClipboard=true
 // simulates the headless/fallback case without requiring a real display server).
