@@ -3,7 +3,8 @@ Description=LocalGo - LocalSend v2.1 Protocol Implementation
 Documentation=https://github.com/bethropolis/localgo
 After=network.target network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=0
+StartLimitBurst=3
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -12,8 +13,9 @@ Group=localgo
 ExecStart=/usr/local/bin/localgo-cli serve --quiet
 Restart=always
 RestartSec=5
+TimeoutStartSec=10
 TimeoutStopSec=15
-StandardOutput=journal
+StandardOutput=null
 StandardError=journal
 SyslogIdentifier=localgo
 
@@ -36,10 +38,10 @@ RemoveIPC=true
 PrivateDevices=true
 
 # Resource limits
-LimitNOFILE=65536
-LimitNPROC=4096
+LimitNOFILE=4096
+LimitNPROC=256
 MemoryAccounting=true
-MemoryMax=512M
+MemoryMax=256M
 
 [Install]
 WantedBy=multi-user.target

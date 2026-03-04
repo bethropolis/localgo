@@ -352,15 +352,20 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		protocol = "HTTP"
 	}
 
-	zap.S().Infof("Starting LocalGo server")
-	zap.S().Infof("  Alias: %s", cfg.Alias)
-	zap.S().Infof("  Protocol: %s", protocol)
-	zap.S().Infof("  Port: %d", cfg.Port)
-	zap.S().Infof("  Download Directory: %s", cfg.DownloadDir)
-	if cfg.PIN != "" {
-		zap.S().Infof("  PIN Protection: Enabled")
+	logFn := zap.S().Infof
+	if *quiet {
+		logFn = zap.S().Warnf
 	}
-	zap.S().Infof("  Fingerprint: %s", cfg.SecurityContext.CertificateHash[:16]+"...")
+
+	logFn("Starting LocalGo server")
+	logFn("  Alias: %s", cfg.Alias)
+	logFn("  Protocol: %s", protocol)
+	logFn("  Port: %d", cfg.Port)
+	logFn("  Download Directory: %s", cfg.DownloadDir)
+	if cfg.PIN != "" {
+		logFn("  PIN Protection: Enabled")
+	}
+	logFn("  Fingerprint: %s", cfg.SecurityContext.CertificateHash[:16]+"...")
 
 	// Context for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -401,7 +406,9 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
 
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
-		zap.S().Infof("Device discovered: %s (%s)", device.Alias, device.IP)
+		if !*quiet {
+			zap.S().Infof("Device discovered: %s (%s)", device.Alias, device.IP)
+		}
 	})
 
 	// Start server first
@@ -426,8 +433,10 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 		return fmt.Errorf("discovery service failed: %w", err)
 	}
 
-	zap.S().Infof("Server ready! Waiting for files...")
-	zap.S().Infof("Press Ctrl+C to stop")
+	if !*quiet {
+		zap.S().Infof("Server ready! Waiting for files...")
+		zap.S().Infof("Press Ctrl+C to stop")
+	}
 
 	// Wait for server to finish
 	if err := <-serverErrChan; err != nil {
@@ -435,7 +444,11 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 
 	discoverySvc.Stop()
-	zap.S().Infof("Server stopped")
+	if *quiet {
+		zap.S().Warnf("Server stopped")
+	} else {
+		zap.S().Infof("Server stopped")
+	}
 	return nil
 }
 

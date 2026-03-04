@@ -78,8 +78,9 @@ release: clean-dist ## Cross-compile for all platforms into dist/
 	@$(foreach P,$(PLATFORMS), \
 	  $(eval OS   := $(word 1,$(subst /, ,$(P)))) \
 	  $(eval ARCH := $(word 2,$(subst /, ,$(P)))) \
+	  $(eval OUT_OS := $(if $(filter darwin,$(OS)),macos,$(OS))) \
 	  $(eval EXT  := $(if $(filter windows,$(OS)),.exe,)) \
-	  $(eval OUT  := $(DIST_DIR)/$(BINARY_NAME)-$(OS)-$(ARCH)$(EXT)) \
+	  $(eval OUT  := $(DIST_DIR)/$(BINARY_NAME)-$(OUT_OS)-$(ARCH)$(EXT)) \
 	  printf '  %-40s' '$(OS)/$(ARCH)'; \
 	  GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 \
 	    $(GO) build $(LDFLAGS_STRIP) -o $(OUT) $(BUILD_DIR) \

@@ -3,15 +3,27 @@ Description=LocalGo - LocalSend v2.1 Protocol Implementation (User Service)
 Documentation=https://github.com/bethropolis/localgo
 After=network.target network-online.target
 Wants=network-online.target
+StartLimitBurst=3
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/localgo-cli serve --quiet
 Restart=always
 RestartSec=5
-StandardOutput=journal
+TimeoutStartSec=10
+StandardOutput=null
 StandardError=journal
 SyslogIdentifier=localgo-user
+
+# Resource and scheduling limits
+MemoryAccounting=true
+MemoryMax=128M
+TasksMax=64
+LimitNOFILE=4096
+Nice=15
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
 
 # Security hardening
 NoNewPrivileges=true
