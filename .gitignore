@@ -1,5 +1,6 @@
 # Binaries
 /localgo-cli
+/localgo
 *.exe
 *.out
 *.test
@@ -41,3 +42,5 @@ GEMINI.md
 FIX.md
 config/.security
 codebase.md
+test
+dist/

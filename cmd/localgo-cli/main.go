@@ -155,6 +155,7 @@ func (app *Application) registerCommands() {
 	serveVerbose := serveFlags.Bool("verbose", false, "Verbose mode - detailed output")
 	serveInterval := serveFlags.Int("interval", 30, "Discovery announcement interval in seconds")
 	serveAutoAccept := serveFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
+	serveNoClipboard := serveFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
 
 	app.commands["serve"] = &Command{
 		Name:        "serve",
@@ -171,7 +172,7 @@ func (app *Application) registerCommands() {
 		Flags: serveFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			serveFlags.Parse(args)
-			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval, serveAutoAccept)
+			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval, serveAutoAccept, serveNoClipboard)
 		},
 	}
 
@@ -257,6 +258,7 @@ func (app *Application) registerCommands() {
 	sharePin := shareFlags.String("pin", "", "PIN for authentication")
 	shareAlias := shareFlags.String("alias", "", "Device alias (default: from config)")
 	shareAutoAccept := shareFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
+	shareNoClipboard := shareFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
 
 	app.commands["share"] = &Command{
 		Name:        "share",
@@ -271,7 +273,7 @@ func (app *Application) registerCommands() {
 		Flags: shareFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			shareFlags.Parse(args)
-			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias, shareAutoAccept)
+			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias, shareAutoAccept, shareNoClipboard)
 		},
 	}
 
@@ -320,7 +322,7 @@ func (app *Application) registerCommands() {
 
 // Help methods removed - now using pkg/help module
 
-func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool) error {
+func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool, noClipboard *bool) error {
 	// Apply overrides
 	if *port > 0 {
 		cfg.Port = *port
@@ -340,13 +342,15 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	if *autoAccept {
 		cfg.AutoAccept = true
 	}
+	if *noClipboard {
+		cfg.NoClipboard = true
+	}
 
 	// Create download directory if it doesn't exist
 	if err := os.MkdirAll(cfg.DownloadDir, 0755); err != nil {
 		return fmt.Errorf("failed to create download directory: %w", err)
 	}
 
-	// Show startup information
 	protocol := "HTTPS"
 	if !cfg.HttpsEnabled {
 		protocol = "HTTP"
@@ -452,7 +456,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	return nil
 }
 
-func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string, autoAccept *bool) error {
+func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string, autoAccept *bool, noClipboard *bool) error {
 	if len(files) == 0 {
 		return fmt.Errorf("file parameter is required (use --file)")
 	}
@@ -472,6 +476,9 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 	}
 	if *autoAccept {
 		cfg.AutoAccept = true
+	}
+	if *noClipboard {
+		cfg.NoClipboard = true
 	}
 
 	protocol := "HTTPS"

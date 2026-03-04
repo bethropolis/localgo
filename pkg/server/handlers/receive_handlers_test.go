@@ -239,3 +239,48 @@ func TestCancelHandler(t *testing.T) {
 		t.Errorf("expected session to be cancelled/nil")
 	}
 }
+
+// TestUploadHandlerV2_TextPlain_ClipboardFallback verifies that a text/plain
+// transfer is saved to a file when the clipboard is unavailable (NoClipboard=true
+// simulates the headless/fallback case without requiring a real display server).
+func TestUploadHandlerV2_TextPlain_NoClipboard(t *testing.T) {
+	cfg := &config.Config{
+		AutoAccept:  true,
+		NoClipboard: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	files := map[string]model.FileDto{
+		"clip1": {ID: "clip1", FileName: "snippet.txt", Size: 12, FileType: "text/plain"},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	body := "hello, world"
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=clip1&token="+token,
+		strings.NewReader(body),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	// File must have been written to disk.
+	written, err := os.ReadFile(filepath.Join(tempDir, "snippet.txt"))
+	if err != nil {
+		t.Fatalf("expected file to be saved to disk: %v", err)
+	}
+	if string(written) != body {
+		t.Errorf("file content mismatch: got %q, want %q", string(written), body)
+	}
+}

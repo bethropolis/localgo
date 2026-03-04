@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -20,6 +22,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/storage"
 	"go.uber.org/zap"
 )
+
+// maxTextSize is the maximum bytes read from a text/plain body before
+// falling back to saving as a file (prevents memory exhaustion).
+const maxTextSize = 1 * 1024 * 1024 // 1 MB
 
 // ReceiveHandler handles file receiving requests (/prepare-upload, /upload, /cancel).
 type ReceiveHandler struct {
@@ -198,6 +204,64 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		accessed = fileInfo.Dto.Metadata.Accessed
 	}
 
+	// --- Text/Clipboard Handling ---
+	// When the incoming transfer is plain text and clipboard is not disabled,
+	// try to copy the content directly to the system clipboard instead of writing
+	// to disk.  On failure (headless / no display server) fall through to the
+	// normal file-save path so the content is never lost.
+	if strings.HasPrefix(fileInfo.Dto.FileType, "text/plain") && !h.config.NoClipboard {
+		limited := io.LimitReader(r.Body, maxTextSize+1)
+		textBytes, readErr := io.ReadAll(limited)
+		defer r.Body.Close()
+
+		if readErr != nil {
+			h.logger.Errorf("Error reading text body for clipboard (file %s): %v", fileInfo.Dto.FileName, readErr)
+			httputil.RespondError(w, http.StatusInternalServerError, "Failed to read text content")
+			return
+		}
+
+		text := string(textBytes)
+
+		if int64(len(textBytes)) > maxTextSize {
+			// Text is too large for clipboard; save to file instead.
+			h.logger.Warnf("Text transfer too large for clipboard (%d bytes), saving to file", len(textBytes))
+		} else if clipErr := clipboard.Write(text); clipErr == nil {
+			// Successfully copied to clipboard.
+			preview := text
+			if len(preview) > 80 {
+				preview = preview[:80] + "…"
+			}
+			h.logger.Infof("Copied text to clipboard from %s: %q", fileInfo.Dto.FileName, preview)
+			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+			httputil.RespondJSON(w, http.StatusOK, nil)
+			return
+		} else {
+			// Clipboard unavailable — fall back to file.
+			h.logger.Warnf("Clipboard unavailable (%v), saving text as file instead", clipErr)
+		}
+
+		// Fall-back: save the already-read bytes as a file.
+		destinationPath = resolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+		cleanPath = filepath.Clean(destinationPath)
+		if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
+			cleanPath != filepath.Clean(h.config.DownloadDir) {
+			httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
+			return
+		}
+		savErr := storage.SaveStreamToFileWithMetadata(
+			strings.NewReader(text), destinationPath, modified, accessed, onProgress, h.logger,
+		)
+		if savErr != nil {
+			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)
+			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save file")
+			return
+		}
+		h.logger.Infof("Saved text as file: %s", destinationPath)
+		h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+		httputil.RespondJSON(w, http.StatusOK, nil)
+		return
+	}
+
 	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, modified, accessed, onProgress, h.logger)
 	defer r.Body.Close()
 
@@ -223,16 +287,37 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
 	// Output to stderr to avoid interfering with stdout
-	fmt.Fprintf(os.Stderr, "\n%s Incoming file transfer %s\n", cli.ColorYellow, cli.ColorReset)
+	fmt.Fprintf(os.Stderr, "\n%s Incoming transfer %s\n", cli.ColorYellow, cli.ColorReset)
 	fmt.Fprintf(os.Stderr, "From: %s%s%s (IP: %s)\n", cli.ColorCyan, sender.Alias, cli.ColorReset, sender.IP)
 
 	var totalSize int64
+	var hasText bool
 	fmt.Fprintf(os.Stderr, "Files:\n")
 	for _, file := range files {
-		fmt.Fprintf(os.Stderr, "  - %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+		isText := strings.HasPrefix(file.FileType, "text/plain")
+		if isText {
+			hasText = true
+			preview := ""
+			if file.Preview != nil && *file.Preview != "" {
+				preview = *file.Preview
+				if len(preview) > 80 {
+					preview = preview[:80] + "…"
+				}
+				fmt.Fprintf(os.Stderr, "  - [text] %q\n", preview)
+			} else {
+				fmt.Fprintf(os.Stderr, "  - [text] %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "  - %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+		}
 		totalSize += file.Size
 	}
-	fmt.Fprintf(os.Stderr, "Total size: %s\n", cli.FormatBytes(totalSize))
+	if !hasText {
+		fmt.Fprintf(os.Stderr, "Total size: %s\n", cli.FormatBytes(totalSize))
+	}
+	if hasText && !h.config.NoClipboard {
+		fmt.Fprintf(os.Stderr, "(text will be copied to clipboard)\n")
+	}
 
 	fmt.Fprintf(os.Stderr, "\nAccept transfer? [Y/n] (auto-rejects in 30s): ")
 

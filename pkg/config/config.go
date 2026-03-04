@@ -35,6 +35,7 @@ type Config struct {
 	AutoAccept        bool                          `json:"-"`
 	RandomFingerprint string                        `json:"-"`
 	MaxBodySize       int64                         `json:"-"`
+	NoClipboard       bool                          `json:"-"` // skip clipboard; save text as a file instead
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -203,6 +204,7 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 	}
 
 	autoAccept := os.Getenv("LOCALSEND_AUTO_ACCEPT") == "true" || os.Getenv("LOCALSEND_AUTO_ACCEPT") == "1"
+	noClipboard := os.Getenv("LOCALSEND_NO_CLIPBOARD") == "true" || os.Getenv("LOCALSEND_NO_CLIPBOARD") == "1"
 
 	cfg := &Config{
 		Alias:             alias,
@@ -217,6 +219,7 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 		AutoAccept:        autoAccept,
 		RandomFingerprint: generateRandomID(64),
 		MaxBodySize:       maxBodySize,
+		NoClipboard:       noClipboard,
 	}
 
 	return cfg, nil
