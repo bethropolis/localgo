@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/gorilla/mux"
@@ -29,6 +30,7 @@ type Server struct {
 
 // NewServer creates a new Server instance.
 func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
+	httputil.SetLogger(logger)
 	router := mux.NewRouter()
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()

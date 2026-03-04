@@ -656,7 +656,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 	discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discoverTimeout)*time.Second)
 	defer cancel()
 
-	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
+	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled, false)
 	if err != nil && !*quiet {
 		zap.S().Warnf("Discovery completed with warnings: %v", err)
 	}

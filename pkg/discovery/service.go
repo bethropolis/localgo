@@ -125,7 +125,7 @@ func (s *Service) Stop() {
 // Discover performs a discovery scan and returns found devices.
 // It sends an announcement and listens for a short duration.
 // It requires the service to be configured but not necessarily fully "Start"ed (for listening).
-func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) ([]*model.Device, error) {
+func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool, isDownloadServer bool) ([]*model.Device, error) {
 	s.logger.Info("Performing one-off discovery scan...")
 
 	// --- Create Multicast DTO for announcement ---
@@ -141,7 +141,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 		Fingerprint: fingerprint,
 		Port:        port,
 		Protocol:    protocol,
-		Download:    true,
+		Download:    isDownloadServer,
 		Announce:    true, // We are announcing
 	}
 

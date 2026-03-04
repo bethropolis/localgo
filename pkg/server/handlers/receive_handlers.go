@@ -3,9 +3,12 @@ package handlers
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -54,7 +57,7 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	// --- PIN Check ---
 	if h.config.PIN != "" {
 		pin := r.URL.Query().Get("pin")
-		if pin != h.config.PIN {
+		if subtle.ConstantTimeCompare([]byte(pin), []byte(h.config.PIN)) != 1 {
 			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
 			return
 		}
@@ -68,8 +71,10 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	}
 
 	// --- Decode Request ---
+	// Limit request body to prevent memory exhaustion from massive JSON (1 MB limit)
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
 	var requestDto model.PrepareUploadRequestDto
-	err := json.NewDecoder(r.Body).Decode(&requestDto)
+	err := decoder.Decode(&requestDto)
 	if err != nil {
 		h.logger.Errorf("Error decoding /prepare-upload request from %s: %v", r.RemoteAddr, err)
 		httputil.RespondError(w, http.StatusBadRequest, "Request body malformed")
@@ -233,7 +238,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			}
 			h.logger.Infof("Copied text to clipboard from %s: %q", fileInfo.Dto.FileName, preview)
 			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
-			httputil.RespondJSON(w, http.StatusOK, nil)
+			httputil.RespondJSON(w, http.StatusOK, struct{}{})
 			return
 		} else {
 			// Clipboard unavailable — fall back to file.
@@ -258,7 +263,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		}
 		h.logger.Infof("Saved text as file: %s", destinationPath)
 		h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
-		httputil.RespondJSON(w, http.StatusOK, nil)
+		httputil.RespondJSON(w, http.StatusOK, struct{}{})
 		return
 	}
 
@@ -275,7 +280,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 
-	httputil.RespondJSON(w, http.StatusOK, nil)
+	httputil.RespondJSON(w, http.StatusOK, struct{}{})
 }
 
 // PrepareUploadHandlerV1 handles POST /v1/prepare-upload requests (older protocol).
@@ -283,6 +288,10 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 	// This is a simplified version for V1. It will be removed in the future.
 	h.PrepareUploadHandlerV2(w, r)
 }
+
+// stdinReader is used to prevent creating multiple bufio.Readers on os.Stdin
+// which can steal bytes from each other.
+var stdinReader = bufio.NewReader(os.Stdin)
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
 	// Output to stderr to avoid interfering with stdout
@@ -326,8 +335,7 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 
 	ch := make(chan string, 1)
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
+		input, _ := stdinReader.ReadString('\n')
 		select {
 		case ch <- strings.TrimSpace(strings.ToLower(input)):
 		case <-ctx.Done():
@@ -367,7 +375,7 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		// successful transfer, so this is the normal post-upload flow — return 200.
 		h.logger.Infof("/cancel received for already-closed session %s — treating as success.", reqSessionId)
 	}
-	httputil.RespondJSON(w, http.StatusOK, nil)
+	httputil.RespondJSON(w, http.StatusOK, struct{}{})
 }
 
 func resolveDuplicateFilename(dir, baseName string) string {
@@ -387,5 +395,9 @@ func resolveDuplicateFilename(dir, baseName string) string {
 		}
 	}
 
-	return filepath.Join(dir, baseName)
+	// Fallback to avoid silent overwrite if (1) through (999) are all taken
+	randomBytes := make([]byte, 3)
+	rand.Read(randomBytes)
+	newName := fmt.Sprintf("%s_%s%s", nameWithoutExt, hex.EncodeToString(randomBytes), ext)
+	return filepath.Join(dir, newName)
 }
