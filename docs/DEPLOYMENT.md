@@ -112,10 +112,10 @@ If you prefer to manage the binary yourself:
 2.  **Move** it to a directory in your `$PATH` (e.g., `/usr/local/bin`).
 3.  **Run** it directly:
     ```bash
-    localgo-cli serve
+    localgo serve
     ```
 
 **Tip:** Use `nohup` or `screen`/`tmux` to keep it running after you disconnect:
 ```bash
-nohup localgo-cli serve > localgo.log 2>&1 &
+nohup localgo serve > localgo.log 2>&1 &
 ```

@@ -38,4 +38,4 @@ services:
 
     # Volume mount for live code reloading (if mounting binary)
     # volumes:
-    #   ./localgo-cli:/usr/local/bin/localgo-cli:ro
+    #   ./localgo:/usr/local/bin/localgo:ro

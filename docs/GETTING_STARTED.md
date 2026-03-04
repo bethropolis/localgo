@@ -2,7 +2,7 @@
 
 LocalGo is a high-performance, cross-platform implementation of the LocalSend protocol. This guide will help you get up and running quickly.
 
-## 📥 Installation
+## Installation
 
 ### Option 1: Pre-built Binaries (Recommended)
 Download the latest release for your platform from the [Releases page](https://github.com/bethropolis/localgo/releases).
@@ -10,13 +10,22 @@ Download the latest release for your platform from the [Releases page](https://g
 **Linux/macOS:**
 ```bash
 tar -xzf localgo_Linux_x86_64.tar.gz
-sudo mv localgo-cli /usr/local/bin/
+sudo mv localgo /usr/local/bin/
 ```
 
 **Windows:**
 Extract the zip file and add the folder to your `PATH`.
 
-### Option 2: Build from Source
+### Option 2: Install via the install script
+```bash
+# User installation (installs to ~/.local/bin)
+./scripts/install.sh
+
+# System-wide with optional systemd service
+sudo ./scripts/install.sh --mode system --service --create-user
+```
+
+### Option 3: Build from Source
 Requirements: Go 1.19+
 
 ```bash
@@ -25,74 +34,123 @@ cd localgo
 make build
 ```
 
-### Option 3: Install via Go
+### Option 4: Install via Go
 ```bash
-go install github.com/bethropolis/localgo/cmd/localgo-cli@latest
+go install github.com/bethropolis/localgo/cmd/localgo@latest
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Receive Files
-To start receiving files, simply run the server. It will automatically discover your network interface and start listening.
+Start the server. It will automatically discover your network interface and start listening for incoming transfers.
 
 ```bash
-localgo-cli serve
-```
-*You are now visible to other LocalSend devices as "LocalGo".*
-
-### 2. Send Files
-To send a file, you first need to know the alias (name) of the recipient.
-
-**Discover nearby devices:**
-```bash
-localgo-cli discover
+localgo serve
 ```
 
-**Send the file:**
+You are now visible to other LocalSend devices on your network.
+
+### 2. Discover Devices
 ```bash
-localgo-cli send --file photos.zip --to "QuickShare"
+localgo discover
+```
+
+If multicast is blocked on your network, use the HTTP scanner instead:
+```bash
+localgo scan
+```
+
+Or list the most recently seen devices (fast 2s scan):
+```bash
+localgo devices
+```
+
+### 3. Send Files
+```bash
+localgo send --file photos.zip --to "QuickShare"
+```
+
+You can send multiple files at once:
+```bash
+localgo send --file image.jpg --file document.pdf --to "MyPhone"
+```
+
+### 4. Share Files for Download
+Start a share server so other devices can pull files from you:
+```bash
+localgo share --file document.pdf
+```
+
+Share multiple files, protected by a PIN:
+```bash
+localgo share --file report.pdf --file data.csv --pin 1234
+```
+
+### 5. Show Device Info
+Check your current configuration (alias, fingerprint, port, etc.):
+```bash
+localgo info
 ```
 
 ---
 
-## 💡 Common Scenarios
+## Common Scenarios
 
 ### Running on a Headless Server
-If you are running LocalGo on a VPS or a Raspberry Pi without a monitor:
+If you are running LocalGo on a VPS or a Raspberry Pi without a display:
 
-1.  **Use specific IP binding**: If you have multiple interfaces (VPN, Docker), bind to the physical LAN IP.
-    *(Currently `serve` listens on `0.0.0.0`, but you can filter discovery by subnet)*
-2.  **Enable Quiet Mode**: To avoid cluttering logs.
-    ```bash
-    localgo-cli serve --quiet &
-    ```
-3.  **Run as a Service**: See [Deployment Guide](DEPLOYMENT.md).
+1. **Enable Quiet Mode** to avoid cluttering logs.
+   ```bash
+   localgo serve --quiet &
+   ```
+2. **Disable clipboard** since there is no display server — incoming text will be saved as a `.txt` file.
+   ```bash
+   localgo serve --no-clipboard
+   ```
+3. **Run as a Service**: See the [Deployment Guide](DEPLOYMENT.md).
 
 ### Using in a Script
-LocalGo is JSON-friendly.
+LocalGo is JSON-friendly — pipe output into `jq` or `grep` for automation:
 
 ```bash
 # Check if "MyPhone" is online
-if localgo-cli scan --json | grep -q "MyPhone"; then
+if localgo scan --json | grep -q "MyPhone"; then
     echo "Phone is online!"
 fi
+
+# Get device list as JSON
+localgo devices --json | jq '.[].alias'
 ```
 
-## 🔒 Security
+### Auto-Accept Mode
+For unattended setups where you trust senders on the network:
+
+```bash
+localgo serve --auto-accept --quiet
+```
+
+Or set it permanently via an environment variable:
+```bash
+export LOCALSEND_AUTO_ACCEPT=true
+localgo serve --quiet
+```
+
+## Security
 
 - **Encryption**: All transfers are encrypted using TLS 1.2+ with on-the-fly generated certificates.
 - **PIN Protection**: Enforce a PIN for incoming transfers.
-    ```bash
-    localgo-cli serve --pin 12345
-    ```
-    *The sender will be prompted to enter this PIN.*
+  ```bash
+  localgo serve --pin 12345
+  ```
+  The sender will be prompted to enter this PIN.
 
-## ⏭ Next Steps
+---
 
-- [Configuration Guide](CONFIGURATION.md) - Deep dive into flags and env vars.
-- [CLI Reference](CLI_REFERENCE.md) - Full command documentation.
+## Next Steps
+
+- [Configuration Guide](CONFIGURATION.md) - Deep dive into all flags and env vars.
+- [CLI Reference](CLI_REFERENCE.md) - Full command and flag documentation.
 - [Library Guide](LIBRARY_GUIDE.md) - Embed LocalGo in your own Go apps.
-- [Code Walkthrough](CODE_WALKTHROUGH.md) - Step-by-step guide to understand the codebase.
-
+- [Code Walkthrough](CODE_WALKTHROUGH.md) - Step-by-step guide to the codebase.

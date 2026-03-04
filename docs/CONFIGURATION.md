@@ -9,61 +9,92 @@ LocalGo can be configured via Command Line Flags, Environment Variables, or a Co
 
 ---
 
-## 🚩 Command Line Flags
+## Command Line Flags
 
-Flags are specific to each command. Use `localgo-cli <command> --help` to see them all.
+Flags are specific to each subcommand. Run `localgo help <command>` to see them, or see the [CLI Reference](CLI_REFERENCE.md).
 
-### Common Flags
+### Global Flags
+These can be passed before any subcommand.
+
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--port` | TCP/UDP port to listen/scan on | `53317` |
 | `--verbose` | Enable debug logging | `false` |
-| `--quiet` | Suppress non-essential output | `false` |
-| `--json` | Output results in JSON format | `false` |
+| `--json` | Enable JSON log output | `false` |
 
 ### `serve` Flags
-| Flag | Description | Example |
+| Flag | Description | Default |
 |------|-------------|---------|
-| `--alias` | Device name visible to others | `--alias "FileServer"` |
-| `--dir` | Directory to save incoming files | `--dir "/mnt/storage"` |
-| `--pin` | Require PIN for incoming transfers | `--pin "9999"` |
-| `--http` | Disable HTTPS (use HTTP only) | `--http` |
-| `--auto-accept` | Auto-accept incoming files without prompting | `--auto-accept` |
-| `--interval` | Discovery announcement interval in seconds | `--interval 60` |
-
-### `send` Flags
-| Flag | Description | Example |
-|------|-------------|---------|
-| `--file` | Path to file to send (Required) | `--file "./doc.pdf"` |
-| `--to` | Exact alias of recipient (Required) | `--to "MyPhone"` |
-| `--timeout` | Transfer timeout in seconds | `--timeout 60` |
+| `--port` | TCP port to listen on | `53317` |
+| `--http` | Disable HTTPS (use HTTP only) | `false` |
+| `--alias` | Device name visible to others | from config |
+| `--dir` | Directory to save incoming files | from config |
+| `--pin` | Require PIN for incoming transfers | — |
+| `--interval` | Discovery announcement interval in seconds | `30` |
+| `--auto-accept` | Auto-accept incoming files without prompting | `false` |
+| `--no-clipboard` | Save incoming text as a file instead of copying to clipboard | `false` |
+| `--quiet` | Suppress non-essential output | `false` |
+| `--verbose` | Enable debug logging | `false` |
 
 ### `share` Flags
-| Flag | Description | Example |
+| Flag | Description | Default |
 |------|-------------|---------|
-| `--file` | Path to file to share (Required, can be repeated) | `--file "./doc.pdf"` |
-| `--alias` | Device name visible to others | `--alias "FileServer"` |
-| `--pin` | Require PIN for incoming transfers | `--pin "9999"` |
-| `--http` | Disable HTTPS (use HTTP only) | `--http` |
-| `--auto-accept` | Auto-accept incoming files without prompting | `--auto-accept` |
+| `--file` | Path to file or directory to share (required, repeatable) | — |
+| `--port` | TCP port to listen on | `53317` |
+| `--http` | Disable HTTPS (use HTTP only) | `false` |
+| `--alias` | Device name visible to others | from config |
+| `--pin` | Require PIN for incoming transfers | — |
+| `--auto-accept` | Auto-accept incoming files without prompting | `false` |
+| `--no-clipboard` | Save incoming text as a file instead of copying to clipboard | `false` |
+
+### `send` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--file` | Path to file or directory to send (required, repeatable) | — |
+| `--to` | Exact alias of recipient (required) | — |
+| `--port` | Target device port | auto-detect |
+| `--timeout` | Transfer timeout in seconds | `30` |
+| `--alias` | Sender alias | from config |
+
+### `discover` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--timeout` | Discovery timeout in seconds | `5` |
+| `--json` | Output results in JSON format | `false` |
+| `--quiet` | Only show results, no status messages | `false` |
+
+### `scan` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--timeout` | Scan timeout in seconds | `15` |
+| `--port` | Port to scan | `53317` |
+| `--json` | Output results in JSON format | `false` |
+| `--quiet` | Only show results, no status messages | `false` |
+
+### `devices` / `info` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--json` | Output results in JSON format | `false` |
 
 ---
 
-## 🌍 Environment Variables
+## Environment Variables
 
 You can set these globally to avoid repeating flags.
 
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `LOCALSEND_ALIAS` | Device name | Hostname |
 | `LOCALSEND_PORT` | Port number | `53317` |
-| `LOCALSEND_DOWNLOAD_DIR` | Save path | `./downloads` |
+| `LOCALSEND_DOWNLOAD_DIR` | Save path for incoming files | `./downloads` |
 | `LOCALSEND_SECURITY_DIR` | Security files path | (Auto-detected) |
 | `LOCALSEND_PIN` | Security PIN | (Empty) |
-| `LOCALSEND_MULTICAST_GROUP`| Multicast IP | `224.0.0.167` |
 | `LOCALSEND_FORCE_HTTP` | Disable HTTPS, use HTTP only | `false` |
-| `LOCALSEND_DEVICE_TYPE` | Device type (mobile/desktop/web/headless/server/laptop/tablet/other) | `server` |
+| `LOCALSEND_DEVICE_TYPE` | Device type (`mobile`/`desktop`/`laptop`/`tablet`/`server`/`headless`/`web`/`other`) | `desktop` |
 | `LOCALSEND_DEVICE_MODEL` | Device model string | `LocalGo` |
-| `LOCALSEND_AUTO_ACCEPT` | Auto-accept incoming files without prompting | `false` |
-| `LOCALSEND_LOG_LEVEL` | Log verbosity | `info` |
+| `LOCALSEND_AUTO_ACCEPT` | Auto-accept incoming files (`true` or `1`) | `false` |
+| `LOCALSEND_NO_CLIPBOARD` | Save incoming text as a file instead of clipboard (`true` or `1`) | `false` |
+| `LOCALSEND_MULTICAST_GROUP` | Multicast IP address | `224.0.0.167` |
+| `LOCALSEND_LOG_LEVEL` | Log verbosity (`debug`/`info`/`warn`/`error`) | `info` |
 
 ### Docker-specific Variables
 | Variable | Description | Default |
@@ -76,16 +107,17 @@ You can set these globally to avoid repeating flags.
 LOCALSEND_ALIAS="BackupServer"
 LOCALSEND_DOWNLOAD_DIR="/raid/backups"
 LOCALSEND_PIN="secure_pin_123"
+LOCALSEND_NO_CLIPBOARD=true
 ```
 
 Then run:
 ```bash
-source .env && localgo-cli serve
+source .env && localgo serve
 ```
 
 ---
 
-## 🔧 Technical Details
+## Technical Details
 
 ### Security Directory
 

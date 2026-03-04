@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Script configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BINARY_NAME="localgo-cli"
+BINARY_NAME="localgo"
 SERVICE_NAME="localgo"
 
 # Installation paths
@@ -190,7 +190,7 @@ build_binary() {
     local build_tmp
     build_tmp=$(mktemp -d)
 
-    if go build -ldflags "$LINKER_FLAGS" -o "$build_tmp/$BINARY_NAME" ./cmd/localgo-cli; then
+    if go build -ldflags "$LINKER_FLAGS" -o "$build_tmp/$BINARY_NAME" ./cmd/localgo; then
         BUILT_BINARY="$build_tmp/$BINARY_NAME"
         print_success "Binary built successfully ($VERSION)"
     else

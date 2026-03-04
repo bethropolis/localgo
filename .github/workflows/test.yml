@@ -43,4 +43,4 @@ jobs:
       run: go test -v -race ./...
 
     - name: Verify Build
-      run: go build -v ./cmd/localgo-cli
+      run: go build -v ./cmd/localgo

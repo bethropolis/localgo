@@ -31,16 +31,18 @@ func ShowMainUsage() {
 	fmt.Printf("%s - %s\n\n", header, subheader)
 
 	fmt.Printf("%s\n", cli.Colorize("USAGE:", cli.ColorBold+cli.ColorYellow))
-	fmt.Printf("    localgo-cli <COMMAND> [OPTIONS]\n\n")
+	fmt.Printf("    localgo <COMMAND> [OPTIONS]\n\n")
 
 	fmt.Printf("%s\n", cli.Colorize("COMMANDS:", cli.ColorBold+cli.ColorYellow))
 	commands := []struct {
 		name, desc string
 	}{
 		{"serve", "Start the LocalGo server to receive files"},
+		{"share", "Share files so other devices can download them"},
+		{"send", "Send a file to another device"},
 		{"discover", "Discover devices using multicast"},
 		{"scan", "Scan network for devices using HTTP"},
-		{"send", "Send a file to another device"},
+		{"devices", "List recently discovered devices"},
 		{"info", "Show device information"},
 		{"help", "Show help information"},
 		{"version", "Show version information"},
@@ -52,14 +54,17 @@ func ShowMainUsage() {
 
 	fmt.Printf("\n%s\n", cli.Colorize("OPTIONS:", cli.ColorBold+cli.ColorYellow))
 	fmt.Printf("    %s  Show help\n", cli.Colorize("-h, --help", cli.ColorCyan))
-	fmt.Printf("    %s  Show version\n\n", cli.Colorize("-v, --version", cli.ColorCyan))
+	fmt.Printf("    %s  Show version\n", cli.Colorize("-v, --version", cli.ColorCyan))
+	fmt.Printf("    %s      Enable debug logging\n", cli.Colorize("--verbose", cli.ColorCyan))
+	fmt.Printf("    %s         Enable JSON log output\n\n", cli.Colorize("--json", cli.ColorCyan))
 
 	fmt.Printf("%s\n", cli.Colorize("EXAMPLES:", cli.ColorBold+cli.ColorYellow))
 	examples := []string{
-		"localgo-cli serve --port 8080 --http",
-		"localgo-cli discover --timeout 10",
-		"localgo-cli send --file document.pdf --to MyPhone",
-		"localgo-cli help send",
+		"localgo serve --port 8080 --http",
+		"localgo discover --timeout 10",
+		"localgo send --file document.pdf --to MyPhone",
+		"localgo share --file document.pdf",
+		"localgo help send",
 	}
 
 	for _, ex := range examples {
@@ -67,7 +72,7 @@ func ShowMainUsage() {
 	}
 
 	fmt.Printf("\n%s\n", cli.Colorize("For more information about a specific command, use:", cli.ColorBold))
-	fmt.Printf("    localgo-cli help <COMMAND>\n\n")
+	fmt.Printf("    localgo help <COMMAND>\n\n")
 
 	fmt.Printf("%s\n", cli.Colorize("ENVIRONMENT VARIABLES:", cli.ColorBold+cli.ColorYellow))
 	envVars := []struct {
@@ -76,8 +81,15 @@ func ShowMainUsage() {
 		{"LOCALSEND_ALIAS", "Device alias"},
 		{"LOCALSEND_PORT", "Default port"},
 		{"LOCALSEND_DOWNLOAD_DIR", "Download directory"},
+		{"LOCALSEND_PIN", "Security PIN"},
+		{"LOCALSEND_FORCE_HTTP", "Use HTTP instead of HTTPS"},
+		{"LOCALSEND_DEVICE_TYPE", "Device type (mobile/desktop/server/laptop/tablet/headless/web/other)"},
+		{"LOCALSEND_DEVICE_MODEL", "Device model string"},
+		{"LOCALSEND_AUTO_ACCEPT", "Auto-accept incoming files (true/1)"},
+		{"LOCALSEND_NO_CLIPBOARD", "Save incoming text as file instead of clipboard (true/1)"},
 		{"LOCALSEND_MULTICAST_GROUP", "Multicast group address"},
 		{"LOCALSEND_SECURITY_DIR", "Security directory path"},
+		{"LOCALSEND_LOG_LEVEL", "Log verbosity (debug/info/warn/error)"},
 	}
 
 	for _, env := range envVars {
@@ -138,12 +150,14 @@ func GetCommandHelp(commandName string) *CommandHelp {
 		"serve": {
 			Name:        "serve",
 			Description: "Start the LocalGo server to receive files",
-			Usage:       "localgo-cli serve [OPTIONS]",
+			Usage:       "localgo serve [OPTIONS]",
 			Examples: []string{
-				"localgo-cli serve",
-				"localgo-cli serve --port 8080 --http",
-				"localgo-cli serve --pin 123456 --alias MyDevice",
-				"localgo-cli serve --dir /tmp/downloads --verbose",
+				"localgo serve",
+				"localgo serve --port 8080 --http",
+				"localgo serve --pin 123456 --alias MyDevice",
+				"localgo serve --dir /tmp/downloads --verbose",
+				"localgo serve --auto-accept --quiet",
+				"localgo serve --no-clipboard",
 			},
 			Flags: []FlagHelp{
 				{Name: "--port", Type: "int", Default: "from config", Description: "Port to run the server on"},
@@ -151,19 +165,43 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--pin", Type: "string", Default: "", Description: "PIN for authentication"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},
 				{Name: "--dir", Type: "string", Default: "from config", Description: "Download directory"},
+				{Name: "--interval", Type: "int", Default: "30", Description: "Discovery announcement interval in seconds"},
+				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
+				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
 				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - minimal output"},
 				{Name: "--verbose", Type: "bool", Default: "false", Description: "Verbose mode - detailed output"},
+			},
+		},
+		"share": {
+			Name:        "share",
+			Description: "Share files so other devices can download them",
+			Usage:       "localgo share --file FILE [OPTIONS]",
+			Examples: []string{
+				"localgo share --file document.pdf",
+				"localgo share --file image.jpg --file text.txt",
+				"localgo share --file data.zip --pin 1234",
+				"localgo share --file data.zip --auto-accept",
+				"localgo share --file report.pdf --no-clipboard",
+			},
+			Flags: []FlagHelp{
+				{Name: "--file", Type: "string", Default: "", Description: "File or directory to share (required, can be specified multiple times)"},
+				{Name: "--port", Type: "int", Default: "from config", Description: "Port to run the server on"},
+				{Name: "--http", Type: "bool", Default: "false", Description: "Use HTTP instead of HTTPS"},
+				{Name: "--pin", Type: "string", Default: "", Description: "PIN for authentication"},
+				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},
+				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
+				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
 			},
 		},
 		"discover": {
 			Name:        "discover",
 			Description: "Discover LocalGo devices on the network using multicast",
-			Usage:       "localgo-cli discover [OPTIONS]",
+			Usage:       "localgo discover [OPTIONS]",
 			Examples: []string{
-				"localgo-cli discover",
-				"localgo-cli discover --timeout 10",
-				"localgo-cli discover --json",
-				"localgo-cli discover --quiet",
+				"localgo discover",
+				"localgo discover --timeout 10",
+				"localgo discover --json",
+				"localgo discover --quiet",
 			},
 			Flags: []FlagHelp{
 				{Name: "--timeout", Type: "int", Default: "5", Description: "Discovery timeout in seconds"},
@@ -174,12 +212,12 @@ func GetCommandHelp(commandName string) *CommandHelp {
 		"scan": {
 			Name:        "scan",
 			Description: "Scan the network for LocalGo devices using HTTP",
-			Usage:       "localgo-cli scan [OPTIONS]",
+			Usage:       "localgo scan [OPTIONS]",
 			Examples: []string{
-				"localgo-cli scan",
-				"localgo-cli scan --port 8080 --timeout 30",
-				"localgo-cli scan --json",
-				"localgo-cli scan --quiet",
+				"localgo scan",
+				"localgo scan --port 8080 --timeout 30",
+				"localgo scan --json",
+				"localgo scan --quiet",
 			},
 			Flags: []FlagHelp{
 				{Name: "--timeout", Type: "int", Default: "15", Description: "Scan timeout in seconds"},
@@ -191,28 +229,40 @@ func GetCommandHelp(commandName string) *CommandHelp {
 		"send": {
 			Name:        "send",
 			Description: "Send a file to another LocalGo device",
-			Usage:       "localgo-cli send --file FILE --to DEVICE [OPTIONS]",
+			Usage:       "localgo send --file FILE --to DEVICE [OPTIONS]",
 			Examples: []string{
-				"localgo-cli send --file document.pdf --to MyPhone",
-				"localgo-cli send --file /path/to/file.txt --to 'John's Laptop'",
-				"localgo-cli send --file image.jpg --to MyDevice --port 8080",
-				"localgo-cli send --file data.zip --to RemotePC --timeout 60",
+				"localgo send --file document.pdf --to MyPhone",
+				"localgo send --file /path/to/file.txt --to 'John's Laptop'",
+				"localgo send --file image.jpg --file text.txt --to MyDevice",
+				"localgo send --file data.zip --to RemotePC --timeout 60",
 			},
 			Flags: []FlagHelp{
-				{Name: "--file", Type: "string", Default: "", Description: "File to send (required)"},
+				{Name: "--file", Type: "string", Default: "", Description: "File or directory to send (required, can be specified multiple times)"},
 				{Name: "--to", Type: "string", Default: "", Description: "Target device alias (required)"},
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},
 				{Name: "--timeout", Type: "int", Default: "30", Description: "Send timeout in seconds"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Sender alias"},
 			},
 		},
+		"devices": {
+			Name:        "devices",
+			Description: "List recently discovered devices on the network",
+			Usage:       "localgo devices [OPTIONS]",
+			Examples: []string{
+				"localgo devices",
+				"localgo devices --json",
+			},
+			Flags: []FlagHelp{
+				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
+			},
+		},
 		"info": {
 			Name:        "info",
 			Description: "Show device information and configuration",
-			Usage:       "localgo-cli info [OPTIONS]",
+			Usage:       "localgo info [OPTIONS]",
 			Examples: []string{
-				"localgo-cli info",
-				"localgo-cli info --json",
+				"localgo info",
+				"localgo info --json",
 			},
 			Flags: []FlagHelp{
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},

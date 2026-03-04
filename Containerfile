@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 go build \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \
     -X main.BuildDate=${BUILD_DATE}" \
-    -o localgo-cli ./cmd/localgo-cli
+    -o localgo ./cmd/localgo
 
 FROM alpine:3.21
 
@@ -47,7 +47,7 @@ RUN apk add --no-cache ca-certificates tzdata su-exec
 
 RUN adduser -D -u 1000 -h /app localgo
 
-COPY --from=builder /app/localgo-cli /usr/local/bin/localgo-cli
+COPY --from=builder /app/localgo /usr/local/bin/localgo
 
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -66,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget -qO- http://localhost:53317/api/localsend/v2/info || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["localgo-cli", "serve"]
+CMD ["localgo", "serve"]

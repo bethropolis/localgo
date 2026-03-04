@@ -4,7 +4,7 @@ This document provides a deep dive into the LocalGo codebase, explaining "how it
 
 ## 📂 Project Structure
 
-### `cmd/localgo-cli/`
+### `cmd/localgo/`
 The entry point for the application.
 
 - **`main.go`**: The command-line interface (CLI) driver.

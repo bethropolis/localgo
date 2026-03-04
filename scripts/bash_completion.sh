@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bash completion script for localgo-cli
+# Bash completion script for localgo
 # To use this script, source it in your ~/.bashrc or copy it to /etc/bash_completion.d/
 
 _localgo_cli_completions() {
@@ -30,7 +30,7 @@ _localgo_cli_completions() {
     # Info command flags
     local info_flags="--json"
 
-    # Get the command (first argument after localgo-cli)
+    # Get the command (first argument after localgo)
     local command=""
     if [[ ${#COMP_WORDS[@]} -gt 1 ]]; then
         command="${COMP_WORDS[1]}"
@@ -127,7 +127,7 @@ _localgo_cli_completions() {
 }
 
 # Register the completion function
-complete -F _localgo_cli_completions localgo-cli
+complete -F _localgo_cli_completions localgo
 
 # Also register for common aliases
 complete -F _localgo_cli_completions localgo
@@ -142,15 +142,15 @@ install_localgo_completion() {
 
     # Try system-wide installation first
     if [[ -w "$completion_dir" ]]; then
-        cp "$(dirname "$0")/bash_completion.sh" "$completion_dir/localgo-cli"
-        echo "Installed system-wide completion to $completion_dir/localgo-cli"
+        cp "$(dirname "$0")/bash_completion.sh" "$completion_dir/localgo"
+        echo "Installed system-wide completion to $completion_dir/localgo"
     elif [[ ! -d "$user_completion_dir" ]]; then
         mkdir -p "$user_completion_dir"
-        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo-cli"
-        echo "Installed user completion to $user_completion_dir/localgo-cli"
+        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo"
+        echo "Installed user completion to $user_completion_dir/localgo"
     else
-        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo-cli"
-        echo "Installed user completion to $user_completion_dir/localgo-cli"
+        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo"
+        echo "Installed user completion to $user_completion_dir/localgo"
     fi
 
     echo "Please restart your shell or run 'source ~/.bashrc' to enable completion."
@@ -161,7 +161,7 @@ show_completion_help() {
     cat << 'EOF'
 LocalGo CLI Bash Completion
 
-This script provides intelligent tab completion for the localgo-cli command.
+This script provides intelligent tab completion for the localgo command.
 
 Features:
 - Command completion (serve, discover, scan, send, info, help, version)
@@ -175,23 +175,23 @@ Installation:
    echo "source /path/to/bash_completion.sh" >> ~/.bashrc
 
 2. Or install system-wide:
-   sudo cp bash_completion.sh /etc/bash_completion.d/localgo-cli
+   sudo cp bash_completion.sh /etc/bash_completion.d/localgo
 
 3. Or use the installer function:
    source bash_completion.sh && install_localgo_completion
 
 Usage:
-After installation, you can use tab completion with localgo-cli:
+After installation, you can use tab completion with localgo:
 
-  localgo-cli <TAB>                    # Shows available commands
-  localgo-cli serve --<TAB>            # Shows serve command flags
-  localgo-cli send --file <TAB>        # Completes file paths
-  localgo-cli send --to <TAB>          # Suggests device names
+  localgo <TAB>                    # Shows available commands
+  localgo serve --<TAB>            # Shows serve command flags
+  localgo send --file <TAB>        # Completes file paths
+  localgo send --to <TAB>          # Suggests device names
 
 Examples:
-  localgo-cli se<TAB>                  # Completes to "serve"
-  localgo-cli serve --p<TAB>           # Completes to "--port"
-  localgo-cli send --file ~/Doc<TAB>   # Completes file path
+  localgo se<TAB>                  # Completes to "serve"
+  localgo serve --p<TAB>           # Completes to "--port"
+  localgo send --file ~/Doc<TAB>   # Completes file path
 EOF
 }
 

@@ -8,7 +8,7 @@ StartLimitIntervalSec=60
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/localgo-cli serve --quiet
+ExecStart=%h/.local/bin/localgo serve --quiet
 Restart=always
 RestartSec=5
 TimeoutStartSec=10

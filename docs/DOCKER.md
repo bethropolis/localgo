@@ -163,7 +163,7 @@ services:
       - "53317:53317/udp"
 ```
 
-**Note:** Multicast discovery may not work as reliably on macOS/Windows. Use HTTP scanning (`localgo-cli scan`) as an alternative.
+**Note:** Multicast discovery may not work as reliably on macOS/Windows. Use HTTP scanning (`localgo scan`) as an alternative.
 
 ## Health Checks
 
@@ -222,13 +222,13 @@ docker-compose logs --tail=100
 
 **From host to container:**
 ```bash
-./localgo-cli discover --timeout 10
+./localgo discover --timeout 10
 ```
 
 **From container:**
 ```bash
-docker-compose exec localgo localgo-cli info
-docker-compose exec localgo localgo-cli discover --timeout 10
+docker-compose exec localgo localgo info
+docker-compose exec localgo localgo discover --timeout 10
 ```
 
 ### Permission Issues / SELinux
@@ -246,7 +246,7 @@ volumes:
 **Multicast not working:**
 1. Verify network mode is set to `host` (Linux only)
 2. Check firewall settings allow UDP port 53317
-3. Use HTTP scanning as fallback: `docker-compose exec localgo localgo-cli scan`
+3. Use HTTP scanning as fallback: `docker-compose exec localgo localgo scan`
 
 ## Security Considerations
 

@@ -5,8 +5,8 @@
 # ---------------------------------------------------------------------------
 # Variables
 # ---------------------------------------------------------------------------
-BINARY_NAME    := localgo-cli
-BUILD_DIR      := ./cmd/localgo-cli
+BINARY_NAME    := localgo
+BUILD_DIR      := ./cmd/localgo
 DIST_DIR       := dist
 COVER_DIR      := .coverage
 

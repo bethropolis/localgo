@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 go build \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \
     -X main.BuildDate=${BUILD_DATE}" \
-    -o localgo-cli ./cmd/localgo-cli
+    -o localgo ./cmd/localgo
 
 # Runtime Stage
 FROM alpine:3.21
@@ -51,7 +51,7 @@ RUN apk add --no-cache ca-certificates tzdata su-exec wget
 RUN adduser -D -u 1000 -h /app localgo
 
 # Copy binary from builder
-COPY --from=builder /app/localgo-cli /usr/local/bin/localgo-cli
+COPY --from=builder /app/localgo /usr/local/bin/localgo
 
 # Copy entrypoint script
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -83,4 +83,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Command to run
-CMD ["localgo-cli", "serve"]
+CMD ["localgo", "serve"]

@@ -13,6 +13,7 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 - **Fast Discovery** - Multicast UDP + HTTP fallback
 - **Multi-file Transfers** - Send multiple files concurrently
 - **Web Share** - Share files via browser download link
+- **Clipboard Integration** - Incoming text/plain transfers copied to clipboard automatically
 - **Metadata Preserved** - File timestamps preserved on transfer
 - **Cross-Platform** - Linux, macOS, Windows
 
@@ -26,22 +27,25 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 # System-wide with systemd
 sudo ./scripts/install.sh --mode system --service --create-user
+
+# or using go (no service and completions)
+go install github.com/bethropolis/localgo/cmd/localgo@latest
 ```
 
 ### Usage
 
 ```bash
 # Start server to receive files
-localgo-cli serve
+localgo serve
 
 # Discover devices
-localgo-cli discover
+localgo discover
 
 # Send a file
-localgo-cli send --file document.pdf --to "My Phone"
+localgo send --file document.pdf --to "My Phone"
 
 # Share files for web download
-localgo-cli share --file document.pdf
+localgo share --file document.pdf
 ```
 
 ### Docker
@@ -64,9 +68,13 @@ docker run -d --network host -v $(pwd)/downloads:/app/downloads localgo
 | `LOCALSEND_ALIAS` | hostname | Device name |
 | `LOCALSEND_PORT` | 53317 | Server port |
 | `LOCALSEND_DOWNLOAD_DIR` | ./downloads | Download directory |
-| `LOCALSEND_PIN` | - | Optional PIN protection |
+| `LOCALSEND_PIN` | — | Optional PIN protection |
 | `LOCALSEND_FORCE_HTTP` | false | Use HTTP instead of HTTPS |
-| `LOCALSEND_DEVICE_TYPE` | desktop | Device type (mobile, desktop, server, etc.) |
+| `LOCALSEND_DEVICE_TYPE` | desktop | Device type (mobile/desktop/laptop/tablet/server/headless/web/other) |
+| `LOCALSEND_DEVICE_MODEL` | LocalGo | Device model string |
+| `LOCALSEND_AUTO_ACCEPT` | false | Auto-accept incoming files without prompting |
+| `LOCALSEND_NO_CLIPBOARD` | false | Save incoming text as a file instead of clipboard |
+| `LOCALSEND_LOG_LEVEL` | info | Log verbosity (debug/info/warn/error) |
 
 ### Example
 
@@ -74,7 +82,7 @@ docker run -d --network host -v $(pwd)/downloads:/app/downloads localgo
 export LOCALSEND_ALIAS="File Server"
 export LOCALSEND_DOWNLOAD_DIR="/srv/files"
 export LOCALSEND_PIN="123456"
-localgo-cli serve
+localgo serve
 ```
 
 ## Commands
@@ -89,7 +97,7 @@ localgo-cli serve
 | `info` | Show device information |
 | `devices` | List discovered devices |
 
-Run `localgo-cli help` for more options.
+Run `localgo help` for more options.
 
 ## Documentation
 
@@ -105,13 +113,13 @@ Detailed guides available in [docs/](docs/):
 **Discovery not working:**
 ```bash
 # Use HTTP scan instead
-localgo-cli scan --timeout 15
+localgo scan --timeout 15
 ```
 
 **Port in use:**
 ```bash
 # Use different port
-localgo-cli serve --port 8080
+localgo serve --port 8080
 ```
 
 **Permission denied:**

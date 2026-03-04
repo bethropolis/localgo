@@ -7,9 +7,9 @@ tmp_dir = ".air"
 
 [build]
   # Command run on each change
-  cmd = "go build -o .air/localgo-cli ./cmd/localgo-cli"
+  cmd = "go build -o .air/localgo ./cmd/localgo"
   # Binary to run after a successful build
-  bin = ".air/localgo-cli"
+  bin = ".air/localgo"
   # Arguments passed to the binary
   args_bin = ["serve", "--http"]
   # Files/directories to watch

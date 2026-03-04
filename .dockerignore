@@ -7,7 +7,7 @@
 *.dylib
 *.test
 *.out
-localgo-cli
+localgo
 *.swp
 *.swo
 *~

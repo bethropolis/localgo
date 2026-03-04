@@ -160,14 +160,14 @@ func (app *Application) registerCommands() {
 	app.commands["serve"] = &Command{
 		Name:        "serve",
 		Description: "Start the LocalGo server to receive files",
-		Usage:       "localgo-cli serve [OPTIONS]",
+		Usage:       "localgo serve [OPTIONS]",
 		Examples: []string{
-			"localgo-cli serve",
-			"localgo-cli serve --port 8080 --http",
-			"localgo-cli serve --pin 123456 --alias MyDevice",
-			"localgo-cli serve --dir /tmp/downloads --verbose",
-			"localgo-cli serve --quiet --interval 300",
-			"localgo-cli serve --auto-accept",
+			"localgo serve",
+			"localgo serve --port 8080 --http",
+			"localgo serve --pin 123456 --alias MyDevice",
+			"localgo serve --dir /tmp/downloads --verbose",
+			"localgo serve --quiet --interval 300",
+			"localgo serve --auto-accept",
 		},
 		Flags: serveFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -185,12 +185,12 @@ func (app *Application) registerCommands() {
 	app.commands["discover"] = &Command{
 		Name:        "discover",
 		Description: "Discover LocalGo devices on the network using multicast",
-		Usage:       "localgo-cli discover [OPTIONS]",
+		Usage:       "localgo discover [OPTIONS]",
 		Examples: []string{
-			"localgo-cli discover",
-			"localgo-cli discover --timeout 10",
-			"localgo-cli discover --json",
-			"localgo-cli discover --quiet",
+			"localgo discover",
+			"localgo discover --timeout 10",
+			"localgo discover --json",
+			"localgo discover --quiet",
 		},
 		Flags: discoverFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -209,12 +209,12 @@ func (app *Application) registerCommands() {
 	app.commands["scan"] = &Command{
 		Name:        "scan",
 		Description: "Scan the network for LocalGo devices using HTTP",
-		Usage:       "localgo-cli scan [OPTIONS]",
+		Usage:       "localgo scan [OPTIONS]",
 		Examples: []string{
-			"localgo-cli scan",
-			"localgo-cli scan --port 8080 --timeout 30",
-			"localgo-cli scan --json",
-			"localgo-cli scan --quiet",
+			"localgo scan",
+			"localgo scan --port 8080 --timeout 30",
+			"localgo scan --json",
+			"localgo scan --quiet",
 		},
 		Flags: scanFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -235,12 +235,12 @@ func (app *Application) registerCommands() {
 	app.commands["send"] = &Command{
 		Name:        "send",
 		Description: "Send a file to another LocalGo device",
-		Usage:       "localgo-cli send --file FILE --to DEVICE [OPTIONS]",
+		Usage:       "localgo send --file FILE --to DEVICE [OPTIONS]",
 		Examples: []string{
-			"localgo-cli send --file document.pdf --to MyPhone",
-			"localgo-cli send --file /path/to/file.txt --to 'John\\'s Laptop'",
-			"localgo-cli send --file image.jpg --file text.txt --to MyDevice",
-			"localgo-cli send --file data.zip --to RemotePC --timeout 60",
+			"localgo send --file document.pdf --to MyPhone",
+			"localgo send --file /path/to/file.txt --to 'John\\'s Laptop'",
+			"localgo send --file image.jpg --file text.txt --to MyDevice",
+			"localgo send --file data.zip --to RemotePC --timeout 60",
 		},
 		Flags: sendFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -263,12 +263,12 @@ func (app *Application) registerCommands() {
 	app.commands["share"] = &Command{
 		Name:        "share",
 		Description: "Share files so others can download them",
-		Usage:       "localgo-cli share --file FILE [OPTIONS]",
+		Usage:       "localgo share --file FILE [OPTIONS]",
 		Examples: []string{
-			"localgo-cli share --file document.pdf",
-			"localgo-cli share --file image.jpg --file text.txt",
-			"localgo-cli share --file data.zip --pin 1234",
-			"localgo-cli share --file data.zip --auto-accept",
+			"localgo share --file document.pdf",
+			"localgo share --file image.jpg --file text.txt",
+			"localgo share --file data.zip --pin 1234",
+			"localgo share --file data.zip --auto-accept",
 		},
 		Flags: shareFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -284,10 +284,10 @@ func (app *Application) registerCommands() {
 	app.commands["info"] = &Command{
 		Name:        "info",
 		Description: "Show device information and configuration",
-		Usage:       "localgo-cli info [OPTIONS]",
+		Usage:       "localgo info [OPTIONS]",
 		Examples: []string{
-			"localgo-cli info",
-			"localgo-cli info --json",
+			"localgo info",
+			"localgo info --json",
 		},
 		Flags: infoFlags,
 		Action: func(cfg *config.Config, args []string) error {
@@ -303,10 +303,10 @@ func (app *Application) registerCommands() {
 	app.commands["devices"] = &Command{
 		Name:        "devices",
 		Description: "Show all recently discovered devices on the network",
-		Usage:       "localgo-cli devices [OPTIONS]",
+		Usage:       "localgo devices [OPTIONS]",
 		Examples: []string{
-			"localgo-cli devices",
-			"localgo-cli devices --json",
+			"localgo devices",
+			"localgo devices --json",
 		},
 		Flags: devicesFlags,
 		Action: func(cfg *config.Config, args []string) error {
