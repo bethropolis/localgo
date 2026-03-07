@@ -23,7 +23,7 @@ jobs:
           cache: true
 
       - name: Run Tests
-      - run: go test -race ./...
+        run: go test -race ./...
 
       - name: Build Binaries
         run: make release
@@ -38,3 +38,59 @@ jobs:
           prerelease: false
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: bethropolis/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Fetch SHA256 hashes from GitHub API
+        id: hashes
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          API="https://api.github.com/repos/bethropolis/localgo/releases/tags/${VERSION}"
+
+          # Wait briefly for release assets to be available
+          sleep 10
+
+          ASSETS=$(curl -sL "$API" | jq -r '.assets[] | "\(.name) \(.digest)"')
+
+          get_sha() {
+            echo "$ASSETS" | grep "^$1 " | awk '{print $2}' | sed 's/sha256://'
+          }
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "macos_arm64=$(get_sha localgo-macos-arm64)" >> $GITHUB_OUTPUT
+          echo "macos_amd64=$(get_sha localgo-macos-amd64)" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(get_sha localgo-linux-arm64)" >> $GITHUB_OUTPUT
+          echo "linux_amd64=$(get_sha localgo-linux-amd64)" >> $GITHUB_OUTPUT
+
+      - name: Update formula
+        env:
+          VERSION: ${{ steps.hashes.outputs.version }}
+          MACOS_ARM64: ${{ steps.hashes.outputs.macos_arm64 }}
+          MACOS_AMD64: ${{ steps.hashes.outputs.macos_amd64 }}
+          LINUX_ARM64: ${{ steps.hashes.outputs.linux_arm64 }}
+          LINUX_AMD64: ${{ steps.hashes.outputs.linux_amd64 }}
+        run: |
+          VER="${VERSION#v}"
+          sed -i "s/version \".*\"/version \"${VER}\"/" Formula/localgo.rb
+          sed -i "/macos-arm64/{n;s/sha256 \".*\"/sha256 \"${MACOS_ARM64}\"/}" Formula/localgo.rb
+          sed -i "/macos-amd64/{n;s/sha256 \".*\"/sha256 \"${MACOS_AMD64}\"/}" Formula/localgo.rb
+          sed -i "/linux-arm64/{n;s/sha256 \".*\"/sha256 \"${LINUX_ARM64}\"/}" Formula/localgo.rb
+          sed -i "/linux-amd64/{n;s/sha256 \".*\"/sha256 \"${LINUX_AMD64}\"/}" Formula/localgo.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/localgo.rb
+          git commit -m "localgo ${{ steps.hashes.outputs.version }}"
+          git push
