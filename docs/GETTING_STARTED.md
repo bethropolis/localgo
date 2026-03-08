@@ -36,23 +36,24 @@ make build
 go install github.com/bethropolis/localgo/cmd/localgo@latest
 ```
 
-### Option 5: Install via Homebrew (macOS)
+### Option 5: Install via Homebrew (macOS/Linux)
 ```bash
 brew install bethropolis/localgo/localgo
 ```
 
 ### Option 6: Install via Docker/podman
 ```bash
-docker pull ghcr.io/bethropolis/localgo:latest
-
-docker run -d \
+podman run -d \
   --name localgo \
   --network host \
-  -v ./downloads:/app/downloads \
-  -v ./config:/app/config \
+  -v $(pwd)/downloads:/app/downloads:z \
+  -v $(pwd)/config:/app/config:z \
   -e LOCALSEND_ALIAS="My Server" \
   ghcr.io/bethropolis/localgo:latest
 ```
+> ensure the mounted `downloads` and `config` directories exist and have the correct permissions.
+> for more information see [container documentation](CONTAINER.md)
+
 
 ---
 

@@ -46,7 +46,8 @@ brew tap bethropolis/tap
 brew install localgo
 ```
 
-> more install options in 
+> [!NOTE]
+> more install options in [installation documentation](docs/GETTING_STARTED.md)
 
 ### Usage
 
@@ -64,16 +65,9 @@ localgo send --file document.pdf --to "My Phone"
 localgo share --file document.pdf
 ```
 
-### Docker
+### Docker and Podman
 
-```bash
-# Start with Docker Compose
-docker-compose up -d
-
-# Or build and run manually
-docker build -t localgo .
-docker run -d --network host -v $(pwd)/downloads:/app/downloads localgo
-```
+Read the [container documentation](docs/CONTAINER.md) for more information.
 
 ## Configuration
 
@@ -120,7 +114,7 @@ Run `localgo help` for more options.
 Detailed guides available in [docs/](docs/):
 
 - [Configuration](docs/CONFIGURATION.md) - All settings
-- [Docker](docs/DOCKER.md) - Container deployment
+- [Container](docs/CONTAINER.md) - Container deployment
 - [CLI Reference](docs/CLI_REFERENCE.md) - Command details
 - [Deployment](docs/DEPLOYMENT.md) - Production setup
 

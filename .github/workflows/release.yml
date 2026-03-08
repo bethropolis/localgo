@@ -1,7 +1,10 @@
 name: Release Builder
 
+
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -34,7 +37,7 @@ jobs:
           zip -r dist/localgo_Windows_arm64.zip dist/localgo_Windows_arm64
           rm -rf dist/localgo_Windows_x86_64
           rm -rf dist/localgo_Windows_arm64
-          
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         env:
