@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -70,14 +71,28 @@ func (l *Logger) Close() error {
 	return l.file.Close()
 }
 
-// DefaultPath returns the default history file path using XDG conventions.
-// It falls back to ./localgo-history.jsonl if XDG_DATA_HOME and HOME are unset.
+// DefaultPath returns the platform-appropriate default history file path.
+//
+// Resolution order:
+//  1. $XDG_DATA_HOME/localgo/history.jsonl  (all platforms)
+//  2. $HOME/.local/share/localgo/history.jsonl  (Unix)
+//  3. %APPDATA%\localgo\history.jsonl  (Windows)
+//  4. localgo-history.jsonl  (current directory, last resort)
 func DefaultPath() string {
 	if dataHome := os.Getenv("XDG_DATA_HOME"); dataHome != "" {
 		return filepath.Join(dataHome, "localgo", "history.jsonl")
 	}
 	if home := os.Getenv("HOME"); home != "" {
 		return filepath.Join(home, ".local", "share", "localgo", "history.jsonl")
+	}
+	// Windows: HOME is usually unset; APPDATA points to the roaming profile.
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "localgo", "history.jsonl")
+		}
+		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
+			return filepath.Join(userProfile, "AppData", "Roaming", "localgo", "history.jsonl")
+		}
 	}
 	return "localgo-history.jsonl"
 }
