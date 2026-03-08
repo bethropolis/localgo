@@ -4,7 +4,7 @@ LocalGo is a high-performance, cross-platform implementation of the LocalSend pr
 
 ## Installation
 
-### Option 1: Pre-built Binaries (Recommended)
+### Option 1: Pre-built Binaries
 Download the latest release for your platform from the [Releases page](https://github.com/bethropolis/localgo/releases).
 
 **Linux/macOS:**
@@ -13,15 +13,12 @@ tar -xzf localgo_Linux_x86_64.tar.gz
 sudo mv localgo /usr/local/bin/
 ```
 
-**Windows:**
-Extract the zip file and add the folder to your `PATH`.
-
 ### Option 2: Install via the install script
 ```bash
 # User installation (installs to ~/.local/bin)
 ./scripts/install.sh
 
-# System-wide with optional systemd service
+# System-wide with systemd service
 sudo ./scripts/install.sh --mode system --service --create-user
 ```
 
@@ -37,6 +34,24 @@ make build
 ### Option 4: Install via Go
 ```bash
 go install github.com/bethropolis/localgo/cmd/localgo@latest
+```
+
+### Option 5: Install via Homebrew (macOS)
+```bash
+brew install bethropolis/localgo/localgo
+```
+
+### Option 6: Install via Docker/podman
+```bash
+docker pull ghcr.io/bethropolis/localgo:latest
+
+docker run -d \
+  --name localgo \
+  --network host \
+  -v ./downloads:/app/downloads \
+  -v ./config:/app/config \
+  -e LOCALSEND_ALIAS="My Server" \
+  ghcr.io/bethropolis/localgo:latest
 ```
 
 ---

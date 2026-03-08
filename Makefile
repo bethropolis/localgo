@@ -28,6 +28,7 @@ PLATFORMS := \
 	darwin/amd64 \
 	darwin/arm64 \
 	windows/amd64 \
+	windows/arm64 \
 	android/arm \
 	android/arm64
 
