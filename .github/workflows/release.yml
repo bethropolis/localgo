@@ -1,6 +1,5 @@
 name: Release Builder
 
-
 on:
   push:
     branches:
@@ -33,10 +32,9 @@ jobs:
 
       - name: Zip Windows Binaries
         run: |
-          zip -r dist/localgo_Windows_x86_64.zip dist/localgo_Windows_x86_64
-          zip -r dist/localgo_Windows_arm64.zip dist/localgo_Windows_arm64
-          rm -rf dist/localgo_Windows_x86_64
-          rm -rf dist/localgo_Windows_arm64
+          zip -j dist/localgo-windows-amd64.zip dist/localgo-windows-amd64.exe
+          zip -j dist/localgo-windows-arm64.zip dist/localgo-windows-arm64.exe
+          rm dist/localgo-windows-amd64.exe dist/localgo-windows-arm64.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -65,22 +63,20 @@ jobs:
         id: hashes
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
-          API="https://api.github.com/repos/bethropolis/localgo/releases/tags/${VERSION}"
-
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          API="https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}"
+          
           # Wait briefly for release assets to be available
           sleep 10
-
-          ASSETS=$(curl -sL "$API" | jq -r '.assets[] | "\(.name) \(.digest)"')
-
-          get_sha() {
-            echo "$ASSETS" | grep "^$1 " | awk '{print $2}' | sed 's/sha256://'
-          }
-
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "macos_arm64=$(get_sha localgo-macos-arm64)" >> $GITHUB_OUTPUT
-          echo "macos_amd64=$(get_sha localgo-macos-amd64)" >> $GITHUB_OUTPUT
-          echo "linux_arm64=$(get_sha localgo-linux-arm64)" >> $GITHUB_OUTPUT
-          echo "linux_amd64=$(get_sha localgo-linux-amd64)" >> $GITHUB_OUTPUT
+          
+          # Download the release assets for hashing
+          curl -sL "$API" | jq -r '.assets[].browser_download_url' | xargs -n 1 curl -sL -O
+          
+          echo "macos_arm64=$(sha256sum localgo-macos-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "macos_amd64=$(sha256sum localgo-macos-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(sha256sum localgo-linux-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_amd64=$(sha256sum localgo-linux-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Update formula
         env:

@@ -1,3 +1,4 @@
+// File: pkg/discovery/http_discovery.go
 package discovery
 
 import (
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -17,28 +19,24 @@ import (
 	"go.uber.org/zap"
 )
 
-// HTTPDiscoveryConfig contains settings for HTTP discovery
 type HTTPDiscoveryConfig struct {
 	RequestTimeout time.Duration
 }
 
-// DefaultHTTPDiscoveryConfig returns default HTTP discovery configuration
 func DefaultHTTPDiscoveryConfig() *HTTPDiscoveryConfig {
 	return &HTTPDiscoveryConfig{
 		RequestTimeout: 2 * time.Second,
 	}
 }
 
-// HTTPDiscovery handles HTTP-based device discovery
 type HTTPDiscovery struct {
 	config        *HTTPDiscoveryConfig
 	dto           model.RegisterDto
 	client        *http.Client
-	deviceHandler func(*model.Device) // New field for handling discovered devices
+	deviceHandler func(*model.Device)
 	logger        *zap.SugaredLogger
 }
 
-// NewHTTPDiscovery creates a new HTTP discovery instance
 func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handler func(*model.Device), logger *zap.SugaredLogger) *HTTPDiscovery {
 	if config == nil {
 		config = DefaultHTTPDiscoveryConfig()
@@ -47,13 +45,11 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 		logger = zap.NewNop().Sugar()
 	}
 
-	// Create HTTP client with custom transport for TLS
 	client := &http.Client{
 		Timeout: config.RequestTimeout,
-		// This client must be able to handle both http and https for discovery purposes
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // Accept self-signed certificates
+				InsecureSkipVerify: true,
 			},
 		},
 	}
@@ -67,50 +63,36 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 	}
 }
 
-// fetchDeviceInfo retrieves device information using a specific scheme (http or https)
 func (hd *HTTPDiscovery) fetchDeviceInfo(ctx context.Context, ip net.IP, port int, scheme string) (*model.Device, error) {
-	// Create URL for the info endpoint
-	url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/info", scheme, ip.String(), port)
+	url := fmt.Sprintf("%s://%s/api/localsend/v2/info", scheme, net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 
 	hd.logger.Debugf("HTTPDiscovery: Fetching device info from URL: %s", url)
 
-	// Create a request with context for cancellation
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		hd.logger.Debugf("Failed to create request for %s: %v", url, err)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Send the request
 	resp, err := hd.client.Do(req)
 	if err != nil {
-		hd.logger.Debugf("Failed to send request to %s: %v", url, err)
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		hd.logger.Debugf("Unexpected status code from %s: %d", url, resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		hd.logger.Debugf("Failed to read response body from %s: %v", url, err)
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var infoDto model.InfoDto
 	if err := json.Unmarshal(body, &infoDto); err != nil {
-		hd.logger.Debugf("Failed to parse response body from %s: %v", url, err)
 		return nil, fmt.Errorf("failed to parse response body: %w", err)
 	}
 
-	hd.logger.Debugf("Successfully fetched device info from %s: %+v", url, infoDto)
-
-	// Create and return a device from the info
 	return &model.Device{
 		IP:          ip.String(),
 		Version:     infoDto.Version,
@@ -126,18 +108,15 @@ func (hd *HTTPDiscovery) fetchDeviceInfo(ctx context.Context, ip net.IP, port in
 	}, nil
 }
 
-// FetchDeviceInfo is a public wrapper that tries HTTPS first, then HTTP.
 func (hd *HTTPDiscovery) FetchDeviceInfo(ctx context.Context, ip net.IP, port int) (*model.Device, error) {
-	// The official app uses HTTPS by default, so we should try that first for max compatibility.
 	device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
 	if err != nil {
-		// If HTTPS fails (e.g., our own test server running in --http mode), try HTTP.
 		device, err = hd.fetchDeviceInfo(ctx, ip, port, "http")
 	}
 	return device, err
 }
+
 func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port int, scheme string) (*model.Device, error) {
-	// Create request body with this device's info
 	jsonData, err := json.Marshal(hd.dto)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
@@ -146,30 +125,25 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 	if scheme == "" {
 		scheme = "http"
 	}
-	url := fmt.Sprintf("%s://%s:%d/api/localsend/v2/register", scheme, ip.String(), port)
+	url := fmt.Sprintf("%s://%s/api/localsend/v2/register", scheme, net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 
-	// Create a request with context for cancellation
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 
-	// Send the request
 	resp, err := hd.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check status code
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
@@ -180,7 +154,6 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 		return nil, fmt.Errorf("failed to parse response body: %w", err)
 	}
 
-	// Create and return a device from the info
 	return &model.Device{
 		IP:          ip.String(),
 		Version:     infoDto.Version,
@@ -196,9 +169,8 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 	}, nil
 }
 
-// ScanNetwork scans a range of IP addresses for LocalGo devices
-func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int) ([]*model.Device, error) {
-	var devices []*model.Device
+func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips[]net.IP, port int) ([]*model.Device, error) {
+	var devices[]*model.Device
 	var wg sync.WaitGroup
 	deviceChan := make(chan *model.Device, len(ips))
 
@@ -209,19 +181,14 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 		go func(ip net.IP) {
 			defer wg.Done()
 
-			// Try HTTPS first, as it's the secure default for the official app
 			device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
 			if err != nil {
-				hd.logger.Debugf("HTTPDiscovery: HTTPS fetch failed for %s:%d: %v", ip, port, err)
-				// If HTTPS fails, fall back to HTTP
 				device, err = hd.fetchDeviceInfo(ctx, ip, port, "http")
 				if err != nil {
-					hd.logger.Debugf("HTTPDiscovery: Failed to fetch device info from %s:%d on both http and https: %v", ip, port, err)
 					return
 				}
 			}
 
-			hd.logger.Debugf("HTTPDiscovery: Successfully discovered device at %s:%d - %s", ip, port, device.Alias)
 			deviceChan <- device
 		}(ip)
 	}
@@ -233,25 +200,18 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 		devices = append(devices, device)
 	}
 
-	hd.logger.Debugf("Found %d devices total", len(devices))
 	return devices, nil
 }
 
-// ScanLocalNetwork scans the local network for devices
 func (hd *HTTPDiscovery) ScanLocalNetwork(ctx context.Context, port int) ([]*model.Device, error) {
 	localIPs, err := getLocalNetworkIPs()
 	if err != nil {
 		return nil, fmt.Errorf("could not get local ip addresses to scan: %w", err)
 	}
-	// Also add loopback for local testing
 	localIPs = append(localIPs, net.ParseIP("127.0.0.1"))
-	hd.logger.Debugf("Scanning local network on port %d: found %d IP addresses to check", port, len(localIPs))
-
-	// Scan the network
 	return hd.ScanNetwork(ctx, localIPs, port)
 }
 
-// getLocalNetworkIPs returns all IP addresses in the local network
 func getLocalNetworkIPs() ([]net.IP, error) {
 	return network.GetLocalIPAddresses()
 }
