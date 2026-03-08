@@ -156,6 +156,8 @@ func (app *Application) registerCommands() {
 	serveInterval := serveFlags.Int("interval", 30, "Discovery announcement interval in seconds")
 	serveAutoAccept := serveFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 	serveNoClipboard := serveFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
+	serveHistory := serveFlags.String("history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl)")
+	serveExec := serveFlags.String("exec", "", "Shell command to execute after each received file")
 
 	app.commands["serve"] = &Command{
 		Name:        "serve",
@@ -172,7 +174,7 @@ func (app *Application) registerCommands() {
 		Flags: serveFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			serveFlags.Parse(args)
-			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval, serveAutoAccept, serveNoClipboard)
+			return app.runServe(cfg, servePort, serveHTTP, servePin, serveAlias, serveDir, serveQuiet, serveVerbose, serveInterval, serveAutoAccept, serveNoClipboard, serveHistory, serveExec)
 		},
 	}
 
@@ -259,6 +261,9 @@ func (app *Application) registerCommands() {
 	shareAlias := shareFlags.String("alias", "", "Device alias (default: from config)")
 	shareAutoAccept := shareFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 	shareNoClipboard := shareFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
+	shareHistory := shareFlags.String("history", "", "Path to transfer history JSONL file")
+	shareExec := shareFlags.String("exec", "", "Shell command to execute after each received file")
+	shareQuiet := shareFlags.Bool("quiet", false, "Quiet mode - minimal output")
 
 	app.commands["share"] = &Command{
 		Name:        "share",
@@ -273,7 +278,7 @@ func (app *Application) registerCommands() {
 		Flags: shareFlags,
 		Action: func(cfg *config.Config, args []string) error {
 			shareFlags.Parse(args)
-			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias, shareAutoAccept, shareNoClipboard)
+			return app.runShare(cfg, shareFiles, sharePort, shareHTTP, sharePin, shareAlias, shareAutoAccept, shareNoClipboard, shareHistory, shareExec, shareQuiet)
 		},
 	}
 
@@ -322,7 +327,7 @@ func (app *Application) registerCommands() {
 
 // Help methods removed - now using pkg/help module
 
-func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool, noClipboard *bool) error {
+func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, pin *string, alias *string, dir *string, quiet *bool, verbose *bool, interval *int, autoAccept *bool, noClipboard *bool, history *string, execHook *string) error {
 	// Apply overrides
 	if *port > 0 {
 		cfg.Port = *port
@@ -344,6 +349,15 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	}
 	if *noClipboard {
 		cfg.NoClipboard = true
+	}
+	if *history != "" {
+		cfg.HistoryFile = *history
+	}
+	if *execHook != "" {
+		cfg.ExecHook = *execHook
+	}
+	if *quiet {
+		cfg.Quiet = true
 	}
 
 	// Create download directory if it doesn't exist
@@ -456,7 +470,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	return nil
 }
 
-func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string, autoAccept *bool, noClipboard *bool) error {
+func (app *Application) runShare(cfg *config.Config, files []string, port *int, useHTTP *bool, pin *string, alias *string, autoAccept *bool, noClipboard *bool, history *string, execHook *string, quiet *bool) error {
 	if len(files) == 0 {
 		return fmt.Errorf("file parameter is required (use --file)")
 	}
@@ -479,6 +493,15 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 	}
 	if *noClipboard {
 		cfg.NoClipboard = true
+	}
+	if *history != "" {
+		cfg.HistoryFile = *history
+	}
+	if *execHook != "" {
+		cfg.ExecHook = *execHook
+	}
+	if *quiet {
+		cfg.Quiet = true
 	}
 
 	protocol := "HTTPS"
@@ -656,7 +679,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 	discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discoverTimeout)*time.Second)
 	defer cancel()
 
-	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
+	foundDevices, err := discoverySvc.Discover(discoverCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled, false)
 	if err != nil && !*quiet {
 		zap.S().Warnf("Discovery completed with warnings: %v", err)
 	}

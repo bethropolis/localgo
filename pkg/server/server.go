@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/history"
+	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/gorilla/mux"
@@ -29,6 +31,7 @@ type Server struct {
 
 // NewServer creates a new Server instance.
 func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
+	httputil.SetLogger(logger)
 	router := mux.NewRouter()
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()
@@ -55,7 +58,28 @@ func (s *Server) configureRoutes() {
 	apiRouter.HandleFunc("/v2/register", discoveryHandler.RegisterHandler).Methods("POST")
 
 	// Receive Handlers (Phase 2)
-	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.logger)
+	var historyLogger *history.Logger
+	if s.config.HistoryFile != "" {
+		hl, err := history.NewLogger(s.config.HistoryFile)
+		if err != nil {
+			s.logger.Warnf("Failed to initialize history logger at %s: %v", s.config.HistoryFile, err)
+		} else {
+			historyLogger = hl
+			s.logger.Infof("Transfer history will be written to %s", s.config.HistoryFile)
+		}
+	} else if s.config.HistoryFile == "" {
+		// Use default
+		defaultPath := history.DefaultPath()
+		hl, err := history.NewLogger(defaultPath)
+		if err != nil {
+			s.logger.Warnf("Failed to initialize history logger at %s: %v", defaultPath, err)
+		} else {
+			historyLogger = hl
+			s.logger.Infof("Transfer history will be written to %s", defaultPath)
+		}
+	}
+
+	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, historyLogger, s.logger)
 	apiRouter.HandleFunc("/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1).Methods("POST")
 	apiRouter.HandleFunc("/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2).Methods("POST")
 	apiRouter.HandleFunc("/v2/upload", receiveHandler.UploadHandlerV2).Methods("POST")

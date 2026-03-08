@@ -22,6 +22,23 @@ localgo serve [flags]
 | `--no-clipboard` | bool | false | Save incoming text as a file instead of copying to clipboard |
 | `--quiet` | bool | false | Quiet mode — minimal output |
 | `--verbose` | bool | false | Verbose mode — detailed debug output |
+| `--history` | string | ~/.local/share/localgo/history.jsonl | Path to transfer history JSONL file |
+| `--exec` | string | — | Shell command to execute after each received file |
+
+**Exec Hook Placeholders:**
+| Placeholder | Description |
+|-------------|-------------|
+| `%f` | Absolute file path |
+| `%n` | File name |
+| `%s` | File size in bytes |
+| `%a` | Sender alias |
+| `%i` | Sender IP |
+
+**Examples:**
+```bash
+localgo serve --exec "notify-send 'Got: %f'"
+localgo serve --exec "curl -F 'file=@%f' https://example.com/upload"
+```
 
 **Behavior:**
 - Starts HTTP/S server on port 53317 (or configured port).
@@ -51,6 +68,9 @@ localgo share --file FILE [flags]
 | `--alias` | string | from config | Device alias |
 | `--auto-accept` | bool | false | Auto-accept incoming files without prompting |
 | `--no-clipboard` | bool | false | Save incoming text as a file instead of copying to clipboard |
+| `--history` | string | — | Path to transfer history JSONL file |
+| `--exec` | string | — | Shell command to execute after each received file |
+| `--quiet` | bool | false | Quiet mode — minimal output |
 
 **Examples:**
 ```bash

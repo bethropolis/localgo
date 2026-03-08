@@ -11,6 +11,7 @@ tmp_dir = ".air"
   # Binary to run after a successful build
   bin = ".air/localgo"
   # Arguments passed to the binary
+  # Note: runs in http mode
   args_bin = ["serve", "--http"]
   # Files/directories to watch
   include_ext = ["go"]

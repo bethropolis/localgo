@@ -44,3 +44,5 @@ config/.security
 codebase.md
 test
 dist/
+.coverage/
+.air/

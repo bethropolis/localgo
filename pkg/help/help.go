@@ -87,6 +87,9 @@ func ShowMainUsage() {
 		{"LOCALSEND_DEVICE_MODEL", "Device model string"},
 		{"LOCALSEND_AUTO_ACCEPT", "Auto-accept incoming files (true/1)"},
 		{"LOCALSEND_NO_CLIPBOARD", "Save incoming text as file instead of clipboard (true/1)"},
+		{"LOCALSEND_QUIET", "Quiet mode - minimal output (true/1)"},
+		{"LOCALSEND_HISTORY", "Path to transfer history JSONL file"},
+		{"LOCALSEND_EXEC", "Shell command to execute after each received file"},
 		{"LOCALSEND_MULTICAST_GROUP", "Multicast group address"},
 		{"LOCALSEND_SECURITY_DIR", "Security directory path"},
 		{"LOCALSEND_LOG_LEVEL", "Log verbosity (debug/info/warn/error)"},
@@ -158,6 +161,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo serve --dir /tmp/downloads --verbose",
 				"localgo serve --auto-accept --quiet",
 				"localgo serve --no-clipboard",
+				"localgo serve --exec 'notify-send \"Got: %f\"'",
 			},
 			Flags: []FlagHelp{
 				{Name: "--port", Type: "int", Default: "from config", Description: "Port to run the server on"},
@@ -170,6 +174,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
 				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - minimal output"},
 				{Name: "--verbose", Type: "bool", Default: "false", Description: "Verbose mode - detailed output"},
+				{Name: "--history", Type: "string", Default: "~/.local/share/localgo/history.jsonl", Description: "Path to transfer history JSONL file"},
+				{Name: "--exec", Type: "string", Default: "", Description: "Shell command to execute after each received file (use %f, %n, %s, %a, %i)"},
 			},
 		},
 		"share": {
@@ -182,6 +188,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo share --file data.zip --pin 1234",
 				"localgo share --file data.zip --auto-accept",
 				"localgo share --file report.pdf --no-clipboard",
+				"localgo share --file doc.pdf --exec 'curl -F \"file=@%f\" https://example.com/upload'",
 			},
 			Flags: []FlagHelp{
 				{Name: "--file", Type: "string", Default: "", Description: "File or directory to share (required, can be specified multiple times)"},
@@ -191,6 +198,9 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},
 				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
 				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
+				{Name: "--history", Type: "string", Default: "", Description: "Path to transfer history JSONL file"},
+				{Name: "--exec", Type: "string", Default: "", Description: "Shell command to execute after each received file"},
+				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - minimal output"},
 			},
 		},
 		"discover": {

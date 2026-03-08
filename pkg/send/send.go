@@ -215,8 +215,8 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		// Read first 512 bytes for content type detection
 		buffer := make([]byte, 512)
 		n, _ := file.Read(buffer)
+		file.Close() // Close immediately after reading
 		contentType := http.DetectContentType(buffer[:n])
-		file.Close()
 
 		modTime := fileInfo.ModTime().Format(time.RFC3339)
 

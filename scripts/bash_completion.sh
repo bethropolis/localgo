@@ -10,13 +10,13 @@ _localgo_cli_completions() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    local commands="serve discover scan send info help version"
+    local commands="serve discover scan send share devices info help version"
 
     # Global flags
     local global_flags="-h --help -v --version"
 
     # Serve command flags
-    local serve_flags="--port --http --pin --alias --dir --quiet --verbose"
+    local serve_flags="--port --http --pin --alias --dir --quiet --verbose --auto-accept --no-clipboard"
 
     # Discover command flags
     local discover_flags="--timeout --json --quiet"
@@ -25,7 +25,13 @@ _localgo_cli_completions() {
     local scan_flags="--timeout --port --json --quiet"
 
     # Send command flags
-    local send_flags="--file --to --port --timeout --alias"
+    local send_flags="--file --to --port --timeout --alias --json --quiet --text"
+
+    # Share command flags
+    local share_flags="--file --port --http --pin --alias --auto-accept --no-clipboard"
+
+    # Devices command flags
+    local devices_flags="--json"
 
     # Info command flags
     local info_flags="--json"
@@ -104,6 +110,16 @@ _localgo_cli_completions() {
                 COMPREPLY=($(compgen -W "${send_flags}" -- ${cur}))
             fi
             ;;
+        share)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "${share_flags}" -- ${cur}))
+            fi
+            ;;
+        devices)
+            if [[ ${cur} == -* ]]; then
+                COMPREPLY=($(compgen -W "${devices_flags}" -- ${cur}))
+            fi
+            ;;
         info)
             if [[ ${cur} == -* ]]; then
                 COMPREPLY=($(compgen -W "${info_flags}" -- ${cur}))
@@ -130,7 +146,6 @@ _localgo_cli_completions() {
 complete -F _localgo_cli_completions localgo
 
 # Also register for common aliases
-complete -F _localgo_cli_completions localgo
 complete -F _localgo_cli_completions lg
 
 # Function to install completion
