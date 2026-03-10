@@ -22,10 +22,9 @@ SERVICE_NAME="localgo"
 SYSTEM_BIN_DIR="/usr/local/bin"
 SYSTEM_CONFIG_DIR="/etc/localgo"
 SYSTEM_DATA_DIR="/var/lib/localgo"
-SYSTEM_LOG_DIR="/var/log/localgo"
 USER_BIN_DIR="$HOME/.local/bin"
 USER_CONFIG_DIR="$HOME/.config/localgo"
-USER_DATA_DIR="$HOME/.local/share/localgo"
+USER_DATA_DIR="$HOME/Downloads/localgo"
 
 # Default settings
 INSTALL_MODE="user"
@@ -251,7 +250,7 @@ create_directories() {
     print_status "Creating directories..."
 
     if [[ "$INSTALL_MODE" == "system" ]]; then
-        sudo mkdir -p "$SYSTEM_CONFIG_DIR" "$SYSTEM_DATA_DIR" "$SYSTEM_LOG_DIR"
+        sudo mkdir -p "$SYSTEM_CONFIG_DIR" "$SYSTEM_DATA_DIR"
 
         if [[ "$CREATE_USER" == true ]]; then
             if ! id "localgo" &>/dev/null; then
@@ -262,11 +261,11 @@ create_directories() {
                 print_status "localgo user already exists"
             fi
 
-            sudo chown -R localgo:localgo "$SYSTEM_DATA_DIR" "$SYSTEM_LOG_DIR"
+            sudo chown -R localgo:localgo "$SYSTEM_DATA_DIR"
             sudo chown root:localgo "$SYSTEM_CONFIG_DIR"
         fi
 
-        sudo chmod 755 "$SYSTEM_DATA_DIR" "$SYSTEM_LOG_DIR" "$SYSTEM_CONFIG_DIR"
+        sudo chmod 755 "$SYSTEM_DATA_DIR" "$SYSTEM_CONFIG_DIR"
         print_success "System directories created"
     else
         mkdir -p "$USER_CONFIG_DIR" "$USER_DATA_DIR"
@@ -301,36 +300,13 @@ install_configuration() {
         config_file="$config_dir/localgo.env"
 
         if [[ ! -f "$config_file" ]]; then
+            # Binary resolves default paths via os.UserHomeDir() / os.UserConfigDir() —
+            # no need to patch the env file. Copy as-is; user edits if they want overrides.
             cp "$SCRIPT_DIR/localgo.env.example" "$config_file"
             chmod 600 "$config_file"
-
-            local download_dir="$HOME/Downloads/LocalGo"
-            local escaped_dir
-            escaped_dir=$(echo "$download_dir" | sed 's/\//\\\//g')
-
-            if [[ "$(uname)" == "Darwin" ]]; then
-                sed -i '' "s/\/home\/user\/Downloads\/LocalGo/$escaped_dir/g" "$config_file"
-            else
-                sed -i "s/\/home\/user\/Downloads\/LocalGo/$escaped_dir/g" "$config_file"
-            fi
-
             print_success "Configuration installed to $config_file"
         else
             print_status "Configuration already exists at $config_file"
-
-            if grep -q "/home/user/Downloads/LocalGo" "$config_file"; then
-                print_status "Fixing incorrect download path in existing configuration..."
-                local download_dir="$HOME/Downloads/LocalGo"
-                local escaped_dir
-                escaped_dir=$(echo "$download_dir" | sed 's/\//\\\//g')
-
-                if [[ "$(uname)" == "Darwin" ]]; then
-                    sed -i '' "s/\/home\/user\/Downloads\/LocalGo/$escaped_dir/g" "$config_file"
-                else
-                    sed -i "s/\/home\/user\/Downloads\/LocalGo/$escaped_dir/g" "$config_file"
-                fi
-                print_success "Configuration updated with correct path"
-            fi
         fi
     fi
 
@@ -361,7 +337,6 @@ install_service() {
         # But for systemd 232+, StateDirectory works nicely.
 
         # Remove user specifiers
-        sed -i "s|%h/.local/share/localgo|$SYSTEM_DATA_DIR|g" "$tmp_svc"
         sed -i "s|%E/localgo|$SYSTEM_CONFIG_DIR|g" "$tmp_svc"
 
         # Remove User/Group lines if not creating user
@@ -445,7 +420,7 @@ install_completion() {
             ;;
         zsh)
             local zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
-            local completion_script="$SCRIPT_DIR/bash_completion.sh"
+            local completion_script="$SCRIPT_DIR/zsh_completion.zsh"
             if [[ -f "$completion_script" ]]; then
                 mkdir -p "$zsh_completion_dir"
                 cp "$completion_script" "$zsh_completion_dir/_$BINARY_NAME"

@@ -20,13 +20,11 @@ SERVICE_NAME="localgo"
 SYSTEM_BIN_DIR="/usr/local/bin"
 SYSTEM_CONFIG_DIR="/etc/localgo"
 SYSTEM_DATA_DIR="/var/lib/localgo"
-SYSTEM_LOG_DIR="/var/log/localgo"
 SYSTEM_SERVICE_FILE="/etc/systemd/system/localgo.service"
-SYSTEM_COMPLETION_DIR="/etc/bash_completion.d"
 
 USER_BIN_DIR="$HOME/.local/bin"
 USER_CONFIG_DIR="$HOME/.config/localgo"
-USER_DATA_DIR="$HOME/.local/share/localgo"
+USER_DATA_DIR="$HOME/Downloads/localgo"
 USER_COMPLETION_DIR="$HOME/.local/share/bash-completion/completions"
 
 # Default settings
@@ -292,7 +290,7 @@ remove_completion() {
 
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         # System bash completion (legacy cleanup)
-        if safe_remove_file "$SYSTEM_COMPLETION_DIR/$BINARY_NAME" true; then
+        if safe_remove_file "/usr/share/bash-completion/completions/$BINARY_NAME" true; then
             print_success "Removed system bash completion"
             removed=true
         fi
@@ -384,13 +382,6 @@ remove_data() {
             fi
         fi
 
-        if [[ -d "$SYSTEM_LOG_DIR" ]]; then
-            if confirm_action "Remove system log directory: $SYSTEM_LOG_DIR"; then
-                safe_remove_dir "$SYSTEM_LOG_DIR" true true
-                print_success "Removed system log directory"
-                removed=true
-            fi
-        fi
     fi
 
     if [[ "$UNINSTALL_MODE" != "system" ]]; then
@@ -404,11 +395,12 @@ remove_data() {
     fi
 
     # Security directories (checked regardless of mode)
-    local security_dirs=("/tmp/.localgo_security" "$HOME/.localgo_security" "/var/lib/localgo/.localgo_security")
+    # Security dir is now ~/.config/localgo/.security (via os.UserConfigDir())
+    local security_dirs=("$HOME/.config/localgo/.security" "/var/lib/localgo/.security")
     for dir in "${security_dirs[@]}"; do
         if [[ -d "$dir" ]]; then
             if confirm_action "Remove security directory: $dir"; then
-                if [[ "$dir" == "/var/lib/localgo/.localgo_security" ]]; then
+                if [[ "$dir" == "/var/lib/localgo/.security" ]]; then
                     safe_remove_dir "$dir" true true
                 else
                     safe_remove_dir "$dir" false true
