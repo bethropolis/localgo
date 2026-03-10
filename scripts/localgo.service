@@ -10,10 +10,8 @@
 [Unit]
 Description=LocalGo - LocalSend v2.1 Protocol Implementation
 Documentation=https://github.com/bethropolis/localgo
-# Wait for the network stack to be up; multicast will fail without it.
 After=network.target network-online.target
 Wants=network-online.target
-# Stop rebooting on repeated crashes: allow 3 starts per 60 s, then give up.
 StartLimitBurst=3
 StartLimitIntervalSec=60
 
@@ -24,17 +22,13 @@ Group=localgo
 
 ExecStart=/usr/bin/localgo serve --quiet --auto-accept
 
-
 Restart=on-failure
 RestartSec=5
 
-# First start generates a TLS certificate — give it enough time.
-# 10 s is too tight on ARM or slow I/O. 30 s is safe.
+# 30 s for first-run TLS certificate generation.
 TimeoutStartSec=30
 TimeoutStopSec=15
 
-# Log everything to journald (stdout + stderr).
-# null would silently swallow any stdout diagnostic output.
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=localgo
@@ -42,16 +36,23 @@ SyslogIdentifier=localgo
 # -----------------------------------------------------------------------
 # Directory management
 # -----------------------------------------------------------------------
+# Creates /var/lib/localgo and /etc/localgo owned by the localgo user.
 StateDirectory=localgo
 StateDirectoryMode=0750
 ConfigurationDirectory=localgo
 ConfigurationDirectoryMode=0750
+
+# Binary resolves all user paths itself — working dir just needs to be stable.
 WorkingDirectory=/var/lib/localgo
 
 # -----------------------------------------------------------------------
 # Environment
 # -----------------------------------------------------------------------
+# System service runs as a dedicated non-login user with no real home dir,
+# so we must tell the binary explicitly where to save received files.
 Environment=LOCALSEND_DOWNLOAD_DIR=/var/lib/localgo/downloads
+
+# User overrides — file is optional (- prefix suppresses missing-file errors).
 EnvironmentFile=-/etc/localgo/localgo.env
 
 # -----------------------------------------------------------------------
@@ -71,7 +72,6 @@ RemoveIPC=true
 PrivateDevices=true
 CapabilityBoundingSet=
 
-# Resource limits
 LimitNOFILE=4096
 LimitNPROC=256
 MemoryAccounting=true

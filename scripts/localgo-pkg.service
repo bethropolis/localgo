@@ -20,11 +20,10 @@ Type=simple
 
 ExecStart=/usr/bin/localgo serve --quiet --auto-accept
 
-# on-failure only — do not restart on clean exit (admin stop / logout).
 Restart=on-failure
 RestartSec=5
 
-# 30 s for first-run TLS cert generation.
+# 30 s for first-run TLS certificate generation.
 TimeoutStartSec=30
 TimeoutStopSec=15
 
@@ -35,11 +34,13 @@ SyslogIdentifier=localgo
 # -----------------------------------------------------------------------
 # Directory management
 # -----------------------------------------------------------------------
-StateDirectory=localgo
-WorkingDirectory=%h/.local/share/localgo
+# %h = home directory, %E = XDG_CONFIG_HOME (~/.config)
+# WorkingDirectory is just home — the binary calls os.UserHomeDir() and
+# os.UserConfigDir() itself to resolve all actual paths.
+WorkingDirectory=%h
 
-Environment=LOCALSEND_DOWNLOAD_DIR=%h/.local/share/localgo/downloads
-
+# Optional user overrides — %E expands to XDG_CONFIG_HOME (~/.config).
+# The - prefix suppresses errors if the file doesn't exist.
 EnvironmentFile=-%E/localgo/localgo.env
 
 # -----------------------------------------------------------------------
@@ -48,7 +49,6 @@ EnvironmentFile=-%E/localgo/localgo.env
 NoNewPrivileges=true
 RestrictRealtime=true
 
-# Resource limits — lower than system service since this is a user daemon.
 MemoryAccounting=true
 MemoryMax=128M
 TasksMax=64

@@ -42,70 +42,21 @@ type Config struct {
 }
 
 // getSecurityDir determines the best location for the security directory
-// Priority order:
-// 1. XDG_CONFIG_HOME/localgo/.security (or platform equivalent)
-// 2. HOME/.localgo/.security
-// 3. Current directory .localgo_security (fallback for compatibility)
 func getSecurityDir() string {
-	// Check for explicit override via environment variable
-	if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
-		zap.S().Infof("Using security directory from LOCALSEND_SECURITY_DIR: %s", envDir)
-		return envDir
-	}
+    if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
+        zap.S().Infof("Using security directory: %s", envDir)
+        return envDir
+    }
 
-	// Try XDG_CONFIG_HOME first (Linux/Unix standard)
-	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
-		dir := filepath.Join(configHome, "localgo", ".security")
-		if testDirWritable(dir) {
-			zap.S().Debugf("Using XDG config directory for security: %s", dir)
-			return dir
-		}
-	}
+    configDir, err := os.UserConfigDir()
+    if err != nil {
+        zap.S().Warnf("Could not determine config directory: %v; falling back to current directory", err)
+        return DefaultSecurityDir
+    }
 
-	// Try HOME/.config/localgo/.security (XDG default when XDG_CONFIG_HOME not set)
-	if home := os.Getenv("HOME"); home != "" {
-		dir := filepath.Join(home, ".config", "localgo", ".security")
-		if testDirWritable(dir) {
-			zap.S().Debugf("Using HOME/.config directory for security: %s", dir)
-			return dir
-		}
-	}
-
-	// Try APPDATA on Windows
-	if appData := os.Getenv("APPDATA"); appData != "" {
-		dir := filepath.Join(appData, "localgo", ".security")
-		if testDirWritable(dir) {
-			zap.S().Debugf("Using APPDATA directory for security: %s", dir)
-			return dir
-		}
-	}
-
-	// Fallback: Try HOME/.localgo/.security
-	if home := os.Getenv("HOME"); home != "" {
-		dir := filepath.Join(home, ".localgo", ".security")
-		if testDirWritable(dir) {
-			zap.S().Debugf("Using HOME/.localgo directory for security: %s", dir)
-			return dir
-		}
-	}
-
-	// Final fallback: Current directory (for compatibility with older versions)
-	exePath, err := os.Executable()
-	if err != nil {
-		zap.S().Warnf("Could not get executable path, using current directory for security: %v", err)
-		exePath = "."
-	}
-	dir := filepath.Join(filepath.Dir(exePath), DefaultSecurityDir)
-	zap.S().Warnf("Using fallback security directory (current/executable dir): %s", dir)
-
-	// Check if old location exists and provide migration hint
-	if _, err := os.Stat(dir); err == nil {
-		zap.S().Infof("Found existing security directory at %s", dir)
-		zap.S().Infof("Consider moving to ~/.config/localgo/.security for better XDG compliance")
-	}
-
-	return dir
+    return filepath.Join(configDir, "localgo", ".security")
 }
+
 
 // testDirWritable tests if a directory is writable (creates it if needed)
 // Returns true if the directory exists or can be created and is writable
@@ -157,7 +108,11 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 
 	downloadDir := os.Getenv("LOCALSEND_DOWNLOAD_DIR")
 	if downloadDir == "" {
-		downloadDir = "./downloads"
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "."
+		}
+		downloadDir = filepath.Join(home, "Downloads", "localgo")
 	}
 
 	maxBodySizeStr := os.Getenv("LOCALSEND_MAX_BODY_SIZE")

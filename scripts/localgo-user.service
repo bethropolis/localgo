@@ -9,7 +9,7 @@
 # Config:  ~/.config/localgo/localgo.env
 
 [Unit]
-Description=LocalGo - LocalSend v2.1 Protocol Implementation (User Service)
+Description=LocalGo - LocalSend v2.1 Protocol Implementation
 Documentation=https://github.com/bethropolis/localgo
 After=network.target network-online.target
 Wants=network-online.target
@@ -24,19 +24,29 @@ ExecStart=%h/.local/bin/localgo serve --quiet --auto-accept
 Restart=on-failure
 RestartSec=5
 
+# 30 s for first-run TLS certificate generation.
 TimeoutStartSec=30
 TimeoutStopSec=15
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=localgo-user
+SyslogIdentifier=localgo
 
-ExecStartPre=/bin/mkdir -p %h/.local/share/localgo
+# -----------------------------------------------------------------------
+# Directory management
+# -----------------------------------------------------------------------
+# %h = home directory, %E = XDG_CONFIG_HOME (~/.config)
+# WorkingDirectory is just home — the binary calls os.UserHomeDir() and
+# os.UserConfigDir() itself to resolve all actual paths.
+WorkingDirectory=%h
 
-Environment=LOCALSEND_DOWNLOAD_DIR=%h/.local/share/localgo/downloads
+# Optional user overrides — %E expands to XDG_CONFIG_HOME (~/.config).
+# The - prefix suppresses errors if the file doesn't exist.
 EnvironmentFile=-%E/localgo/localgo.env
-WorkingDirectory=%h/.local/share/localgo
 
+# -----------------------------------------------------------------------
+# Security hardening (user service subset)
+# -----------------------------------------------------------------------
 NoNewPrivileges=true
 RestrictRealtime=true
 
@@ -45,6 +55,7 @@ MemoryMax=128M
 TasksMax=64
 LimitNOFILE=4096
 
+# Run at idle priority so localgo doesn't compete with user workloads.
 Nice=15
 CPUSchedulingPolicy=idle
 IOSchedulingClass=idle

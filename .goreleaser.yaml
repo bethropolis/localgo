@@ -111,8 +111,6 @@ homebrew_casks:
       zsh: scripts/zsh_completion.zsh
       fish: scripts/fish_completion.fish
 
-    url:
-      verified: "github.com/bethropolis/localgo"
 
     # Remove Gatekeeper quarantine flag on macOS 
     hooks:
@@ -138,68 +136,70 @@ homebrew_casks:
     description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
     license: "MIT"
 
-    caveats: |
-      To start localgo as a background service:
-        localgo serve --quiet --auto-accept
-
-      To enable shell completions, restart your shell or run:
-        source ~/.bash_profile  # bash
-        source ~/.zshrc         # zsh
+    caveats: "Shell completions are installed automatically.\n\nTo start as a background service:\n  localgo serve --quiet --auto-accept"
 
 # ---------------------------------------------------------------------------
 # AUR (Arch User Repository)
 # ---------------------------------------------------------------------------
-# aurs:
-#   - name: localgo-bin
-#     ids: [default]
-#     homepage: "https://github.com/bethropolis/localgo"
-#     description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
-#     maintainers:
-#       - "bethropolis <bethropolis@gmail.com>"
-#     license: MIT
-#     private_key: "{{ .Env.AUR_SSH_KEY }}"
-#     git_url: "ssh://aur@aur.archlinux.org/localgo-bin.git"
-#     skip_upload: auto
+aurs:
+  - name: localgo-bin
+    ids: [default]
+    homepage: "https://github.com/bethropolis/localgo"
+    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    maintainers:
+      - "bethropolis <bethropolis at gmail dot com>"
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/localgo-bin.git"
+    skip_upload: auto
 
-#     depends:
-#       - glibc
-#     optdepends:
-#       - "xclip: clipboard support on X11"
-#       - "xsel: clipboard support on X11 (alternative)"
-#       - "wl-clipboard: clipboard support on Wayland"
-#     provides:
-#       - localgo
-#     conflicts:
-#       - localgo
-#       - localgo-git
+    depends: []
+    optdepends:
+      - "xclip: clipboard support on X11"
+      - "xsel: clipboard support on X11 (alternative)"
+      - "wl-clipboard: clipboard support on Wayland"
+    provides:
+      - localgo
+    conflicts:
+      - localgo
+      - localgo-git
 
-#     package: |-
-#       install -Dm755 "./localgo" "${pkgdir}/usr/bin/localgo"
+    package: |-
+      install -Dm755 "./localgo" "${pkgdir}/usr/bin/localgo"
 
-#       install -Dm644 "./LICENSE" \
-#         "${pkgdir}/usr/share/licenses/localgo-bin/LICENSE"
+      install -Dm644 "./LICENSE" \
+        "${pkgdir}/usr/share/licenses/localgo-bin/LICENSE"
 
-#       install -Dm644 "./README.md" \
-#         "${pkgdir}/usr/share/doc/localgo-bin/README"
+      install -Dm644 "./README.md" \
+        "${pkgdir}/usr/share/doc/localgo-bin/README"
 
-#       install -Dm644 "./docs/GETTING_STARTED.md" \
-#         "${pkgdir}/usr/share/doc/localgo-bin/GETTING_STARTED.md"
+      install -Dm644 "./docs/GETTING_STARTED.md" \
+        "${pkgdir}/usr/share/doc/localgo-bin/GETTING_STARTED.md"
 
-#       install -Dm644 "./scripts/localgo.env.example" \
-#         "${pkgdir}/usr/share/doc/localgo-bin/localgo.env.example"
+      install -Dm644 "./scripts/localgo.env.example" \
+        "${pkgdir}/usr/share/doc/localgo-bin/localgo.env.example"
 
-#       # Shell completions
-#       install -Dm644 "./scripts/bash_completion.sh" \
-#         "${pkgdir}/usr/share/bash-completion/completions/localgo"
+      # Shell completions — optional, only install if the shell is present
+      if command -v bash &>/dev/null; then
+        install -Dm644 "./scripts/bash_completion.sh" \
+          "${pkgdir}/usr/share/bash-completion/completions/localgo"
+      fi
 
-#       install -Dm644 "./scripts/zsh_completion.zsh" \
-#         "${pkgdir}/usr/share/zsh/site-functions/_localgo"
+      if command -v zsh &>/dev/null; then
+        install -Dm644 "./scripts/zsh_completion.zsh" \
+          "${pkgdir}/usr/share/zsh/site-functions/_localgo"
+      fi
 
-#       install -Dm644 "./scripts/fish_completion.fish" \
-#         "${pkgdir}/usr/share/fish/vendor_completions.d/localgo.fish"
+      if command -v fish &>/dev/null; then
+        install -Dm644 "./scripts/fish_completion.fish" \
+          "${pkgdir}/usr/share/fish/vendor_completions.d/localgo.fish"
+      fi
 
-#       install -Dm644 "./scripts/localgo-pkg.service" \
-#         "${pkgdir}/usr/lib/systemd/user/localgo.service"
+      if [[ -f "./scripts/localgo-pkg.service" ]]; then
+        install -Dm644 "./scripts/localgo-pkg.service" \
+          "${pkgdir}/usr/lib/systemd/user/localgo.service"
+      fi
+
 
 # ---------------------------------------------------------------------------
 # Scoop bucket (Windows)
