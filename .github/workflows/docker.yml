@@ -21,12 +21,12 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write # For Trivy SARIF upload
-      id-token: write # For provenance attestation
+      security-events: write  # Trivy SARIF upload
+      id-token: write         # provenance attestation
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -50,6 +50,10 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=pr
 
+      - name: Set up QEMU
+        # Required for cross-compiling to arm64 on the amd64 runner
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -58,14 +62,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-
           platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
-          load: ${{ github.event_name == 'pull_request' }}
+
           push: ${{ github.event_name != 'pull_request' }}
-          outputs: ${{ github.event_name == 'pull_request' && 'type=docker' || 'type=registry' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          provenance: ${{ github.event_name != 'pull_request' }}
+          sbom: ${{ github.event_name != 'pull_request' }}
