@@ -156,8 +156,8 @@ func (app *Application) registerCommands() {
 	serveInterval := serveFlags.Int("interval", 30, "Discovery announcement interval in seconds")
 	serveAutoAccept := serveFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 	serveNoClipboard := serveFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
-	serveHistory := serveFlags.String("history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl)")
-	serveExec := serveFlags.String("exec", "", "Shell command to execute after each received file")
+	serveHistory := serveFlags.String("history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl).\n\t\t\t\tPass 'off' to disable history logging.")
+	serveExec := serveFlags.String("exec", "", "Shell command to run after each received file.\n\t\t\t\tAvailable env vars: LOCALGO_FILE, LOCALGO_NAME, LOCALGO_SIZE, LOCALGO_ALIAS, LOCALGO_IP")
 
 	app.commands["serve"] = &Command{
 		Name:        "serve",
@@ -261,8 +261,8 @@ func (app *Application) registerCommands() {
 	shareAlias := shareFlags.String("alias", "", "Device alias (default: from config)")
 	shareAutoAccept := shareFlags.Bool("auto-accept", false, "Auto-accept incoming files without prompting")
 	shareNoClipboard := shareFlags.Bool("no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
-	shareHistory := shareFlags.String("history", "", "Path to transfer history JSONL file")
-	shareExec := shareFlags.String("exec", "", "Shell command to execute after each received file")
+	shareHistory := shareFlags.String("history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl).\n\t\t\t\tPass 'off' to disable history logging.")
+	shareExec := shareFlags.String("exec", "", "Shell command to run after each received file.\n\t\t\t\tAvailable env vars: LOCALGO_FILE, LOCALGO_NAME, LOCALGO_SIZE, LOCALGO_ALIAS, LOCALGO_IP")
 	shareQuiet := shareFlags.Bool("quiet", false, "Quiet mode - minimal output")
 
 	app.commands["share"] = &Command{

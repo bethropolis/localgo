@@ -1,4 +1,4 @@
-// Package discovery provides network device discovery functionality
+// File: pkg/discovery/service.go
 package discovery
 
 import (
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bethropolis/localgo/pkg/config" // Import config
+	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/model"
 	"go.uber.org/zap"
 )
@@ -18,7 +18,7 @@ type Service struct {
 	multicast     MulticastDiscoverer
 	devices       map[string]*model.Device
 	devicesMutex  sync.RWMutex
-	handlers      []func(*model.Device)
+	handlers[]func(*model.Device)
 	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
 	logger        *zap.SugaredLogger
@@ -36,8 +36,8 @@ type ServiceConfig struct {
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
 		MulticastConfig:    DefaultMulticastConfig(),
-		AnnounceInterval:   30 * time.Second, // Send announcement every 30 seconds
-		DeviceTimeout:      2 * time.Minute,  // Consider devices offline after 2 minutes
+		AnnounceInterval:   30 * time.Second, 
+		DeviceTimeout:      2 * time.Minute,  
 		EnableAnnouncement: true,
 	}
 }
@@ -51,55 +51,51 @@ func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *za
 		logger = zap.NewNop().Sugar()
 	}
 
-	return &Service{
+	s := &Service{
 		config:    config,
 		devices:   make(map[string]*model.Device),
 		multicast: multicast,
 		logger:    logger,
 	}
+
+	// ALWAYS ensure multicast propagates raw events upward to the Service state
+	if s.multicast != nil {
+		s.multicast.AddDeviceHandler(func(device *model.Device) {
+			s.updateDevice(device)
+		})
+	}
+
+	return s
 }
 
 // Start initializes and starts the discovery service for listening and periodic announcements
 func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) error {
-	// Create UDP multicast discovery instance
-	// ** Important: Create the DTO needed for multicast here **
 	protocol := model.ProtocolTypeHTTP
 	if httpsEnabled {
 		protocol = model.ProtocolTypeHTTPS
 	}
 	multicastDto := model.MulticastDto{
 		Alias:       alias,
-		Version:     config.ProtocolVersion, // Use constant from config package
+		Version:     config.ProtocolVersion,
 		DeviceModel: deviceModel,
 		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Port:        port,
 		Protocol:    protocol,
 		Download:    true,
-		Announce:    true, // Default Announce for DTO, can be overridden
+		Announce:    true, 
 	}
 
 	s.multicast.SetDto(multicastDto)
-	s.multicast.AddDeviceHandler(func(device *model.Device) {
-		s.updateDevice(device) // Update the service's central device list
-	})
 
-	// Start multicast discovery listening
 	if err := s.multicast.StartListening(ctx); err != nil {
-		// Only return error if it's not already listening (idempotency)
-		// This check might be fragile depending on the exact error type from StartListening
-		// if !strings.Contains(err.Error(), "already listening") { // Example check
 		return fmt.Errorf("failed to start multicast discovery: %w", err)
-		// }
-		// already listening; ignore
 	}
 
-	// Start periodic announcements if enabled
 	if s.config.EnableAnnouncement {
 		s.startAnnouncementLoop(ctx)
 	}
 
-	// Send initial announcement
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
 		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
 	}
@@ -109,55 +105,47 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 
 // Stop stops the discovery service
 func (s *Service) Stop() {
-	s.logger.Info("Stopping discovery service...")
-	// Stop multicast
+	s.logger.Debugf("Stopping discovery service...")
 	if s.multicast != nil {
 		s.multicast.Stop()
 	}
 
-	// Stop announcement timer
 	if s.announceTimer != nil {
 		s.announceTimer.Stop()
 	}
-	s.logger.Info("Discovery service stopped.")
+	s.logger.Debugf("Discovery service stopped.")
 }
 
 // Discover performs a discovery scan and returns found devices.
-// It sends an announcement and listens for a short duration.
-// It requires the service to be configured but not necessarily fully "Start"ed (for listening).
 func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool, isDownloadServer bool) ([]*model.Device, error) {
-	s.logger.Info("Performing one-off discovery scan...")
+	s.logger.Debugf("Performing one-off discovery scan...")
 
-	// --- Create Multicast DTO for announcement ---
 	protocol := model.ProtocolTypeHTTP
 	if httpsEnabled {
 		protocol = model.ProtocolTypeHTTPS
 	}
 	multicastDto := model.MulticastDto{
 		Alias:       alias,
-		Version:     config.ProtocolVersion, // Use constant from config package
+		Version:     config.ProtocolVersion,
 		DeviceModel: deviceModel,
 		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Port:        port,
 		Protocol:    protocol,
 		Download:    isDownloadServer,
-		Announce:    true, // We are announcing
+		Announce:    true, 
 	}
 
 	s.multicast.SetDto(multicastDto)
 
-	// Send initial announcement
+	// MUST be listening to receive multicast responses
+	_ = s.multicast.StartListening(ctx)
+
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
 		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
 	}
 
-	// --- Wait for Responses ---
-	// Responses might come via Multicast (handled by the main listening service if Start was called)
-	// or via HTTP /register (handled by the HTTP server).
-	// We just wait for the context timeout, collecting all devices discovered during that time.
-
-	var lastDevices []*model.Device
+	var lastDevices[]*model.Device
 
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
@@ -165,24 +153,22 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.Infof("Discovery scan finished. %d device(s) found.", len(lastDevices))
+			s.logger.Debugf("Discovery scan finished. %d device(s) found.", len(lastDevices))
 			return lastDevices, nil
 		case <-ticker.C:
 			devices := s.GetDevices()
 			lastDevices = devices
-			s.logger.Debugf("Discovery scan progress: %d device(s) found so far.", len(devices))
 		}
 	}
 }
 
 // GetDevices returns all currently known devices
-func (s *Service) GetDevices() []*model.Device {
+func (s *Service) GetDevices()[]*model.Device {
 	s.devicesMutex.RLock()
 	defer s.devicesMutex.RUnlock()
 
 	devices := make([]*model.Device, 0, len(s.devices))
 	for _, device := range s.devices {
-		// Only include non-stale devices
 		if !device.IsStale(s.config.DeviceTimeout) {
 			devices = append(devices, device)
 		}
@@ -197,7 +183,6 @@ func (s *Service) GetDevice(id string) *model.Device {
 	defer s.devicesMutex.RUnlock()
 
 	if device, ok := s.devices[id]; ok {
-		// Return only if not stale
 		if !device.IsStale(s.config.DeviceTimeout) {
 			return device
 		}
@@ -226,7 +211,7 @@ func (s *Service) updateDevice(device *model.Device) {
 		// Add new device
 		s.devices[device.Fingerprint] = device
 
-		// Notify handlers about new device
+		// Notify Service-level handlers about the new device ONLY ONCE (debounces the bursts)
 		s.handlersMutex.RLock()
 		handlers := make([]func(*model.Device), len(s.handlers))
 		copy(handlers, s.handlers)

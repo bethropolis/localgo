@@ -1,10 +1,14 @@
 # LocalGo
 
-A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
-
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.24+--blue.svg)](https://golang.org)
 [![Protocol](https://img.shields.io/badge/Protocol-LocalSend%20v2.1-green.svg)](https://github.com/localsend/protocol)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build](https://github.com/bethropolis/localgo/actions/workflows/docker.yml/badge.svg)](https://github.com/bethropolis/localgo/actions/workflows/docker.yml)
+[![Docker Image](https://img.shields.io/docker/pulls/ghcr.io/bethropolis/localgo.svg)](https://github.com/bethropolis/localgo/pkgs/container/localgo)
+[![Release](https://img.shields.io/github/v/release/bethropolis/localgo)](https://github.com/bethropolis/localgo/releases/latest)
+[![Platforms](https://img.shields.io/badge/Platforms-linux%20%7C%20macos%20%7C%20windows-informational)](https://github.com/bethropolis/localgo)
+
+A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
 
 ## Features
 
@@ -21,16 +25,35 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ### Installation
 
+####  User installation (recommended)
 ```bash
-# User installation (recommended)
+# clone repo
+git clone https://github.com/bethropolis/localgo.git
+cd localgo
+
+# installs a user systemd service and completions
 ./scripts/install.sh
+```
 
-# System-wide with systemd
-sudo ./scripts/install.sh --mode system --service --create-user
-
-# or using go (no service and completions)
+#### using go (no service and completions)
+```bash
 go install github.com/bethropolis/localgo/cmd/localgo@latest
 ```
+
+#### using homebrew (macOS/Linux)
+```bash
+brew tap bethropolis/tap
+brew install localgo
+```
+
+#### using scoop (Windows)
+```powershell
+scoop bucket add bethropolis https://github.com/bethropolis/scoop-bucket
+scoop install localgo
+```
+
+> [!NOTE]
+> more install options in [installation documentation](docs/GETTING_STARTED.md)
 
 ### Usage
 
@@ -48,16 +71,9 @@ localgo send --file document.pdf --to "My Phone"
 localgo share --file document.pdf
 ```
 
-### Docker
+### Docker and Podman
 
-```bash
-# Start with Docker Compose
-docker-compose up -d
-
-# Or build and run manually
-docker build -t localgo .
-docker run -d --network host -v $(pwd)/downloads:/app/downloads localgo
-```
+Read the [container documentation](docs/CONTAINER.md) for more information.
 
 ## Configuration
 
@@ -104,7 +120,7 @@ Run `localgo help` for more options.
 Detailed guides available in [docs/](docs/):
 
 - [Configuration](docs/CONFIGURATION.md) - All settings
-- [Docker](docs/DOCKER.md) - Container deployment
+- [Container](docs/CONTAINER.md) - Container deployment
 - [CLI Reference](docs/CLI_REFERENCE.md) - Command details
 - [Deployment](docs/DEPLOYMENT.md) - Production setup
 

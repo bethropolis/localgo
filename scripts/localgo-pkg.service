@@ -1,0 +1,63 @@
+# User service for localgo — installed to /usr/lib/systemd/user/localgo.service
+# Used by AUR, deb, and rpm installs (binary at /usr/bin/localgo).
+# Distinct from scripts/localgo-user.service (install.sh, binary at ~/.local/bin).
+#
+# Enable:  systemctl --user enable --now localgo
+# Persist: loginctl enable-linger $USER
+# Logs:    journalctl --user -u localgo -f
+# Config:  ~/.config/localgo/localgo.env
+
+[Unit]
+Description=LocalGo - LocalSend v2.1 Protocol Implementation
+Documentation=https://github.com/bethropolis/localgo
+After=network.target network-online.target
+Wants=network-online.target
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+
+ExecStart=/usr/bin/localgo serve --quiet --auto-accept
+
+# on-failure only — do not restart on clean exit (admin stop / logout).
+Restart=on-failure
+RestartSec=5
+
+# 30 s for first-run TLS cert generation.
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=localgo
+
+# -----------------------------------------------------------------------
+# Directory management
+# -----------------------------------------------------------------------
+StateDirectory=localgo
+WorkingDirectory=%h/.local/share/localgo
+
+Environment=LOCALSEND_DOWNLOAD_DIR=%h/.local/share/localgo/downloads
+
+EnvironmentFile=-%E/localgo/localgo.env
+
+# -----------------------------------------------------------------------
+# Security hardening (user service subset)
+# -----------------------------------------------------------------------
+NoNewPrivileges=true
+RestrictRealtime=true
+
+# Resource limits — lower than system service since this is a user daemon.
+MemoryAccounting=true
+MemoryMax=128M
+TasksMax=64
+LimitNOFILE=4096
+
+# Run at idle priority so localgo doesn't compete with user workloads.
+Nice=15
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target

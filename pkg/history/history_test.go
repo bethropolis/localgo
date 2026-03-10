@@ -34,7 +34,6 @@ func TestHistoryLogger(t *testing.T) {
 
 	logger.Close()
 
-	// Verify file contents
 	f, err := os.Open(logPath)
 	if err != nil {
 		t.Fatalf("failed to open log file: %v", err)
@@ -55,16 +54,29 @@ func TestHistoryLogger(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", "/custom/xdg")
-	path := history.DefaultPath()
-	if path != "/custom/xdg/localgo/history.jsonl" {
-		t.Errorf("unexpected XDG default path: %s", path)
-	}
+	// filepath.FromSlash converts forward slashes to the OS path separator.
+	// This makes the expected strings correct on both Unix (no-op) and
+	// Windows (converts / to \).
 
-	t.Setenv("XDG_DATA_HOME", "")
-	t.Setenv("HOME", "/custom/home")
-	path = history.DefaultPath()
-	if path != "/custom/home/.local/share/localgo/history.jsonl" {
-		t.Errorf("unexpected HOME default path: %s", path)
-	}
+	t.Run("XDG_DATA_HOME", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", filepath.FromSlash("/custom/xdg"))
+		t.Setenv("HOME", "")
+
+		got := history.DefaultPath()
+		want := filepath.Join(filepath.FromSlash("/custom/xdg"), "localgo", "history.jsonl")
+		if got != want {
+			t.Errorf("XDG path\n got:  %s\n want: %s", got, want)
+		}
+	})
+
+	t.Run("HOME fallback", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", "")
+		t.Setenv("HOME", filepath.FromSlash("/custom/home"))
+
+		got := history.DefaultPath()
+		want := filepath.Join(filepath.FromSlash("/custom/home"), ".local", "share", "localgo", "history.jsonl")
+		if got != want {
+			t.Errorf("HOME path\n got:  %s\n want: %s", got, want)
+		}
+	})
 }
