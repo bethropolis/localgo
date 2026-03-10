@@ -1,12 +1,12 @@
 # LocalGo
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+--blue.svg)](https://golang.org)
-[![Protocol](https://img.shields.io/badge/Protocol-LocalSend%20v2.1-green.svg)](https://github.com/localsend/protocol)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build](https://github.com/bethropolis/localgo/actions/workflows/docker.yml/badge.svg)](https://github.com/bethropolis/localgo/actions/workflows/docker.yml)
-[![Docker Image](https://img.shields.io/docker/pulls/ghcr.io/bethropolis/localgo.svg)](https://github.com/bethropolis/localgo/pkgs/container/localgo)
-[![Release](https://img.shields.io/github/v/release/bethropolis/localgo)](https://github.com/bethropolis/localgo/releases/latest)
-[![Platforms](https://img.shields.io/badge/Platforms-linux%20%7C%20macos%20%7C%20windows-informational)](https://github.com/bethropolis/localgo)
+[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
+[![Protocol](https://img.shields.io/badge/LocalSend-v2.1-4CAF50?style=for-the-badge&logo=protocol.ai&logoColor=white)](https://github.com/localsend/protocol)
+[![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/bethropolis/localgo?style=for-the-badge&logo=github&color=181717&logoColor=white)](https://github.com/bethropolis/localgo/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/bethropolis/localgo/docker.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build)](https://github.com/bethropolis/localgo/actions/workflows/docker.yml)
+[![GHCR](https://img.shields.io/badge/container-ghcr.io-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/bethropolis/localgo/pkgs/container/localgo)
+[![Platforms](https://img.shields.io/badge/Platforms-Linux%20%7C%20macOS%20%7C%20Windows-6e40c9?style=for-the-badge&logoColor=white)](https://github.com/bethropolis/localgo)
 
 A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
 

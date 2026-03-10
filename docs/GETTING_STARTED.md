@@ -41,7 +41,12 @@ go install github.com/bethropolis/localgo/cmd/localgo@latest
 brew install bethropolis/localgo/localgo
 ```
 
-### Option 6: Install via Docker/podman
+### option 6: Install via AUR (Arch Linux)
+```bash
+  yay -S localgo-bin
+```
+
+### Option 7: Install via Docker/podman
 ```bash
 podman run -d \
   --name localgo \
