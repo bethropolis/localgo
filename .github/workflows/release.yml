@@ -1,7 +1,3 @@
-# .github/workflows/release.yml
-# Rename this file to .github/workflows/release.yml in your repo.
-# This replaces the old release.yml (builds + update-homebrew jobs) entirely.
-
 name: Release
 
 on:
@@ -10,7 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write  # create GitHub release, upload assets
+  contents: write 
 
 jobs:
   goreleaser:
@@ -21,8 +17,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 is REQUIRED — GoReleaser needs the full git history
-          # to find the previous tag and generate the changelog correctly.
           fetch-depth: 0
 
       - name: Set up Go
@@ -31,16 +25,13 @@ jobs:
           go-version: "1.24"
           cache: true
 
-      # Write the AUR SSH key to a temp file outside the repo.
-      # SSH requires a key file — passing raw key content in an env var
-      # causes "Load key: invalid format". Writing outside the repo
-      # avoids GoReleaser's dirty-state check.
       - name: Write AUR SSH key
-        # Only run if the secret is actually set
-        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        env:
+          AUR_SSH_KEY_CONTENT: ${{ secrets.AUR_SSH_KEY }}
+        if: env.AUR_SSH_KEY_CONTENT != ''
         run: |
           mkdir -p "$HOME/.secrets"
-          printf '%s' "${{ secrets.AUR_SSH_KEY }}" > "$HOME/.secrets/aur_key"
+          printf '%s' "$AUR_SSH_KEY_CONTENT" > "$HOME/.secrets/aur_key"
           chmod 600 "$HOME/.secrets/aur_key"
           echo "AUR_SSH_KEY=$HOME/.secrets/aur_key" >> $GITHUB_ENV
 
@@ -54,5 +45,4 @@ jobs:
           GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN:   ${{ secrets.TAP_GITHUB_TOKEN }}
           SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
-          # Set by "Write AUR SSH key" step above (file path, not key content)
           AUR_SSH_KEY:        ${{ env.AUR_SSH_KEY }}
