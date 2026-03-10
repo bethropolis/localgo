@@ -130,7 +130,7 @@ func LoadSecurityContext(path string, logger *zap.SugaredLogger) (*StoredSecurit
 		return nil, fmt.Errorf("failed to decode security context from '%s': %w", path, err)
 	}
 	if logger != nil {
-		logger.Infow("Loaded security context", "path", path, "fingerprint", ctx.CertificateHash)
+		logger.Debugw("Loaded security context", "path", path, "fingerprint", ctx.CertificateHash)
 	}
 	return &ctx, nil
 }

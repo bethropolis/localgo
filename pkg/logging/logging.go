@@ -80,6 +80,11 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 			EncodeTime:     zapcore.TimeEncoderOfLayout("15:04:05"),
 			EncodeDuration: zapcore.StringDurationEncoder,
 			EncodeCaller:   zapcore.ShortCallerEncoder,
+			ConsoleSeparator: "  ",
+		}
+
+		if !verbose {
+			encCfg.CallerKey = "" // Disable caller in non-verbose mode
 		}
 
 		enc := zapcore.NewConsoleEncoder(encCfg)
@@ -90,6 +95,8 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 	opts := []zap.Option{zap.AddCaller(), zap.AddCallerSkip(0)}
 	if verbose {
 		opts = append(opts, zap.AddStacktrace(zapcore.ErrorLevel))
+	} else {
+		opts = []zap.Option{zap.AddCallerSkip(0)} // Minimal options for non-verbose
 	}
 
 	logger := zap.New(core, opts...)
