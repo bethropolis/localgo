@@ -7,7 +7,6 @@
 # ---------------------------------------------------------------------------
 BINARY_NAME    := localgo
 BUILD_DIR      := ./cmd/localgo
-DIST_DIR       := dist
 COVER_DIR      := .coverage
 
 GO             := go
@@ -20,17 +19,6 @@ BUILD_DATE     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 LD_BASE        := -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildDate=$(BUILD_DATE)
 LDFLAGS        := -ldflags "$(LD_BASE)"
 LDFLAGS_STRIP  := -ldflags "-s -w $(LD_BASE)"
-
-# Cross-compile targets (GOOS/GOARCH pairs)
-PLATFORMS := \
-	linux/amd64 \
-	linux/arm64 \
-	darwin/amd64 \
-	darwin/arm64 \
-	windows/amd64 \
-	windows/arm64 \
-	android/arm \
-	android/arm64
 
 # Colour helpers — silently degrade when not a tty
 ifeq ($(TERM),)
@@ -74,34 +62,13 @@ build: ## Build the binary for the current platform
 build-fast: ## Build without ldflags (faster iteration, skips version embedding)
 	$(GO) build $(GOFLAGS) -o $(BINARY_NAME) $(BUILD_DIR)
 
-.PHONY: release
-release: clean-dist ## Cross-compile for all platforms into dist/
-	$(call log,Cross-compiling release binaries)
-	@mkdir -p $(DIST_DIR)
-	@for p in $(PLATFORMS); do \
-		os=$${p%/*}; \
-		arch=$${p#*/}; \
-		out_os=$$os; \
-		out_arch=$$arch; \
-		ext=""; \
-		env=""; \
-		[ "$$os" = "darwin" ] && out_os="macos"; \
-		[ "$$os" = "windows" ] && ext=".exe"; \
-		if [ "$$os" = "android" ]; then \
-			if [ "$$arch" = "arm" ]; then \
-				out_arch="armv7"; env="GOARM=7"; \
-				os="linux"; \
-			elif [ "$$arch" = "arm64" ]; then \
-				out_arch="armv8"; \
-			fi; \
-		fi; \
-		out="$(DIST_DIR)/$(BINARY_NAME)-$${out_os}-$${out_arch}$${ext}"; \
-		printf '  %-40s' "$$p"; \
-		env $$env GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build $(LDFLAGS_STRIP) -o "$$out" $(BUILD_DIR) \
-		&& printf '%sdone%s\n' '$(_GREEN)' '$(_RESET)' \
-		|| printf '%sFAILED%s\n' '$(_YELLOW)' '$(_RESET)'; \
-	done
-	@ls -lh $(DIST_DIR)/
+.PHONY: snapshot
+snapshot: ## Local test build via GoReleaser (no publish, no tag needed)
+	goreleaser release --snapshot --clean
+
+.PHONY: release-check
+release-check: ## Validate .goreleaser.yaml
+	goreleaser check
 
 .PHONY: install
 install: ## Install binary to $(GOPATH)/bin
@@ -230,14 +197,11 @@ ci: deps check test build ## Full CI pipeline: deps → check → test → build
 clean: ## Remove local binary and coverage artefacts
 	@rm -f $(BINARY_NAME)
 	@rm -rf $(COVER_DIR)
+	@rm -rf dist
 	$(GO) clean -testcache
 
-.PHONY: clean-dist
-clean-dist: ## Remove dist/ directory
-	@rm -rf $(DIST_DIR)
-
 .PHONY: clean-all
-clean-all: clean clean-dist ## Remove everything (binary, coverage, dist, go build cache)
+clean-all: clean ## Remove everything (binary, coverage, dist, go build cache)
 	$(GO) clean -cache
 
 # ---------------------------------------------------------------------------

@@ -40,10 +40,16 @@ cd localgo
 go install github.com/bethropolis/localgo/cmd/localgo@latest
 ```
 
-#### using homebrew
+#### using homebrew (macOS/Linux)
 ```bash
 brew tap bethropolis/tap
 brew install localgo
+```
+
+#### using scoop (Windows)
+```powershell
+scoop bucket add bethropolis https://github.com/bethropolis/scoop-bucket
+scoop install localgo
 ```
 
 > [!NOTE]

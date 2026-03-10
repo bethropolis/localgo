@@ -346,8 +346,34 @@ install_service() {
     if [[ "$INSTALL_MODE" == "system" ]]; then
         print_status "Installing system-wide systemd service..."
         local service_file="/etc/systemd/system/$SERVICE_NAME.service"
-        sudo cp "$SCRIPT_DIR/localgo.service" "$service_file"
+
+        local tmp_svc
+        tmp_svc=$(mktemp)
+        cp "$SCRIPT_DIR/localgo.service" "$tmp_svc"
+
+        # Patch paths for system-wide service
+        # Replace ExecStart, EnvironmentFile, WorkingDirectory, StateDirectory
+        sed -i "s|ExecStart=.*|ExecStart=$SYSTEM_BIN_DIR/$BINARY_NAME serve --quiet --auto-accept|g" "$tmp_svc"
+        sed -i "s|EnvironmentFile=.*|EnvironmentFile=-$SYSTEM_CONFIG_DIR/localgo.env|g" "$tmp_svc"
+        sed -i "s|WorkingDirectory=.*|WorkingDirectory=$SYSTEM_DATA_DIR|g" "$tmp_svc"
+        # StateDirectory=localgo is for user services or system services with /var/lib/localgo
+        # For a simple system service it's best to remove it if it conflicts or ensure it points to right place.
+        # But for systemd 232+, StateDirectory works nicely.
+
+        # Remove user specifiers
+        sed -i "s|%h/.local/share/localgo|$SYSTEM_DATA_DIR|g" "$tmp_svc"
+        sed -i "s|%E/localgo|$SYSTEM_CONFIG_DIR|g" "$tmp_svc"
+
+        # Remove User/Group lines if not creating user
+        if [[ "$CREATE_USER" == false ]]; then
+            sed -i "/^User=/d" "$tmp_svc"
+            sed -i "/^Group=/d" "$tmp_svc"
+        fi
+
+        sudo cp "$tmp_svc" "$service_file"
         sudo chmod 644 "$service_file"
+        rm -f "$tmp_svc"
+
         sudo systemctl daemon-reload
         print_success "Service installed to $service_file"
         print_status "To enable and start the service:"
@@ -367,34 +393,18 @@ install_service() {
         if [[ -f "$SCRIPT_DIR/localgo-user.service" ]]; then
             cp "$SCRIPT_DIR/localgo-user.service" "$service_file"
         else
-            cat > "$service_file" <<EOF
-[Unit]
-Description=LocalGo (User Service)
-Documentation=https://github.com/bethropolis/localgo
-After=network.target network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$USER_BIN_DIR/$BINARY_NAME serve --quiet
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=localgo-user
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-RestrictRealtime=true
-
-# Environment configuration
-EnvironmentFile=-$USER_CONFIG_DIR/localgo.env
-WorkingDirectory=$USER_DATA_DIR
-
-[Install]
-WantedBy=default.target
-EOF
+            # fallback to using localgo.service as template for user service
+            # since it's already structured for user service (uses %h, %E)
+            local tmp_svc
+            tmp_svc=$(mktemp)
+            cp "$SCRIPT_DIR/localgo.service" "$tmp_svc"
+            # just ensure binary path is correct
+            sed -i "s|ExecStart=.*|ExecStart=$USER_BIN_DIR/$BINARY_NAME serve --quiet --auto-accept|g" "$tmp_svc"
+            # Remove system-only User/Group if present
+            sed -i "/^User=/d" "$tmp_svc"
+            sed -i "/^Group=/d" "$tmp_svc"
+            cp "$tmp_svc" "$service_file"
+            rm -f "$tmp_svc"
         fi
         chmod 644 "$service_file"
 

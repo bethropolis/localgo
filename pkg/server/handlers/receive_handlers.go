@@ -411,16 +411,16 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 		return
 	}
 
-	cmdStr := h.config.ExecHook
-	cmdStr = strings.ReplaceAll(cmdStr, "%f", filePath)
-	cmdStr = strings.ReplaceAll(cmdStr, "%n", fileName)
-	cmdStr = strings.ReplaceAll(cmdStr, "%s", fmt.Sprintf("%d", fileSize))
-	cmdStr = strings.ReplaceAll(cmdStr, "%a", senderAlias)
-	cmdStr = strings.ReplaceAll(cmdStr, "%i", senderIP)
-
 	go func() {
-		h.logger.Infof("Running exec hook: %s", cmdStr)
-		cmd := exec.Command("sh", "-c", cmdStr)
+		h.logger.Infof("Running exec hook: %s", h.config.ExecHook)
+		cmd := exec.Command("sh", "-c", h.config.ExecHook)
+		cmd.Env = append(os.Environ(),
+			"LOCALGO_FILE="+filePath,
+			"LOCALGO_NAME="+fileName,
+			fmt.Sprintf("LOCALGO_SIZE=%d", fileSize),
+			"LOCALGO_ALIAS="+senderAlias,
+			"LOCALGO_IP="+senderIP,
+		)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			h.logger.Errorf("Exec hook failed: %v, output: %s", err, string(output))

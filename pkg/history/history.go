@@ -13,9 +13,10 @@ import (
 
 // Status values for a history entry.
 const (
-	StatusReceived  = "received"
-	StatusClipboard = "clipboard"
-	StatusFailed    = "failed"
+	StatusReceived   = "received"
+	StatusClipboard  = "clipboard"
+	StatusFailed     = "failed"
+	DisabledSentinel = "off"
 )
 
 // Entry represents a single file transfer event.

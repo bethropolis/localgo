@@ -1,22 +1,29 @@
-name: Release Builder
+# .github/workflows/release.yml
+# Rename this file to .github/workflows/release.yml in your repo.
+# This replaces the old release.yml (builds + update-homebrew jobs) entirely.
+
+name: Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
 
 permissions:
-  contents: write
+  contents: write  # create GitHub release, upload assets
 
 jobs:
-  release:
-    name: Build and Release
+  goreleaser:
+    name: GoReleaser
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 is REQUIRED — GoReleaser needs the full git history
+          # to find the previous tag and generate the changelog correctly.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -24,79 +31,28 @@ jobs:
           go-version: "1.24"
           cache: true
 
-      - name: Run Tests
-        run: go test -race ./...
-
-      - name: Build Binaries
-        run: make release
-
-      - name: Zip Windows Binaries
+      # Write the AUR SSH key to a temp file outside the repo.
+      # SSH requires a key file — passing raw key content in an env var
+      # causes "Load key: invalid format". Writing outside the repo
+      # avoids GoReleaser's dirty-state check.
+      - name: Write AUR SSH key
+        # Only run if the secret is actually set
+        if: ${{ secrets.AUR_SSH_KEY != '' }}
         run: |
-          zip -j dist/localgo-windows-amd64.zip dist/localgo-windows-amd64.exe
-          zip -j dist/localgo-windows-arm64.zip dist/localgo-windows-arm64.exe
-          rm dist/localgo-windows-amd64.exe dist/localgo-windows-arm64.exe
+          mkdir -p "$HOME/.secrets"
+          printf '%s' "${{ secrets.AUR_SSH_KEY }}" > "$HOME/.secrets/aur_key"
+          chmod 600 "$HOME/.secrets/aur_key"
+          echo "AUR_SSH_KEY=$HOME/.secrets/aur_key" >> $GITHUB_ENV
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
         with:
-          files: dist/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-
-  update-homebrew:
-    name: Update Homebrew Tap
-    needs: release
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout tap repo
-        uses: actions/checkout@v4
-        with:
-          repository: bethropolis/homebrew-tap
-          token: ${{ secrets.TAP_GITHUB_TOKEN }}
-
-      - name: Fetch SHA256 hashes from GitHub API
-        id: hashes
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          
-          API="https://api.github.com/repos/${{ github.repository }}/releases/tags/${VERSION}"
-          
-          # Wait briefly for release assets to be available
-          sleep 10
-          
-          # Download the release assets for hashing
-          curl -sL "$API" | jq -r '.assets[].browser_download_url' | xargs -n 1 curl -sL -O
-          
-          echo "macos_arm64=$(sha256sum localgo-macos-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "macos_amd64=$(sha256sum localgo-macos-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "linux_arm64=$(sha256sum localgo-linux-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "linux_amd64=$(sha256sum localgo-linux-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
-
-      - name: Update formula
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          VERSION: ${{ steps.hashes.outputs.version }}
-          MACOS_ARM64: ${{ steps.hashes.outputs.macos_arm64 }}
-          MACOS_AMD64: ${{ steps.hashes.outputs.macos_amd64 }}
-          LINUX_ARM64: ${{ steps.hashes.outputs.linux_arm64 }}
-          LINUX_AMD64: ${{ steps.hashes.outputs.linux_amd64 }}
-        run: |
-          VER="${VERSION#v}"
-          sed -i "s/version \".*\"/version \"${VER}\"/" Formula/localgo.rb
-          sed -i "/macos-arm64/{n;s/sha256 \".*\"/sha256 \"${MACOS_ARM64}\"/}" Formula/localgo.rb
-          sed -i "/macos-amd64/{n;s/sha256 \".*\"/sha256 \"${MACOS_AMD64}\"/}" Formula/localgo.rb
-          sed -i "/linux-arm64/{n;s/sha256 \".*\"/sha256 \"${LINUX_ARM64}\"/}" Formula/localgo.rb
-          sed -i "/linux-amd64/{n;s/sha256 \".*\"/sha256 \"${LINUX_AMD64}\"/}" Formula/localgo.rb
-
-      - name: Commit and push
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/localgo.rb
-          git commit -m "localgo ${{ steps.hashes.outputs.version }}"
-          git push
+          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN:   ${{ secrets.TAP_GITHUB_TOKEN }}
+          SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
+          # Set by "Write AUR SSH key" step above (file path, not key content)
+          AUR_SSH_KEY:        ${{ env.AUR_SSH_KEY }}

@@ -1,0 +1,259 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# docs: https://goreleaser.com/customization/
+version: 2
+
+project_name: localgo
+
+# ---------------------------------------------------------------------------
+# Pre-build hooks
+# ---------------------------------------------------------------------------
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+# ---------------------------------------------------------------------------
+# Builds
+# ---------------------------------------------------------------------------
+builds:
+  - id: localgo
+    main: ./cmd/localgo
+    binary: localgo
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.GitCommit={{.Commit}}
+      - -X main.BuildDate={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # disabling Windows ARM64 for now, as it's not tested
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+# ---------------------------------------------------------------------------
+# Archives
+# ---------------------------------------------------------------------------
+archives:
+  - id: default
+    ids: [localgo]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - docs/GETTING_STARTED.md
+      # Completions
+      - scripts/bash_completion.sh
+      - scripts/zsh_completion.zsh
+      - scripts/fish_completion.fish
+      # Service file
+      - scripts/localgo-pkg.service
+      # Example env file 
+      - scripts/localgo.env.example
+
+# ---------------------------------------------------------------------------
+# Checksums
+# ---------------------------------------------------------------------------
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# ---------------------------------------------------------------------------
+# Changelog
+# ---------------------------------------------------------------------------
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+# ---------------------------------------------------------------------------
+# GitHub Release
+# ---------------------------------------------------------------------------
+release:
+  github:
+    owner: bethropolis
+    name: localgo
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} {{.Tag}}"
+
+# ---------------------------------------------------------------------------
+# Homebrew Cask
+# ---------------------------------------------------------------------------
+homebrew_casks:
+  - name: localgo
+    ids: [default]
+
+    # The binary name inside the extracted archive to link into PATH
+    binaries:
+      - localgo
+
+    # Shell completions — paths are relative to the extracted archive root
+    completions:
+      bash: scripts/bash_completion.sh
+      zsh: scripts/zsh_completion.zsh
+      fish: scripts/fish_completion.fish
+
+    url:
+      verified: "github.com/bethropolis/localgo"
+
+    # Remove Gatekeeper quarantine flag on macOS 
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "#{staged_path}/localgo"]
+          end
+
+    repository:
+      owner: bethropolis
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+
+    directory: Casks
+
+    homepage: "https://github.com/bethropolis/localgo"
+    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    license: "MIT"
+
+    caveats: |
+      To start localgo as a background service:
+        localgo serve --quiet --auto-accept
+
+      To enable shell completions, restart your shell or run:
+        source ~/.bash_profile  # bash
+        source ~/.zshrc         # zsh
+
+# ---------------------------------------------------------------------------
+# AUR (Arch User Repository)
+# ---------------------------------------------------------------------------
+# aurs:
+#   - name: localgo-bin
+#     ids: [default]
+#     homepage: "https://github.com/bethropolis/localgo"
+#     description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+#     maintainers:
+#       - "bethropolis <bethropolis@gmail.com>"
+#     license: MIT
+#     private_key: "{{ .Env.AUR_SSH_KEY }}"
+#     git_url: "ssh://aur@aur.archlinux.org/localgo-bin.git"
+#     skip_upload: auto
+
+#     depends:
+#       - glibc
+#     optdepends:
+#       - "xclip: clipboard support on X11"
+#       - "xsel: clipboard support on X11 (alternative)"
+#       - "wl-clipboard: clipboard support on Wayland"
+#     provides:
+#       - localgo
+#     conflicts:
+#       - localgo
+#       - localgo-git
+
+#     package: |-
+#       install -Dm755 "./localgo" "${pkgdir}/usr/bin/localgo"
+
+#       install -Dm644 "./LICENSE" \
+#         "${pkgdir}/usr/share/licenses/localgo-bin/LICENSE"
+
+#       install -Dm644 "./README.md" \
+#         "${pkgdir}/usr/share/doc/localgo-bin/README"
+
+#       install -Dm644 "./docs/GETTING_STARTED.md" \
+#         "${pkgdir}/usr/share/doc/localgo-bin/GETTING_STARTED.md"
+
+#       install -Dm644 "./scripts/localgo.env.example" \
+#         "${pkgdir}/usr/share/doc/localgo-bin/localgo.env.example"
+
+#       # Shell completions
+#       install -Dm644 "./scripts/bash_completion.sh" \
+#         "${pkgdir}/usr/share/bash-completion/completions/localgo"
+
+#       install -Dm644 "./scripts/zsh_completion.zsh" \
+#         "${pkgdir}/usr/share/zsh/site-functions/_localgo"
+
+#       install -Dm644 "./scripts/fish_completion.fish" \
+#         "${pkgdir}/usr/share/fish/vendor_completions.d/localgo.fish"
+
+#       install -Dm644 "./scripts/localgo-pkg.service" \
+#         "${pkgdir}/usr/lib/systemd/user/localgo.service"
+
+# ---------------------------------------------------------------------------
+# Scoop bucket (Windows)
+# ---------------------------------------------------------------------------
+scoops:
+  - name: localgo
+    ids: [default]
+    repository:
+      owner: bethropolis
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_GITHUB_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+    homepage: "https://github.com/bethropolis/localgo"
+    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    license: MIT
+    skip_upload: auto
+
+# ---------------------------------------------------------------------------
+# Linux packages — .deb and .rpm via nfpm
+# ---------------------------------------------------------------------------
+nfpms:
+  - id: linux-packages
+    package_name: localgo
+    ids: [localgo]
+    vendor: bethropolis
+    homepage: "https://github.com/bethropolis/localgo"
+    maintainer: "bethropolis"
+    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      # Shell completions
+      - src: scripts/bash_completion.sh
+        dst: /usr/share/bash-completion/completions/localgo
+      - src: scripts/zsh_completion.zsh
+        dst: /usr/share/zsh/site-functions/_localgo
+      - src: scripts/fish_completion.fish
+        dst: /usr/share/fish/vendor_completions.d/localgo.fish
+      # Systemd system service (for running as a dedicated localgo user)
+      - src: scripts/localgo.service
+        dst: /usr/lib/systemd/system/localgo.service
+      # Systemd user service (for running under a normal user account)
+      - src: scripts/localgo-pkg.service
+        dst: /usr/lib/systemd/user/localgo.service
+      # Example environment file — marked config|noreplace so upgrades
+      # don't overwrite a user's edited copy
+      - src: scripts/localgo.env.example
+        dst: /etc/localgo/localgo.env.example
+        type: config|noreplace
+    scripts:
+      postinstall: scripts/pkg-postinstall.sh
+      preremove:   scripts/pkg-preremove.sh
