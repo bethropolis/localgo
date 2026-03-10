@@ -3,18 +3,20 @@ name: Dev Build & Artifacts
 on:
   push:
     branches:
-      - "dev"
+      - dev
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build and Upload Artifacts
+    name: Snapshot Build
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -25,20 +27,21 @@ jobs:
       - name: Run Tests
         run: go test -race ./...
 
-      - name: Build Binaries
-        run: make release
-
-      - name: Zip Windows Binaries
-        run: |
-          zip -j dist/localgo-windows-amd64.zip dist/localgo-windows-amd64.exe
-          zip -j dist/localgo-windows-arm64.zip dist/localgo-windows-arm64.exe
-          rm -rf dist/localgo-windows-amd64.exe
-          rm -rf dist/localgo-windows-arm64.exe
+      - name: Snapshot Build
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          # --snapshot: build without a tag, no publish
+          # --clean: remove previous dist/ before building
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: localgo-dev-builds
-          path: dist/*
+          path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
