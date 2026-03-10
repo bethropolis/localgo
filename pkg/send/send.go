@@ -133,65 +133,51 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths[]string, recip
 		return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
-	// --- Fallback: HTTP Scan Discovery ---
-	logger.Info("Starting HTTP network scan...")
+	registerDto := model.RegisterDto{
+		Alias:       cfg.Alias,
+		Version:     config.ProtocolVersion,
+		DeviceModel: cfg.DeviceModel,
+		DeviceType:  cfg.DeviceType,
+		Fingerprint: cfg.SecurityContext.CertificateHash,
+		Port:        cfg.Port,
+		Protocol:    model.ProtocolTypeHTTP,
+	}
 
-	retryCtx, cancelRetry := context.WithTimeout(ctx, 15*time.Second)
-	defer cancelRetry()
+	httpFallback := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
 
-	for targetDevice == nil {
-		select {
-		case <-retryCtx.Done():
-			return fmt.Errorf("recipient '%s' not found after multiple attempts", recipientAlias)
-		default:
-			registerDto := model.RegisterDto{
-				Alias:       cfg.Alias,
-				Version:     config.ProtocolVersion,
-				DeviceModel: cfg.DeviceModel,
-				DeviceType:  cfg.DeviceType,
-				Fingerprint: cfg.SecurityContext.CertificateHash,
-				Port:        cfg.Port,
-				Protocol:    model.ProtocolTypeHTTP,
-			}
+	localIPs, err := network.GetLocalIPAddresses()
+	if err != nil {
+		return fmt.Errorf("failed to get local IPs: %w", err)
+	}
 
-			httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
+	var ips[]net.IP
+	for _, ip := range localIPs {
+		subnetIPs := network.GetSubnetIPs(ip)
+		ips = append(ips, subnetIPs...)
+	}
+	ips = append(ips, net.ParseIP("127.0.0.1"))
 
-			localIPs, err := network.GetLocalIPAddresses()
-			if err != nil {
-				logger.Warnf("Failed to get local IPs: %v", err)
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
+	// Give the scan a proper chunk of time to test all IPs safely
+	scanCtx, cancelScan := context.WithTimeout(ctx, 15*time.Second)
+	defer cancelScan()
 
-			var ips[]net.IP
-			for _, ip := range localIPs {
-				subnetIPs := network.GetSubnetIPs(ip)
-				ips = append(ips, subnetIPs...)
-			}
-			ips = append(ips, net.ParseIP("127.0.0.1"))
+	foundDevices, err := httpFallback.ScanNetwork(scanCtx, ips, recipientPort)
+	if err != nil {
+		return fmt.Errorf("HTTP discovery failed: %w", err)
+	}
 
-			discoverCtx, cancel := context.WithTimeout(retryCtx, 3*time.Second)
-			foundDevices, err := httpDiscoverer.ScanNetwork(discoverCtx, ips, recipientPort)
-			cancel()
-
-			if err != nil {
-				logger.Warnf("HTTP discovery failed: %v", err)
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-
-			for _, device := range foundDevices {
-				if device.Alias == recipientAlias {
-					targetDevice = device
-					break
-				}
-			}
-
-			if targetDevice == nil {
-				time.Sleep(500 * time.Millisecond)
-			}
+	for _, device := range foundDevices {
+		if device.Alias == recipientAlias {
+			targetDevice = device
+			break
 		}
 	}
+
+	if targetDevice == nil {
+		return fmt.Errorf("recipient '%s' not found on network after scan", recipientAlias)
+	}
+
+	logger.Infof("Discovered recipient via HTTP Scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
 
 	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 }
@@ -293,6 +279,9 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
+	
+	// Semaphore to strictly limit active concurrent uploads to 4
+	sem := make(chan struct{}, 4)
 
 	for fileID, token := range prepareResponse.Files {
 		filePath, exists := filePathMap[fileID]
@@ -304,6 +293,11 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		wg.Add(1)
 		go func(fID, tkn, fPath string) {
 			defer wg.Done()
+			
+			// Acquire slot
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			logger.Infof("Uploading file: %s", filepath.Base(fPath))
 			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, logger)
 			if err != nil {
@@ -347,6 +341,14 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		return fmt.Errorf("failed to create upload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
+
+	stat, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file stats: %w", err)
+	}
+
+	// Enforce exact content length so it doesn't fall back to chunked encoding
+	req.ContentLength = stat.Size()
 
 	resp, err := client.Do(req)
 	if err != nil {

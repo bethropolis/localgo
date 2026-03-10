@@ -174,12 +174,18 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips[]net.IP, port int)
 	var wg sync.WaitGroup
 	deviceChan := make(chan *model.Device, len(ips))
 
+	// Semaphore limits parallel pinging to prevent socket exhaustion 
+	sem := make(chan struct{}, 100)
+
 	hd.logger.Debugf("Scanning %d IPs on port %d", len(ips), port)
 
 	for _, ip := range ips {
 		wg.Add(1)
 		go func(ip net.IP) {
 			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
 			if err != nil {

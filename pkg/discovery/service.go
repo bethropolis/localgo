@@ -139,7 +139,9 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 	s.multicast.SetDto(multicastDto)
 
 	// MUST be listening to receive multicast responses
-	_ = s.multicast.StartListening(ctx)
+	if err := s.multicast.StartListening(ctx); err != nil {
+		s.logger.Debugf("Failed to start multicast listener (responses may be missed): %v", err)
+	}
 
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
 		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
@@ -153,6 +155,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 	for {
 		select {
 		case <-ctx.Done():
+			lastDevices = s.GetDevices() // Perform one absolute final read to guarantee capture
 			s.logger.Debugf("Discovery scan finished. %d device(s) found.", len(lastDevices))
 			return lastDevices, nil
 		case <-ticker.C:
