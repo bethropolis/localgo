@@ -243,9 +243,6 @@ nfpms:
         dst: /usr/share/zsh/site-functions/_localgo
       - src: scripts/fish_completion.fish
         dst: /usr/share/fish/vendor_completions.d/localgo.fish
-      # Systemd system service (for running as a dedicated localgo user)
-      - src: scripts/localgo.service
-        dst: /usr/lib/systemd/system/localgo.service
       # Systemd user service (for running under a normal user account)
       - src: scripts/localgo-pkg.service
         dst: /usr/lib/systemd/user/localgo.service
