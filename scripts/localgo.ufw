@@ -1,0 +1,4 @@
+[localgo]
+title=LocalGo
+description=LocalSend v2.1 protocol implementation for secure, cross-platform file sharing.
+ports=53317/tcp|53317/udp
