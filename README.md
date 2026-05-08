@@ -10,6 +10,18 @@
 
 A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
 
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Commands](#commands)
+- [Documentation](#documentation)
+- [Troubleshooting](#troubleshooting)
+- [For Developers](#for-developers)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps
@@ -143,6 +155,17 @@ localgo serve --port 8080
 # Fix download directory
 chmod 755 ~/Downloads/LocalGo
 ```
+
+## For Developers
+
+Want to build on top of LocalGo or contribute?
+
+- **[Library Guide](docs/LIBRARY_GUIDE.md)**: How to use LocalGo as a Go library.
+- **[Code Walkthrough](docs/CODE_WALKTHROUGH.md)**: Understand the internal architecture.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 

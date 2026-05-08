@@ -61,6 +61,8 @@ archives:
       - scripts/localgo-pkg.service
       # Example env file 
       - scripts/localgo.env.example
+      # UFW profile
+      - scripts/localgo.ufw
 
 # ---------------------------------------------------------------------------
 # Checksums
@@ -200,6 +202,11 @@ aurs:
           "${pkgdir}/usr/lib/systemd/user/localgo.service"
       fi
 
+      if command -v ufw &>/dev/null; then
+        install -Dm644 "./scripts/localgo.ufw" \
+          "${pkgdir}/etc/ufw/applications.d/localgo"
+      fi
+
 
 # ---------------------------------------------------------------------------
 # Scoop bucket (Windows)
@@ -251,6 +258,9 @@ nfpms:
       - src: scripts/localgo.env.example
         dst: /etc/localgo/localgo.env.example
         type: config|noreplace
+      # UFW profile
+      - src: scripts/localgo.ufw
+        dst: /etc/ufw/applications.d/localgo
     scripts:
       postinstall: scripts/pkg-postinstall.sh
       preremove:   scripts/pkg-preremove.sh
