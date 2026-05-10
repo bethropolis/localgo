@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/charmbracelet/huh"
 	"github.com/gen2brain/beeep"
+	"github.com/sqweek/dialog"
 )
 
 // OutputFormat represents the output format type
@@ -300,4 +303,49 @@ func PrintInfo(format string, a ...any) {
 
 func PrintHeader(text string) {
 	fmt.Println(HeaderStyle.Render(text))
+}
+
+// PickDevice presents an interactive TUI to select a device. Returns the selected device or nil if canceled.
+func PickDevice(devices []*model.Device) *model.Device {
+	if len(devices) == 0 {
+		return nil
+	}
+	if len(devices) == 1 {
+		return devices[0]
+	}
+
+	var selected *model.Device
+	options := make([]huh.Option[*model.Device], len(devices))
+	for i, d := range devices {
+		protocol := strings.ToUpper(string(d.Protocol))
+		options[i] = huh.NewOption(
+			fmt.Sprintf("%s  %s:%d  [%s]", d.Alias, d.IP, d.Port, protocol),
+			d,
+		)
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[*model.Device]().
+				Title("Select recipient:").
+				Options(options...).
+				Value(&selected).
+				WithHeight(10),
+		),
+	)
+	form.Run()
+	return selected
+}
+
+// PickFiles opens a native file picker and returns the selected path.
+// Returns an error on cancel or on unsupported platforms (e.g. headless).
+func PickFiles() (string, error) {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		path, err := dialog.File().Load()
+		if err != nil {
+			return "", fmt.Errorf("file picker canceled: %w", err)
+		}
+		return path, nil
+	}
+	return "", fmt.Errorf("file picker not supported on %s", runtime.GOOS)
 }
