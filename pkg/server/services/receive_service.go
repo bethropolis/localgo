@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/google/uuid"
 )
@@ -14,6 +15,7 @@ type ActiveReceiveSession struct {
 	Sender    model.DeviceInfo
 	Files     map[string]ActiveFile
 	CreatedAt time.Time
+	Progress  *cli.MultiProgress
 }
 
 // ActiveFile represents a file in an active session.
@@ -71,6 +73,7 @@ func (s *ReceiveService) CreateSession(sender model.DeviceInfo, files map[string
 		Sender:    sender,
 		Files:     sessionFiles,
 		CreatedAt: time.Now(),
+		Progress:  cli.NewMultiProgress(int64(len(files))),
 	}
 
 	s.sessions[sessionId] = session
@@ -109,6 +112,7 @@ func (s *ReceiveService) copySession(orig *ActiveReceiveSession) *ActiveReceiveS
 		Sender:    orig.Sender,
 		Files:     make(map[string]ActiveFile, len(orig.Files)),
 		CreatedAt: orig.CreatedAt,
+		Progress:  orig.Progress,
 	}
 	for k, v := range orig.Files {
 		copySession.Files[k] = v
@@ -120,7 +124,12 @@ func (s *ReceiveService) copySession(orig *ActiveReceiveSession) *ActiveReceiveS
 func (s *ReceiveService) CloseSession(sessionID string) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
-	delete(s.sessions, sessionID)
+	if session, ok := s.sessions[sessionID]; ok {
+		if session.Progress != nil {
+			session.Progress.Wait()
+		}
+		delete(s.sessions, sessionID)
+	}
 }
 
 // RemoveFileFromSession removes a file from the current session.

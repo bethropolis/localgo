@@ -40,6 +40,7 @@ type Config struct {
 	HistoryFile       string                        `json:"-"` // path to transfer history jsonl file
 	Quiet             bool                          `json:"-"` // quiet mode - minimal output
 	ExecHook          string                        `json:"-"` // shell command to run after receiving file
+	OpenDir           bool                          `json:"-"` // open download directory after transfer
 }
 
 // getSecurityDir determines the best location for the security directory

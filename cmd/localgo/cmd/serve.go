@@ -29,6 +29,7 @@ var (
 	servenoClipboard bool
 	servehistory     string
 	serveexecHook    string
+	serveopen        bool
 )
 
 var serveCmd = &cobra.Command{
@@ -63,6 +64,9 @@ var serveCmd = &cobra.Command{
 		}
 		if serveexecHook != "" {
 			Cfg.ExecHook = serveexecHook
+		}
+		if serveopen {
+			Cfg.OpenDir = true
 		}
 		if servequiet {
 			Cfg.Quiet = true
@@ -163,7 +167,6 @@ var serveCmd = &cobra.Command{
 			cli.PrintInfo("Server stopped")
 		}
 		return nil
-		return nil
 	},
 }
 
@@ -180,6 +183,7 @@ func init() {
 	serveCmd.Flags().BoolVar(&servenoClipboard, "no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")
 	serveCmd.Flags().StringVar(&servehistory, "history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl)")
 	serveCmd.Flags().StringVar(&serveexecHook, "exec", "", "Shell command to run after each received file")
+	serveCmd.Flags().BoolVar(&serveopen, "open", false, "Open download directory after transfer completes")
 
 	serveCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("serve"); h != nil {

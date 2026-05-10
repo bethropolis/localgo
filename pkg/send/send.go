@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -261,10 +263,11 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to decode prepare response: %w", err)
 	}
 
+	mp := cli.NewMultiProgress(int64(len(prepareResponse.Files)))
+
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
 
-	// Semaphore to strictly limit active concurrent uploads to 4
 	sem := make(chan struct{}, 4)
 
 	for fileID, token := range prepareResponse.Files {
@@ -274,24 +277,30 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			continue
 		}
 
+		var fileSize int64
+		if fi, err := os.Stat(filePath); err == nil {
+			fileSize = fi.Size()
+		}
+		trackProgress := mp.AddBar(filepath.Base(filePath), fileSize)
+
 		wg.Add(1)
-		go func(fID, tkn, fPath string) {
+		go func(fID, tkn, fPath string, track func(int64)) {
 			defer wg.Done()
 
-			// Acquire slot
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			logger.Infof("Uploading file: %s", filepath.Base(fPath))
-			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, logger)
+			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
 			if err != nil {
 				logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
 				errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
 			}
-		}(fileID, token, filePath)
+		}(fileID, token, filePath, trackProgress)
 	}
 
 	wg.Wait()
+	mp.Wait()
 	close(errCh)
 
 	var uploadErrors []error
@@ -307,7 +316,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	return nil
 }
 
-func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, logger *zap.SugaredLogger) error {
+func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -320,18 +329,22 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 
 	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, file)
-	if err != nil {
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-
 	stat, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to get file stats: %w", err)
 	}
 
-	// Enforce exact content length so it doesn't fall back to chunked encoding
+	var body io.ReadCloser = file
+	if trackProgress != nil {
+		bar := &progressBar{current: 0, track: trackProgress}
+		body = &progressTracker{Reader: file, bar: bar}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
 	req.ContentLength = stat.Size()
 
 	resp, err := client.Do(req)
@@ -344,5 +357,31 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		return fmt.Errorf("upload request failed with status: %s", resp.Status)
 	}
 
+	return nil
+}
+
+type progressBar struct {
+	current int64
+	track   func(int64)
+}
+
+type progressTracker struct {
+	io.Reader
+	bar *progressBar
+}
+
+func (pt *progressTracker) Read(p []byte) (int, error) {
+	n, err := pt.Reader.Read(p)
+	if n > 0 && pt.bar != nil {
+		pt.bar.current += int64(n)
+		pt.bar.track(pt.bar.current)
+	}
+	return n, err
+}
+
+func (pt *progressTracker) Close() error {
+	if f, ok := pt.Reader.(*os.File); ok {
+		return f.Close()
+	}
 	return nil
 }
