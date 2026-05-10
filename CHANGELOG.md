@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.3.6 - 2026-05-04
+
+### Refactored
+- Extracted DTO factory methods to `pkg/config/dto.go`
+- Moved `resolveDuplicateFilename` to `pkg/storage`
+- Added progress bar helper in `pkg/cli/progress.go`
+- Reduced boilerplate across major CLI commands
+
 ## v0.3.5 - 2026-03-04
 
 ### Highlights
