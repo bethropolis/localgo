@@ -312,11 +312,19 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 var stdinReader = bufio.NewReader(os.Stdin)
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
+	fileCount := len(files)
+	var totalSize int64
+	for _, f := range files {
+		totalSize += f.Size
+	}
+
+	cli.Notify("LocalGo: Incoming Transfer",
+		fmt.Sprintf("%s wants to send you %d file(s) (%s)", sender.Alias, fileCount, cli.FormatBytes(totalSize)))
+
 	// Output to stderr to avoid interfering with stdout
 	fmt.Fprintf(os.Stderr, "\n%s\n", cli.WarningStyle.Render("Incoming transfer"))
 	fmt.Fprintf(os.Stderr, "From: %s (IP: %s)\n", cli.InfoStyle.Render(sender.Alias), sender.IP)
 
-	var totalSize int64
 	var hasText bool
 	fmt.Fprintf(os.Stderr, "Files:\n")
 	for _, file := range files {

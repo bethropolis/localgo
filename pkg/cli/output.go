@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/gen2brain/beeep"
 )
 
 // OutputFormat represents the output format type
@@ -227,6 +228,11 @@ func FormatDuration(d time.Duration) string {
 		return fmt.Sprintf("%.1fm", d.Minutes())
 	}
 	return fmt.Sprintf("%.1fh", d.Hours())
+}
+
+// Notify sends a native desktop notification. Icon is empty (system default).
+func Notify(title, body string) {
+	beeep.Notify(title, body, "")
 }
 
 // ProgressBar represents a simple progress bar
