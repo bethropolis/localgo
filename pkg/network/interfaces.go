@@ -130,7 +130,7 @@ func GetSubnetIPs(ip net.IP) []net.IP {
 		newIP := make(net.IP, len(ip4))
 		copy(newIP, ip4)
 		newIP[3] = byte(i)
-		
+
 		// Skip if it matches the original IP (optional, but scan logic might want to include self for testing)
 		// Keeping self allows "finding" the local node which confirms scan is running.
 		ips = append(ips, newIP)

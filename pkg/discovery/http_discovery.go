@@ -169,12 +169,12 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 	}, nil
 }
 
-func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips[]net.IP, port int) ([]*model.Device, error) {
-	var devices[]*model.Device
+func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int) ([]*model.Device, error) {
+	var devices []*model.Device
 	var wg sync.WaitGroup
 	deviceChan := make(chan *model.Device, len(ips))
 
-	// Semaphore limits parallel pinging to prevent socket exhaustion 
+	// Semaphore limits parallel pinging to prevent socket exhaustion
 	sem := make(chan struct{}, 100)
 
 	hd.logger.Debugf("Scanning %d IPs on port %d", len(ips), port)

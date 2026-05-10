@@ -397,23 +397,7 @@ func (app *Application) runServe(cfg *config.Config, port *int, useHTTP *bool, p
 	if *interval > 0 {
 		discoverySvcConfig.AnnounceInterval = time.Duration(*interval) * time.Second
 	}
-
-	protocol_type := model.ProtocolTypeHTTP
-	if cfg.HttpsEnabled {
-		protocol_type = model.ProtocolTypeHTTPS
-	}
-
-	multicastDto := model.MulticastDto{
-		Alias:       cfg.Alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: cfg.DeviceModel,
-		DeviceType:  cfg.DeviceType,
-		Fingerprint: cfg.SecurityContext.CertificateHash,
-		Port:        cfg.Port,
-		Protocol:    protocol_type,
-		Download:    false,
-		Announce:    true,
-	}
+	multicastDto := cfg.ToMulticastDto(false)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
 
@@ -568,23 +552,7 @@ func (app *Application) runShare(cfg *config.Config, files []string, port *int, 
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
-
-	protocol_type := model.ProtocolTypeHTTP
-	if cfg.HttpsEnabled {
-		protocol_type = model.ProtocolTypeHTTPS
-	}
-
-	multicastDto := model.MulticastDto{
-		Alias:       cfg.Alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: cfg.DeviceModel,
-		DeviceType:  cfg.DeviceType,
-		Fingerprint: cfg.SecurityContext.CertificateHash,
-		Port:        cfg.Port,
-		Protocol:    protocol_type,
-		Download:    true,
-		Announce:    true,
-	}
+	multicastDto := cfg.ToMulticastDto(true)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, zap.S())
@@ -648,23 +616,7 @@ func (app *Application) runDiscover(cfg *config.Config, timeout *int, jsonOutput
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
-
-	protocol := model.ProtocolTypeHTTP
-	if cfg.HttpsEnabled {
-		protocol = model.ProtocolTypeHTTPS
-	}
-
-	multicastDto := model.MulticastDto{
-		Alias:       cfg.Alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: cfg.DeviceModel,
-		DeviceType:  cfg.DeviceType,
-		Fingerprint: cfg.SecurityContext.CertificateHash,
-		Port:        cfg.Port,
-		Protocol:    protocol,
-		Download:    false,
-		Announce:    true,
-	}
+	multicastDto := cfg.ToMulticastDto(false)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())

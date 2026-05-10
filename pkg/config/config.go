@@ -43,20 +43,19 @@ type Config struct {
 
 // getSecurityDir determines the best location for the security directory
 func getSecurityDir() string {
-    if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
-        zap.S().Infof("Using security directory: %s", envDir)
-        return envDir
-    }
+	if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
+		zap.S().Infof("Using security directory: %s", envDir)
+		return envDir
+	}
 
-    configDir, err := os.UserConfigDir()
-    if err != nil {
-        zap.S().Warnf("Could not determine config directory: %v; falling back to current directory", err)
-        return DefaultSecurityDir
-    }
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		zap.S().Warnf("Could not determine config directory: %v; falling back to current directory", err)
+		return DefaultSecurityDir
+	}
 
-    return filepath.Join(configDir, "localgo", ".security")
+	return filepath.Join(configDir, "localgo", ".security")
 }
-
 
 // testDirWritable tests if a directory is writable (creates it if needed)
 // Returns true if the directory exists or can be created and is writable

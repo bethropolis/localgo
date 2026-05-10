@@ -8,12 +8,12 @@ import (
 
 // Device represents a peer device.
 type Device struct {
-	IP          string     `json:"ip"`
-	Version     string     `json:"version"` // LocalSend protocol version
-	Port        int        `json:"port"`
-	Alias       string     `json:"alias"`
-	Protocol    ProtocolType `json:"protocol"`
-	
+	IP       string       `json:"ip"`
+	Version  string       `json:"version"` // LocalSend protocol version
+	Port     int          `json:"port"`
+	Alias    string       `json:"alias"`
+	Protocol ProtocolType `json:"protocol"`
+
 	Fingerprint string     `json:"fingerprint"`
 	DeviceModel *string    `json:"deviceModel"` // nullable
 	DeviceType  DeviceType `json:"deviceType"`
