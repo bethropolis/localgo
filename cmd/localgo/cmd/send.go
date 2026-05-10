@@ -48,15 +48,15 @@ var sendCmd = &cobra.Command{
 			Cfg.Alias = sendalias
 		}
 
-		zap.S().Infof("Sending %d files", len(files))
+		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
 		for _, file := range files {
 			fileInfo, err := os.Stat(file)
 			if err == nil {
-				zap.S().Infof("  - %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+				cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 			}
 		}
-		zap.S().Infof("  To: %s", sendto)
-		zap.S().Infof("  From: %s", Cfg.Alias)
+		cli.PrintInfo("To: %s", sendto)
+		cli.PrintInfo("From: %s", Cfg.Alias)
 
 		// Create context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
@@ -68,7 +68,7 @@ var sendCmd = &cobra.Command{
 			return fmt.Errorf("failed to send files: %w", err)
 		}
 
-		zap.S().Infof("Files sent successfully!")
+		cli.PrintSuccess("Files sent successfully!")
 		return nil
 	},
 }

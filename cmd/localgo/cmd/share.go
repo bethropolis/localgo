@@ -77,10 +77,12 @@ var shareCmd = &cobra.Command{
 			protocol = "HTTP"
 		}
 
-		zap.S().Infof("Starting LocalGo Web Share")
-		zap.S().Infof("  Alias: %s", Cfg.Alias)
-		zap.S().Infof("  Protocol: %s", protocol)
-		zap.S().Infof("  Port: %d", Cfg.Port)
+		if !sharequiet {
+			cli.PrintHeader("Starting LocalGo Web Share")
+			cli.PrintInfo("Alias: %s", Cfg.Alias)
+			cli.PrintInfo("Protocol: %s", protocol)
+			cli.PrintInfo("Port: %d", Cfg.Port)
+		}
 
 		// Verify and prepare files
 		filesMap := make(map[string]model.FileDto)
@@ -116,7 +118,9 @@ var shareCmd = &cobra.Command{
 
 			filesMap[id] = fileDto
 			pathsMap[id] = file
-			zap.S().Infof("  Sharing: %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+			if !sharequiet {
+				cli.PrintInfo("Sharing: %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+			}
 		}
 
 		// Create server
@@ -164,8 +168,10 @@ var shareCmd = &cobra.Command{
 			return fmt.Errorf("discovery service failed: %w", err)
 		}
 
-		zap.S().Infof("Server ready! Waiting for connections...")
-		zap.S().Infof("Press Ctrl+C to stop sharing")
+		if !sharequiet {
+			cli.PrintSuccess("Server ready! Waiting for connections...")
+			cli.PrintWarning("Press Ctrl+C to stop sharing")
+		}
 
 		// Wait for server to finish
 		if err := <-serverErrChan; err != nil {
@@ -173,7 +179,9 @@ var shareCmd = &cobra.Command{
 		}
 
 		discoverySvc.Stop()
-		zap.S().Infof("Web share stopped")
+		if !sharequiet {
+			cli.PrintInfo("Web share stopped")
+		}
 		return nil
 		return nil
 	},

@@ -2,6 +2,7 @@ package logging
 
 import (
 	"os"
+	"path/filepath"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -54,21 +55,44 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 		level = zapcore.DebugLevel
 	}
 
-	var core zapcore.Core
+	stateDir := ""
+	if xdgState := os.Getenv("XDG_STATE_HOME"); xdgState != "" {
+		stateDir = filepath.Join(xdgState, "localgo")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		stateDir = filepath.Join(home, ".local", "state", "localgo")
+	}
 
+	var fileWs zapcore.WriteSyncer
+	if stateDir != "" {
+		os.MkdirAll(stateDir, 0700)
+		logPath := filepath.Join(stateDir, "app.log")
+		if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600); err == nil {
+			fileWs = zapcore.Lock(f)
+		}
+	}
+	if fileWs == nil {
+		fileWs = zapcore.AddSync(os.Stderr)
+	}
+
+	var fileEnc zapcore.Encoder
 	if jsonFmt {
-		// JSON encoder – suitable for log aggregation pipelines
 		encCfg := zap.NewProductionEncoderConfig()
 		encCfg.TimeKey = "time"
 		encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 		encCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
-
-		enc := zapcore.NewJSONEncoder(encCfg)
-		ws := zapcore.Lock(os.Stdout)
-		core = zapcore.NewCore(enc, ws, level)
+		fileEnc = zapcore.NewJSONEncoder(encCfg)
 	} else {
-		// Coloured console encoder
-		encCfg := zapcore.EncoderConfig{
+		encCfg := zap.NewProductionEncoderConfig()
+		encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+		fileEnc = zapcore.NewConsoleEncoder(encCfg)
+	}
+
+	fileCore := zapcore.NewCore(fileEnc, fileWs, level)
+
+	var core zapcore.Core
+	if verbose {
+		// Also log to stdout
+		stdoutEncCfg := zapcore.EncoderConfig{
 			TimeKey:          "T",
 			LevelKey:         "L",
 			NameKey:          "N",
@@ -82,14 +106,11 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 			EncodeCaller:     zapcore.ShortCallerEncoder,
 			ConsoleSeparator: "  ",
 		}
-
-		if !verbose {
-			encCfg.CallerKey = "" // Disable caller in non-verbose mode
-		}
-
-		enc := zapcore.NewConsoleEncoder(encCfg)
-		ws := zapcore.Lock(os.Stdout)
-		core = zapcore.NewCore(enc, ws, level)
+		stdoutEnc := zapcore.NewConsoleEncoder(stdoutEncCfg)
+		stdoutCore := zapcore.NewCore(stdoutEnc, zapcore.Lock(os.Stdout), level)
+		core = zapcore.NewTee(fileCore, stdoutCore)
+	} else {
+		core = fileCore
 	}
 
 	opts := []zap.Option{zap.AddCaller(), zap.AddCallerSkip(0)}

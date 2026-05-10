@@ -65,27 +65,27 @@ func (ow *OutputWriter) WriteMessage(message string) {
 
 // WriteError outputs an error message
 func (ow *OutputWriter) WriteError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "%s\n", ErrorStyle.Render(fmt.Sprintf("Error: %v", err)))
 }
 
 // WriteProgress outputs progress information
 func (ow *OutputWriter) WriteProgress(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("⏳ %s\n", message)
+		fmt.Printf("%s\n", InfoStyle.Render(fmt.Sprintf("⏳ %s", message)))
 	}
 }
 
 // WriteSuccess outputs a success message
 func (ow *OutputWriter) WriteSuccess(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("✅ %s\n", message)
+		fmt.Printf("%s\n", SuccessStyle.Render(fmt.Sprintf("✅ %s", message)))
 	}
 }
 
 // WriteWarning outputs a warning message
 func (ow *OutputWriter) WriteWarning(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("⚠️  %s\n", message)
+		fmt.Printf("%s\n", WarningStyle.Render(fmt.Sprintf("⚠️  %s", message)))
 	}
 }
 
@@ -274,33 +274,24 @@ func (pb *ProgressBar) render() {
 		FormatBytes(pb.total))
 }
 
-// ColorCode represents ANSI color codes
-type ColorCode string
+// Standalone Print helpers
 
-const (
-	ColorReset  ColorCode = "\033[0m"
-	ColorRed    ColorCode = "\033[31m"
-	ColorGreen  ColorCode = "\033[32m"
-	ColorYellow ColorCode = "\033[33m"
-	ColorBlue   ColorCode = "\033[34m"
-	ColorPurple ColorCode = "\033[35m"
-	ColorCyan   ColorCode = "\033[36m"
-	ColorWhite  ColorCode = "\033[37m"
-	ColorBold   ColorCode = "\033[1m"
-)
-
-// Colorize applies color to text if stdout is a terminal
-func Colorize(text string, color ColorCode) string {
-	if isTerminal() {
-		return string(color) + text + string(ColorReset)
-	}
-	return text
+func PrintSuccess(format string, a ...any) {
+	fmt.Println(SuccessStyle.Render("✅ " + fmt.Sprintf(format, a...)))
 }
 
-// isTerminal checks if stdout is a terminal
-func isTerminal() bool {
-	// Simple check - in a real implementation you might want to use
-	// a library like github.com/mattn/go-isatty
-	fileInfo, _ := os.Stdout.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+func PrintError(format string, a ...any) {
+	fmt.Println(ErrorStyle.Render("❌ " + fmt.Sprintf(format, a...)))
+}
+
+func PrintWarning(format string, a ...any) {
+	fmt.Println(WarningStyle.Render("⚠️  " + fmt.Sprintf(format, a...)))
+}
+
+func PrintInfo(format string, a ...any) {
+	fmt.Println(InfoStyle.Render("ℹ️  " + fmt.Sprintf(format, a...)))
+}
+
+func PrintHeader(text string) {
+	fmt.Println(HeaderStyle.Render(text))
 }

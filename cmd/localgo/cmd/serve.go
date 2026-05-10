@@ -10,6 +10,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/spf13/cobra"
@@ -77,20 +78,20 @@ var serveCmd = &cobra.Command{
 			protocol = "HTTP"
 		}
 
-		logFn := zap.S().Infof
-		if servequiet {
-			logFn = zap.S().Warnf
+		zap.S().Infof("Starting LocalGo server")
+		zap.S().Infof("Alias: %s", Cfg.Alias)
+		zap.S().Infof("Protocol: %s", protocol)
+		if !servequiet {
+			cli.PrintHeader("Starting LocalGo server")
+			cli.PrintInfo("Alias: %s", Cfg.Alias)
+			cli.PrintInfo("Protocol: %s", protocol)
+			cli.PrintInfo("Port: %d", Cfg.Port)
+			cli.PrintInfo("Download Directory: %s", Cfg.DownloadDir)
+			if Cfg.PIN != "" {
+				cli.PrintInfo("PIN Protection: Enabled")
+			}
+			cli.PrintInfo("Fingerprint: %s", Cfg.SecurityContext.CertificateHash[:16]+"...")
 		}
-
-		logFn("Starting LocalGo server")
-		logFn("  Alias: %s", Cfg.Alias)
-		logFn("  Protocol: %s", protocol)
-		logFn("  Port: %d", Cfg.Port)
-		logFn("  Download Directory: %s", Cfg.DownloadDir)
-		if Cfg.PIN != "" {
-			logFn("  PIN Protection: Enabled")
-		}
-		logFn("  Fingerprint: %s", Cfg.SecurityContext.CertificateHash[:16]+"...")
 
 		// Context for graceful shutdown
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -117,6 +118,7 @@ var serveCmd = &cobra.Command{
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !servequiet {
 				zap.S().Infof("Device discovered: %s (%s)", device.Alias, device.IP)
+				cli.PrintSuccess("Device discovered: %s (%s)", device.Alias, device.IP)
 			}
 		})
 
@@ -144,7 +146,8 @@ var serveCmd = &cobra.Command{
 
 		if !servequiet {
 			zap.S().Infof("Server ready! Waiting for files...")
-			zap.S().Infof("Press Ctrl+C to stop")
+			cli.PrintSuccess("Server ready! Waiting for files...")
+			cli.PrintWarning("Press Ctrl+C to stop")
 		}
 
 		// Wait for server to finish
@@ -154,9 +157,10 @@ var serveCmd = &cobra.Command{
 
 		discoverySvc.Stop()
 		if servequiet {
-			zap.S().Warnf("Server stopped")
+			zap.S().Infof("Server stopped")
 		} else {
 			zap.S().Infof("Server stopped")
+			cli.PrintInfo("Server stopped")
 		}
 		return nil
 		return nil

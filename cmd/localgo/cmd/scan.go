@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/network"
@@ -49,9 +50,9 @@ var scanCmd = &cobra.Command{
 		}
 
 		if !scanquiet {
-			zap.S().Infof("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout)
-			zap.S().Infof("  Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
-			zap.S().Infof("  Protocols: HTTPS first, then HTTP fallback")
+			cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout))
+			cli.PrintInfo("Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
+			cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
 		}
 
 		// Initialize HTTP discovery
@@ -64,10 +65,12 @@ var scanCmd = &cobra.Command{
 		foundDevices, err := httpDiscoverer.ScanNetwork(scanCtx, ips, scanPort)
 		if err != nil && !scanquiet {
 			zap.S().Warnf("Scan completed with warnings: %v", err)
+			cli.PrintWarning("Scan completed with warnings: %v", err)
 		}
 
 		if !scanquiet && len(foundDevices) == 0 {
-			zap.S().Warnf("No devices found during scan. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking TCP ports %d (HTTP/HTTPS)\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", scanPort)
+			zap.S().Warnf("No devices found during scan")
+			cli.PrintWarning("No devices found during scan. Check your firewall or network.")
 		}
 
 		return displayDevices(foundDevices, scanjsonOutput, scanquiet, "HTTP scan")

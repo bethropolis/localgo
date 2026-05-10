@@ -7,6 +7,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -30,10 +31,11 @@ var discoverCmd = &cobra.Command{
 		}
 
 		if !discoverquiet {
-			zap.S().Infof("Discovering devices (timeout: %ds)...", discoverTimeout)
-			zap.S().Infof("  Multicast group: %s", Cfg.MulticastGroup)
-			zap.S().Infof("  Port: %d", Cfg.Port)
-			zap.S().Infof("  Protocol: %s", func() string {
+			cli.PrintHeader("Discovering devices")
+			cli.PrintInfo("Timeout: %ds", discoverTimeout)
+			cli.PrintInfo("Multicast group: %s", Cfg.MulticastGroup)
+			cli.PrintInfo("Port: %d", Cfg.Port)
+			cli.PrintInfo("Protocol: %s", func() string {
 				if Cfg.HttpsEnabled {
 					return "HTTPS"
 				}
@@ -53,6 +55,7 @@ var discoverCmd = &cobra.Command{
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !discoverquiet {
 				zap.S().Infof("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
+				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
 			}
 		})
 
@@ -63,10 +66,12 @@ var discoverCmd = &cobra.Command{
 		foundDevices, err := discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
 		if err != nil && !discoverquiet {
 			zap.S().Warnf("Discovery completed with warnings: %v", err)
+			cli.PrintWarning("Discovery completed with warnings: %v", err)
 		}
 
 		if !discoverquiet && len(foundDevices) == 0 {
-			zap.S().Warnf("No devices discovered. If you expected to see a device, check:\n- That both devices are on the same Wi-Fi network\n- That firewalls are not blocking UDP port %d\n- That AP/Client Isolation is disabled on your router\n- That the LocalSend app is open and in receive mode", Cfg.Port)
+			zap.S().Warnf("No devices discovered")
+			cli.PrintWarning("No devices discovered. Check your firewall or network.")
 		}
 
 		return displayDevices(foundDevices, discoverjsonOutput, discoverquiet, "multicast discovery")

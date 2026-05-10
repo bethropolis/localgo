@@ -313,8 +313,8 @@ var stdinReader = bufio.NewReader(os.Stdin)
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
 	// Output to stderr to avoid interfering with stdout
-	fmt.Fprintf(os.Stderr, "\n%s Incoming transfer %s\n", cli.ColorYellow, cli.ColorReset)
-	fmt.Fprintf(os.Stderr, "From: %s%s%s (IP: %s)\n", cli.ColorCyan, sender.Alias, cli.ColorReset, sender.IP)
+	fmt.Fprintf(os.Stderr, "\n%s\n", cli.WarningStyle.Render("Incoming transfer"))
+	fmt.Fprintf(os.Stderr, "From: %s (IP: %s)\n", cli.InfoStyle.Render(sender.Alias), sender.IP)
 
 	var totalSize int64
 	var hasText bool
