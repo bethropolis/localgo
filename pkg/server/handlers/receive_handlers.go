@@ -437,7 +437,7 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	if session != nil {
 		h.logger.Infof("Canceling session %s at user request.", reqSessionId)
 		h.receiveService.CloseSession(reqSessionId)
-		if h.config.OpenDir {
+		if h.config.OpenDir && !cli.IsContainer() {
 			go func() {
 				var cmd string
 				var args []string

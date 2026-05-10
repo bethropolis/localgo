@@ -234,7 +234,11 @@ func FormatDuration(d time.Duration) string {
 }
 
 // Notify sends a native desktop notification. Icon is empty (system default).
+// No-op in container environments.
 func Notify(title, body string) {
+	if IsContainer() {
+		return
+	}
 	beeep.Notify(title, body, "")
 }
 
@@ -305,8 +309,22 @@ func PrintHeader(text string) {
 	fmt.Println(HeaderStyle.Render(text))
 }
 
+// IsContainer returns true if LocalGo is running inside a Docker/Podman container.
+func IsContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if os.Getenv("container") != "" {
+		return true
+	}
+	return false
+}
+
 // PickDevice presents an interactive TUI to select a device. Returns the selected device or nil if canceled.
 func PickDevice(devices []*model.Device) *model.Device {
+	if IsContainer() {
+		return nil
+	}
 	if len(devices) == 0 {
 		return nil
 	}
@@ -338,8 +356,11 @@ func PickDevice(devices []*model.Device) *model.Device {
 }
 
 // PickFiles opens a native file picker and returns the selected path.
-// Returns an error on cancel or on unsupported platforms (e.g. headless).
+// Returns an error on cancel, in containers, or on unsupported platforms.
 func PickFiles() (string, error) {
+	if IsContainer() {
+		return "", fmt.Errorf("file picker not supported in containers")
+	}
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		path, err := dialog.File().Load()
 		if err != nil {

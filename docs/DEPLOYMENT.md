@@ -2,70 +2,88 @@
 
 This guide covers various ways to deploy and run LocalGo, from simple binaries to containerized setups.
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
-LocalGo provides official Docker images via GitHub Container Registry (GHCR).
+LocalGo provides official images via GitHub Container Registry (GHCR).
 
-### Basic Run
-The simplest way to run LocalGo in a container:
+### Image Variants
+
+| Image | Tag | Base | Size | Notes |
+|-------|-----|------|------|-------|
+| Standard | `latest` | Alpine | ~25 MB | Includes shell, useful for debugging |
+| Scratch | `scratch` | `scratch` | ~10 MB | No shell, production-recommended |
+
+The **scratch** image is built from `Dockerfile.scratch`. It uses `localgo docker-start` to handle permission setup natively via `syscall.Setuid`/`Setgid`.
+
+### Quick Run (Scratch)
 
 ```bash
+mkdir -p downloads config
 docker run -d \
   --name localgo \
   --restart unless-stopped \
-  -p 53317:53317 \
-  -p 53317:53317/udp \
-  -v ./downloads:/app/downloads \
-  -v ./localgo_data:/app/.localgo_security \
-  -e LOCALSEND_ALIAS="My-Docker-Node" \
-  ghcr.io/bethropolis/localgo:latest
+  --network host \
+  -v $(pwd)/downloads:/app/downloads:z \
+  -v $(pwd)/config:/app/config:z \
+  -e PUID=$(id -u) -e PGID=$(id -g) \
+  ghcr.io/bethropolis/localgo:scratch
 ```
-
-**Notes:**
-- We expose `53317` on both TCP (file transfer) and UDP (discovery).
-- We mount volumes for `downloads` (files you receive) and `.localgo_security` (to persist your identity/fingerprint).
-
----
 
 ### Docker Compose (Recommended)
 
-For a persistent and reproducible setup, use Docker Compose.
+LocalGo ships with three compose files:
 
-Create a `docker-compose.yml` file:
+| File | Use case |
+|------|---------|
+| `docker-compose.yml` | Standard image on Linux |
+| `docker-compose.scratch.yml` | Scratch image on Linux |
+| `docker-compose.macvlan.yml` | Scratch image with macvlan networking (Mac/Windows) |
+
+```bash
+# Linux — standard image
+docker compose up -d
+
+# Linux — scratch image (production)
+docker compose -f docker-compose.scratch.yml up -d
+
+# macOS/Windows — macvlan (bypasses VM isolation)
+NETWORK_INTERFACE=eth0 docker compose -f docker-compose.macvlan.yml up -d
+```
+
+### Building Locally
+
+```bash
+# Standard image
+docker build -t localgo .
+
+# Scratch image
+docker build -f Dockerfile.scratch -t localgo:scratch .
+```
+
+### Health Check
+
+Both images ship with a built-in health check. The scratch image uses `localgo health` directly — no shell or external tools needed:
+
+```bash
+docker inspect localgo | jq '.[0].State.Health.Status'
+```
+
+`localgo health` hits `http://127.0.0.1:53317/api/localsend/v2/info` and exits `0` on 200, `1` otherwise.
+
+### Read-Only Root Filesystem (Scratch)
+
+The scratch image supports `read_only: true` for maximum container security. Only `/app/downloads` and `/app/config` are writeable:
 
 ```yaml
-version: '3.8'
-
-services:
-  localgo:
-    image: ghcr.io/bethropolis/localgo:latest
-    container_name: localgo
-    restart: unless-stopped
-    ports:
-      # TCP for file transfer, UDP for multicast discovery
-      - "53317:53317"
-      - "53317:53317/udp"
-    volumes:
-      # Persist received files
-      - ./downloads:/app/downloads
-      # Persist SSL certs and config fingerprint
-      - ./localgo_data:/app/.localgo_security
-    environment:
-      - LOCALSEND_ALIAS=Docker-Server
-      - LOCALSEND_DEVICE_TYPE=server
-      # Optional: PIN protection
-      # - LOCALSEND_PIN=12345
+read_only: true
+security_opt:
+  - no-new-privileges:true
+volumes:
+  - ./downloads:/app/downloads:z
+  - ./config:/app/config:z
 ```
 
-**Start the service:**
-```bash
-docker-compose up -d
-```
-
-**View logs:**
-```bash
-docker-compose logs -f
-```
+See [Container Documentation](CONTAINER.md) for full details on image variants, macvlan setup, and deployment.
 
 ---
 

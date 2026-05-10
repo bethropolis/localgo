@@ -37,6 +37,9 @@ LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.license="MIT"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.vendor="Bethropolis"
+LABEL org.opencontainers.image.ref.name="localgo"
+LABEL com.centurylinklabs.watchtower.enable="true"
 
 WORKDIR /app
 
@@ -77,8 +80,8 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 STOPSIGNAL SIGTERM
 
 # Health check using HTTP endpoint (faster than CLI which loads config)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:53317/api/localsend/v2/info || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/usr/local/bin/localgo", "health"]
 
 # Use entrypoint script to fix permissions (runs as root)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

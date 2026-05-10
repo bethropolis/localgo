@@ -1,0 +1,40 @@
+services:
+  localgo:
+    image: ghcr.io/bethropolis/localgo:scratch
+    container_name: localgo
+    restart: unless-stopped
+    network_mode: host
+
+    environment:
+      - LOCALSEND_ALIAS=${LOCALSEND_ALIAS:-LocalGo-Scratch}
+      - LOCALSEND_PORT=${LOCALSEND_PORT:-53317}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - LOCALSEND_AUTO_ACCEPT=${LOCALSEND_AUTO_ACCEPT:-true}
+      - LOCALSEND_FORCE_HTTP=${LOCALSEND_FORCE_HTTP:-false}
+      - LOCALSEND_PIN=${LOCALSEND_PIN:-}
+      - LOCALSEND_MULTICAST_GROUP=${LOCALSEND_MULTICAST_GROUP:-224.0.0.167}
+
+    volumes:
+      - ./downloads:/app/downloads:z
+      - ./config:/app/config:z
+
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["/localgo", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
