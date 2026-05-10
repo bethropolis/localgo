@@ -1,0 +1,43 @@
+services:
+  localgo:
+    image: ghcr.io/bethropolis/localgo:scratch
+    container_name: localgo
+    restart: unless-stopped
+
+    networks:
+      home_lan:
+        ipv4_address: 192.168.1.50
+
+    environment:
+      - LOCALSEND_ALIAS=${LOCALSEND_ALIAS:-LocalGo-Macvlan}
+      - LOCALSEND_PORT=${LOCALSEND_PORT:-53317}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - LOCALSEND_AUTO_ACCEPT=${LOCALSEND_AUTO_ACCEPT:-true}
+      - LOCALSEND_FORCE_HTTP=${LOCALSEND_FORCE_HTTP:-false}
+      - LOCALSEND_PIN=${LOCALSEND_PIN:-}
+
+    volumes:
+      - ./downloads:/app/downloads:z
+      - ./config:/app/config:z
+
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["/localgo", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  home_lan:
+    driver: macvlan
+    driver_opts:
+      parent: ${NETWORK_INTERFACE:-eth0}
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.1

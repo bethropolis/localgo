@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/spf13/viper"
 	"crypto/rand"
 	"fmt"
 	"os"
@@ -39,11 +40,12 @@ type Config struct {
 	HistoryFile       string                        `json:"-"` // path to transfer history jsonl file
 	Quiet             bool                          `json:"-"` // quiet mode - minimal output
 	ExecHook          string                        `json:"-"` // shell command to run after receiving file
+	OpenDir           bool                          `json:"-"` // open download directory after transfer
 }
 
 // getSecurityDir determines the best location for the security directory
-func getSecurityDir() string {
-	if envDir := os.Getenv("LOCALSEND_SECURITY_DIR"); envDir != "" {
+func getSecurityDir(v *viper.Viper) string {
+	if envDir := v.GetString("security_dir"); envDir != "" {
 		zap.S().Infof("Using security directory: %s", envDir)
 		return envDir
 	}
@@ -84,28 +86,31 @@ func testDirWritable(dir string) bool {
 	return true
 }
 
-func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
-	alias := os.Getenv("LOCALSEND_ALIAS")
+func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
+	if v == nil {
+		v = InitViper()
+	}
+	alias := v.GetString("alias")
 	if alias == "" {
 		alias = generateDefaultAlias()
 	}
 
 	// Use the new security directory resolution
-	securityDirPath := getSecurityDir()
+	securityDirPath := getSecurityDir(v)
 	securityFilePath := filepath.Join(securityDirPath, DefaultSecurityFile)
 
-	portStr := os.Getenv("LOCALSEND_PORT")
+	portStr := v.GetString("port")
 	port := DefaultPort
 	if p, err := strconv.Atoi(portStr); err == nil {
 		port = p
 	}
 
-	multicastGroup := os.Getenv("LOCALSEND_MULTICAST_GROUP")
+	multicastGroup := v.GetString("multicast_group")
 	if multicastGroup == "" {
 		multicastGroup = DefaultMulticastGroup
 	}
 
-	downloadDir := os.Getenv("LOCALSEND_DOWNLOAD_DIR")
+	downloadDir := v.GetString("download_dir")
 	if downloadDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -114,7 +119,7 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 		downloadDir = filepath.Join(home, "Downloads", "localgo")
 	}
 
-	maxBodySizeStr := os.Getenv("LOCALSEND_MAX_BODY_SIZE")
+	maxBodySizeStr := v.GetString("max_body_size")
 	maxBodySize := int64(0)
 	if maxBodySizeStr != "" {
 		if size, err := strconv.ParseInt(maxBodySizeStr, 10, 64); err == nil {
@@ -125,7 +130,7 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 	}
 
 	// Parse LOCALSEND_FORCE_HTTP
-	forceHTTP := os.Getenv("LOCALSEND_FORCE_HTTP") == "true" || os.Getenv("LOCALSEND_FORCE_HTTP") == "1"
+	forceHTTP := v.GetString("force_http") == "true" || v.GetString("force_http") == "1"
 	HttpsEnabled := !forceHTTP
 
 	securityContext, err := crypto.LoadSecurityContext(securityFilePath, logger)
@@ -151,22 +156,22 @@ func LoadConfig(logger *zap.SugaredLogger) (*Config, error) {
 	deviceType := model.DeviceTypeDesktop
 
 	// Parse LOCALSEND_DEVICE_MODEL
-	if envDeviceModel := os.Getenv("LOCALSEND_DEVICE_MODEL"); envDeviceModel != "" {
+	if envDeviceModel := v.GetString("device_model"); envDeviceModel != "" {
 		deviceModel = envDeviceModel
 	}
 
 	// Parse LOCALSEND_DEVICE_TYPE
-	if envDeviceType := os.Getenv("LOCALSEND_DEVICE_TYPE"); envDeviceType != "" {
+	if envDeviceType := v.GetString("device_type"); envDeviceType != "" {
 		deviceType = model.DeviceType(envDeviceType)
 	}
 
-	autoAccept := os.Getenv("LOCALSEND_AUTO_ACCEPT") == "true" || os.Getenv("LOCALSEND_AUTO_ACCEPT") == "1"
-	noClipboard := os.Getenv("LOCALSEND_NO_CLIPBOARD") == "true" || os.Getenv("LOCALSEND_NO_CLIPBOARD") == "1"
-	quiet := os.Getenv("LOCALSEND_QUIET") == "true" || os.Getenv("LOCALSEND_QUIET") == "1"
+	autoAccept := v.GetString("auto_accept") == "true" || v.GetString("auto_accept") == "1"
+	noClipboard := v.GetString("no_clipboard") == "true" || v.GetString("no_clipboard") == "1"
+	quiet := v.GetString("quiet") == "true" || v.GetString("quiet") == "1"
 
-	historyFile := os.Getenv("LOCALSEND_HISTORY")
+	historyFile := v.GetString("history")
 
-	execHook := os.Getenv("LOCALSEND_EXEC")
+	execHook := v.GetString("exec")
 
 	cfg := &Config{
 		Alias:             alias,

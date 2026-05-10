@@ -25,15 +25,15 @@ type FlagHelp struct {
 
 // ShowMainUsage displays the main help screen with colored output
 func ShowMainUsage() {
-	header := cli.Colorize("LocalGo CLI", cli.ColorBold+cli.ColorCyan)
-	subheader := cli.Colorize("LocalSend v2.1 Protocol Implementation", cli.ColorCyan)
+	header := cli.HeaderStyle.Render("LocalGo CLI")
+	subheader := cli.InfoStyle.Render("LocalSend v2.1 Protocol Implementation")
 
 	fmt.Printf("%s - %s\n\n", header, subheader)
 
-	fmt.Printf("%s\n", cli.Colorize("USAGE:", cli.ColorBold+cli.ColorYellow))
+	fmt.Printf("%s\n", cli.WarningStyle.Render("USAGE:"))
 	fmt.Printf("    localgo <COMMAND> [OPTIONS]\n\n")
 
-	fmt.Printf("%s\n", cli.Colorize("COMMANDS:", cli.ColorBold+cli.ColorYellow))
+	fmt.Printf("%s\n", cli.WarningStyle.Render("COMMANDS:"))
 	commands := []struct {
 		name, desc string
 	}{
@@ -49,16 +49,16 @@ func ShowMainUsage() {
 	}
 
 	for _, cmd := range commands {
-		fmt.Printf("    %-12s %s\n", cli.Colorize(cmd.name, cli.ColorGreen), cmd.desc)
+		fmt.Printf("    %-12s %s\n", cli.SuccessStyle.Render(cmd.name), cmd.desc)
 	}
 
-	fmt.Printf("\n%s\n", cli.Colorize("OPTIONS:", cli.ColorBold+cli.ColorYellow))
-	fmt.Printf("    %s  Show help\n", cli.Colorize("-h, --help", cli.ColorCyan))
-	fmt.Printf("    %s  Show version\n", cli.Colorize("-v, --version", cli.ColorCyan))
-	fmt.Printf("    %s      Enable debug logging\n", cli.Colorize("--verbose", cli.ColorCyan))
-	fmt.Printf("    %s         Enable JSON log output\n\n", cli.Colorize("--json", cli.ColorCyan))
+	fmt.Printf("\n%s\n", cli.WarningStyle.Render("OPTIONS:"))
+	fmt.Printf("    %s  Show help\n", cli.InfoStyle.Render("-h, --help"))
+	fmt.Printf("    %s  Show version\n", cli.InfoStyle.Render("-v, --version"))
+	fmt.Printf("    %s      Enable debug logging\n", cli.InfoStyle.Render("--verbose"))
+	fmt.Printf("    %s         Enable JSON log output\n\n", cli.InfoStyle.Render("--json"))
 
-	fmt.Printf("%s\n", cli.Colorize("EXAMPLES:", cli.ColorBold+cli.ColorYellow))
+	fmt.Printf("%s\n", cli.WarningStyle.Render("EXAMPLES:"))
 	examples := []string{
 		"localgo serve --port 8080 --http",
 		"localgo discover --timeout 10",
@@ -68,13 +68,13 @@ func ShowMainUsage() {
 	}
 
 	for _, ex := range examples {
-		fmt.Printf("    %s\n", cli.Colorize(ex, cli.ColorGreen))
+		fmt.Printf("    %s\n", cli.SuccessStyle.Render(ex))
 	}
 
-	fmt.Printf("\n%s\n", cli.Colorize("For more information about a specific command, use:", cli.ColorBold))
+	fmt.Printf("\n%s\n", cli.HeaderStyle.Render("For more information about a specific command, use:"))
 	fmt.Printf("    localgo help <COMMAND>\n\n")
 
-	fmt.Printf("%s\n", cli.Colorize("ENVIRONMENT VARIABLES:", cli.ColorBold+cli.ColorYellow))
+	fmt.Printf("%s\n", cli.WarningStyle.Render("ENVIRONMENT VARIABLES:"))
 	envVars := []struct {
 		name, desc string
 	}{
@@ -96,34 +96,34 @@ func ShowMainUsage() {
 	}
 
 	for _, env := range envVars {
-		fmt.Printf("    %-28s %s\n", cli.Colorize(env.name, cli.ColorCyan), env.desc)
+		fmt.Printf("    %-28s %s\n", cli.InfoStyle.Render(env.name), env.desc)
 	}
 	fmt.Println()
 }
 
 // ShowCommandHelp displays help for a specific command
 func ShowCommandHelp(help CommandHelp) {
-	header := cli.Colorize("LocalGo CLI", cli.ColorBold+cli.ColorCyan)
+	header := cli.HeaderStyle.Render("LocalGo CLI")
 
 	fmt.Printf("%s - %s\n", header, help.Description)
-	fmt.Printf("\n%s\n", cli.Colorize("USAGE:", cli.ColorBold+cli.ColorYellow))
+	fmt.Printf("\n%s\n", cli.WarningStyle.Render("USAGE:"))
 	fmt.Printf("    %s\n\n", help.Usage)
 
 	if len(help.Examples) > 0 {
-		fmt.Printf("%s\n", cli.Colorize("EXAMPLES:", cli.ColorBold+cli.ColorYellow))
+		fmt.Printf("%s\n", cli.WarningStyle.Render("EXAMPLES:"))
 		for _, example := range help.Examples {
-			fmt.Printf("    %s\n", cli.Colorize(example, cli.ColorGreen))
+			fmt.Printf("    %s\n", cli.SuccessStyle.Render(example))
 		}
 		fmt.Println()
 	}
 
 	if len(help.Flags) > 0 {
-		fmt.Printf("%s\n", cli.Colorize("OPTIONS:", cli.ColorBold+cli.ColorYellow))
+		fmt.Printf("%s\n", cli.WarningStyle.Render("OPTIONS:"))
 		for _, flag := range help.Flags {
-			flagName := cli.Colorize(flag.Name, cli.ColorCyan)
+			flagName := cli.InfoStyle.Render(flag.Name)
 			defaultVal := ""
 			if flag.Default != "" {
-				defaultVal = fmt.Sprintf(" %s", cli.Colorize(fmt.Sprintf("(default: %s)", flag.Default), cli.ColorPurple))
+				defaultVal = fmt.Sprintf(" %s", cli.MutedStyle.Render(fmt.Sprintf("(default: %s)", flag.Default)))
 			}
 			fmt.Printf("    %-30s %s%s\n", flagName, flag.Description, defaultVal)
 		}
@@ -134,17 +134,17 @@ func ShowCommandHelp(help CommandHelp) {
 // ShowVersion displays version information with colors
 func ShowVersion(version, commit, date string) {
 	fmt.Printf("%s %s\n",
-		cli.Colorize("LocalGo CLI", cli.ColorBold+cli.ColorCyan),
-		cli.Colorize(version, cli.ColorGreen))
+		cli.HeaderStyle.Render("LocalGo CLI"),
+		cli.SuccessStyle.Render(version))
 	fmt.Printf("%s %s\n",
-		cli.Colorize("Git Commit:", cli.ColorYellow),
+		cli.HighlightStyle.Render("Git Commit:"),
 		commit)
 	fmt.Printf("%s %s\n",
-		cli.Colorize("Build Date:", cli.ColorYellow),
+		cli.HighlightStyle.Render("Build Date:"),
 		date)
 	fmt.Printf("%s %s\n",
-		cli.Colorize("Protocol:", cli.ColorYellow),
-		cli.Colorize("LocalSend v2.1", cli.ColorGreen))
+		cli.HighlightStyle.Render("Protocol:"),
+		cli.SuccessStyle.Render("LocalSend v2.1"))
 }
 
 // GetCommandHelp returns help information for built-in commands

@@ -1,6 +1,6 @@
 # LocalGo
 
-[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
 [![Protocol](https://img.shields.io/badge/LocalSend-v2.1-4CAF50?style=for-the-badge&logo=protocol.ai&logoColor=white)](https://github.com/localsend/protocol)
 [![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bethropolis/localgo?style=for-the-badge&logo=github&color=181717&logoColor=white)](https://github.com/bethropolis/localgo/releases/latest)
@@ -85,7 +85,25 @@ localgo share --file document.pdf
 
 ### Docker and Podman
 
-Read the [container documentation](docs/CONTAINER.md) for more information.
+LocalGo ships in two image variants:
+
+| Image | Base | Size | Use case |
+|-------|------|------|----------|
+| `ghcr.io/bethropolis/localgo:latest` | Alpine | ~25 MB | General use, includes shell |
+| `ghcr.io/bethropolis/localgo:scratch` | scratch | ~10 MB | Production hardening, no shell |
+
+The **scratch** image is recommended for production. It contains only the binary and CA certificates — no shell, no package manager, minimal attack surface. It uses `localgo docker-start` to handle permission setup internally via `syscall.Setuid`/`Setgid`.
+
+```bash
+# Run the scratch image (recommended)
+docker run -d --network host \
+  -v $(pwd)/downloads:/app/downloads \
+  -v $(pwd)/config:/app/config \
+  -e PUID=$(id -u) -e PGID=$(id -g) \
+  ghcr.io/bethropolis/localgo:scratch
+```
+
+For full details — macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
 
 ## Configuration
 

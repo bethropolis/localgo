@@ -35,14 +35,22 @@ SyslogIdentifier=localgo
 # -----------------------------------------------------------------------
 # Directory management
 # -----------------------------------------------------------------------
-# %h = home directory, %E = XDG_CONFIG_HOME (~/.config)
-# WorkingDirectory is just home — the binary calls os.UserHomeDir() and
-# os.UserConfigDir() itself to resolve all actual paths.
+# StateDirectory → ~/.local/state/localgo (zap app.log + runtime state)
+# systemd creates this directory when the service starts.
+# ~/.config/localgo is created by install.sh with correct user ownership —
+# do NOT use ConfigurationDirectory here (causes systemd to own it as root).
+StateDirectory=localgo
+
+# WorkingDirectory is just the initial cwd — binary resolves all paths itself.
 WorkingDirectory=%h
 
 # Optional user overrides — %E expands to XDG_CONFIG_HOME (~/.config).
 # The - prefix suppresses errors if the file doesn't exist.
-EnvironmentFile=-%E/localgo/localgo.env
+Environment=HOME=%h
+Environment=XDG_CONFIG_HOME=%h/.config
+Environment=XDG_STATE_HOME=%h/.local/state
+Environment=XDG_DATA_HOME=%h/.local/share
+EnvironmentFile=-/home/bet/.config/localgo/localgo.env
 
 # -----------------------------------------------------------------------
 # Security hardening (user service subset)

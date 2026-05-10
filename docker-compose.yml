@@ -79,13 +79,13 @@ services:
       # Optional: Use a custom configuration file
       # - ./localgo.env:/app/localgo.env
 
-    # Health check using HTTP endpoint (faster than CLI)
+    # Health check using HTTPS endpoint
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:53317/api/localsend/v2/info"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:53317/ || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 10s
 
     # Resource limits (adjust as needed)
     deploy:

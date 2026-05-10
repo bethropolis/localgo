@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/charmbracelet/huh"
+	"github.com/gen2brain/beeep"
 )
 
 // OutputFormat represents the output format type
@@ -65,27 +67,27 @@ func (ow *OutputWriter) WriteMessage(message string) {
 
 // WriteError outputs an error message
 func (ow *OutputWriter) WriteError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "%s\n", ErrorStyle.Render(fmt.Sprintf("%s Error: %v", IconCross, err)))
 }
 
 // WriteProgress outputs progress information
 func (ow *OutputWriter) WriteProgress(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("⏳ %s\n", message)
+		fmt.Printf("%s\n", InfoStyle.Render(fmt.Sprintf("%s %s", IconSpinner, message)))
 	}
 }
 
 // WriteSuccess outputs a success message
 func (ow *OutputWriter) WriteSuccess(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("✅ %s\n", message)
+		fmt.Printf("%s\n", SuccessStyle.Render(fmt.Sprintf("%s %s", IconCheck, message)))
 	}
 }
 
 // WriteWarning outputs a warning message
 func (ow *OutputWriter) WriteWarning(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("⚠️  %s\n", message)
+		fmt.Printf("%s\n", WarningStyle.Render(fmt.Sprintf("%s %s", IconWarning, message)))
 	}
 }
 
@@ -229,6 +231,15 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.1fh", d.Hours())
 }
 
+// Notify sends a native desktop notification. Icon is empty (system default).
+// No-op in container environments.
+func Notify(title, body string) {
+	if IsContainer() {
+		return
+	}
+	beeep.Notify(title, body, "")
+}
+
 // ProgressBar represents a simple progress bar
 type ProgressBar struct {
 	total   int64
@@ -274,33 +285,72 @@ func (pb *ProgressBar) render() {
 		FormatBytes(pb.total))
 }
 
-// ColorCode represents ANSI color codes
-type ColorCode string
+// Standalone Print helpers
 
-const (
-	ColorReset  ColorCode = "\033[0m"
-	ColorRed    ColorCode = "\033[31m"
-	ColorGreen  ColorCode = "\033[32m"
-	ColorYellow ColorCode = "\033[33m"
-	ColorBlue   ColorCode = "\033[34m"
-	ColorPurple ColorCode = "\033[35m"
-	ColorCyan   ColorCode = "\033[36m"
-	ColorWhite  ColorCode = "\033[37m"
-	ColorBold   ColorCode = "\033[1m"
-)
+func PrintSuccess(format string, a ...any) {
+	fmt.Println(SuccessStyle.Render(IconCheck + " " + fmt.Sprintf(format, a...)))
+}
 
-// Colorize applies color to text if stdout is a terminal
-func Colorize(text string, color ColorCode) string {
-	if isTerminal() {
-		return string(color) + text + string(ColorReset)
+func PrintError(format string, a ...any) {
+	fmt.Println(ErrorStyle.Render(IconCross + " " + fmt.Sprintf(format, a...)))
+}
+
+func PrintWarning(format string, a ...any) {
+	fmt.Println(WarningStyle.Render(IconWarning + " " + fmt.Sprintf(format, a...)))
+}
+
+func PrintInfo(format string, a ...any) {
+	fmt.Println(InfoStyle.Render(IconInfo + " " + fmt.Sprintf(format, a...)))
+}
+
+func PrintHeader(text string) {
+	fmt.Println(HeaderStyle.Render(text))
+}
+
+// IsContainer returns true if LocalGo is running inside a Docker/Podman container.
+func IsContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
 	}
-	return text
+	if os.Getenv("container") != "" {
+		return true
+	}
+	return false
 }
 
-// isTerminal checks if stdout is a terminal
-func isTerminal() bool {
-	// Simple check - in a real implementation you might want to use
-	// a library like github.com/mattn/go-isatty
-	fileInfo, _ := os.Stdout.Stat()
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+// PickDevice presents an interactive TUI to select a device. Returns the selected device or nil if canceled.
+func PickDevice(devices []*model.Device) *model.Device {
+	if IsContainer() {
+		return nil
+	}
+	if len(devices) == 0 {
+		return nil
+	}
+	if len(devices) == 1 {
+		return devices[0]
+	}
+
+	var selected *model.Device
+	options := make([]huh.Option[*model.Device], len(devices))
+	for i, d := range devices {
+		protocol := strings.ToUpper(string(d.Protocol))
+		options[i] = huh.NewOption(
+			fmt.Sprintf("%s  %s:%d  [%s]", d.Alias, d.IP, d.Port, protocol),
+			d,
+		)
+	}
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[*model.Device]().
+				Title("Select recipient:").
+				Options(options...).
+				Value(&selected).
+				WithHeight(10),
+		),
+	)
+	form.Run()
+	return selected
 }
+
+

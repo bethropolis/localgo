@@ -84,7 +84,7 @@ EXAMPLES:
     $0 --mode system --service --create-user  # Full system setup
 
 REQUIREMENTS:
-    - Go 1.24+ (for building; not needed with --no-build)
+    - Go 1.26+ (for building; not needed with --no-build)
     - systemd (for service installation)
     - sudo access (for system installation)
 
@@ -124,8 +124,8 @@ check_prerequisites() {
         MAJOR=$(echo "$GO_VERSION" | cut -d. -f1)
         MINOR=$(echo "$GO_VERSION" | cut -d. -f2)
 
-        if [[ $MAJOR -lt 1 ]] || [[ $MAJOR -eq 1 && $MINOR -lt 24 ]]; then
-            print_error "Go version $GO_VERSION is too old. Please install Go 1.24+ first."
+        if [[ $MAJOR -lt 1 ]] || [[ $MAJOR -eq 1 && $MINOR -lt 26 ]]; then
+            print_error "Go version $GO_VERSION is too old. Please install Go 1.26+ first."
             exit 1
         fi
 
@@ -268,7 +268,11 @@ create_directories() {
         sudo chmod 755 "$SYSTEM_DATA_DIR" "$SYSTEM_CONFIG_DIR"
         print_success "System directories created"
     else
-        mkdir -p "$USER_CONFIG_DIR" "$USER_DATA_DIR"
+        # XDG Base Directory Specification paths
+        mkdir -p "$USER_CONFIG_DIR"             # ~/.config/localgo         (config)
+        mkdir -p "$HOME/.local/state/localgo" # ~/.local/state/localgo   (logs)
+        mkdir -p "$HOME/.local/share/localgo"  # ~/.local/share/localgo    (data/history)
+        mkdir -p "$USER_DATA_DIR"              # ~/Downloads/localgo      (downloads)
         print_success "User directories created"
     fi
 }

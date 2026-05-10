@@ -1,233 +1,969 @@
-#!/bin/bash
+# bash completion for localgo                              -*- shell-script -*-
 
-# Bash completion script for localgo
-# To use this script, source it in your ~/.bashrc or copy it to /etc/bash_completion.d/
+__localgo_debug()
+{
+    if [[ -n ${BASH_COMP_DEBUG_FILE:-} ]]; then
+        echo "$*" >> "${BASH_COMP_DEBUG_FILE}"
+    fi
+}
 
-_localgo_cli_completions() {
-    local cur prev opts
+# Homebrew on Macs have version 1.3 of bash-completion which doesn't include
+# _init_completion. This is a very minimal version of that function.
+__localgo_init_completion()
+{
     COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
-
-    # Main commands
-    local commands="serve discover scan send share devices info help version"
-
-    # Global flags
-    local global_flags="-h --help -v --version"
-
-    # Serve command flags
-    local serve_flags="--port --http --pin --alias --dir --quiet --verbose --auto-accept --no-clipboard"
-
-    # Discover command flags
-    local discover_flags="--timeout --json --quiet"
-
-    # Scan command flags
-    local scan_flags="--timeout --port --json --quiet"
-
-    # Send command flags
-    local send_flags="--file --to --port --timeout --alias --json --quiet --text"
-
-    # Share command flags
-    local share_flags="--file --port --http --pin --alias --auto-accept --no-clipboard"
-
-    # Devices command flags
-    local devices_flags="--json"
-
-    # Info command flags
-    local info_flags="--json"
-
-    # Get the command (first argument after localgo)
-    local command=""
-    if [[ ${#COMP_WORDS[@]} -gt 1 ]]; then
-        command="${COMP_WORDS[1]}"
-    fi
-
-    # If we're completing the first argument (command)
-    if [[ ${COMP_CWORD} -eq 1 ]]; then
-        COMPREPLY=($(compgen -W "${commands} ${global_flags}" -- ${cur}))
-        return 0
-    fi
-
-    # Handle flag values
-    case "${prev}" in
-        --file)
-            # Complete file paths
-            COMPREPLY=($(compgen -f -- ${cur}))
-            return 0
-            ;;
-        --dir)
-            # Complete directory paths
-            COMPREPLY=($(compgen -d -- ${cur}))
-            return 0
-            ;;
-        --port)
-            # Suggest common ports
-            COMPREPLY=($(compgen -W "53317 8080 8000 3000 5000" -- ${cur}))
-            return 0
-            ;;
-        --timeout)
-            # Suggest common timeout values (in seconds)
-            COMPREPLY=($(compgen -W "5 10 15 30 60 120" -- ${cur}))
-            return 0
-            ;;
-        --pin)
-            # Don't complete PIN values for security
-            COMPREPLY=()
-            return 0
-            ;;
-        --alias)
-            # Suggest some common aliases
-            COMPREPLY=($(compgen -W "MyDevice Laptop Desktop Phone Tablet Server" -- ${cur}))
-            return 0
-            ;;
-        --to)
-            # Try to get device list from recent discovery (if available)
-            # For now, suggest common device names
-            COMPREPLY=($(compgen -W "MyPhone MyLaptop MyDesktop MyTablet" -- ${cur}))
-            return 0
-            ;;
-    esac
-
-    # Complete flags based on the command
-    case "${command}" in
-        serve)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${serve_flags}" -- ${cur}))
-            fi
-            ;;
-        discover)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${discover_flags}" -- ${cur}))
-            fi
-            ;;
-        scan)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${scan_flags}" -- ${cur}))
-            fi
-            ;;
-        send)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${send_flags}" -- ${cur}))
-            fi
-            ;;
-        share)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${share_flags}" -- ${cur}))
-            fi
-            ;;
-        devices)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${devices_flags}" -- ${cur}))
-            fi
-            ;;
-        info)
-            if [[ ${cur} == -* ]]; then
-                COMPREPLY=($(compgen -W "${info_flags}" -- ${cur}))
-            fi
-            ;;
-        help)
-            # Complete with available commands for help
-            COMPREPLY=($(compgen -W "${commands}" -- ${cur}))
-            ;;
-        version)
-            # No flags for version command
-            COMPREPLY=()
-            ;;
-        *)
-            # Unknown command, suggest main commands
-            COMPREPLY=($(compgen -W "${commands}" -- ${cur}))
-            ;;
-    esac
-
-    return 0
+    _get_comp_words_by_ref "$@" cur prev words cword
 }
 
-# Register the completion function
-complete -F _localgo_cli_completions localgo
+__localgo_index_of_word()
+{
+    local w word=$1
+    shift
+    index=0
+    for w in "$@"; do
+        [[ $w = "$word" ]] && return
+        index=$((index+1))
+    done
+    index=-1
+}
 
-# Also register for common aliases
-complete -F _localgo_cli_completions lg
+__localgo_contains_word()
+{
+    local w word=$1; shift
+    for w in "$@"; do
+        [[ $w = "$word" ]] && return
+    done
+    return 1
+}
 
-# Function to install completion
-install_localgo_completion() {
-    local completion_dir="/etc/bash_completion.d"
-    local user_completion_dir="$HOME/.local/share/bash-completion/completions"
+__localgo_handle_go_custom_completion()
+{
+    __localgo_debug "${FUNCNAME[0]}: cur is ${cur}, words[*] is ${words[*]}, #words[@] is ${#words[@]}"
 
-    echo "Installing LocalGo CLI bash completion..."
+    local shellCompDirectiveError=1
+    local shellCompDirectiveNoSpace=2
+    local shellCompDirectiveNoFileComp=4
+    local shellCompDirectiveFilterFileExt=8
+    local shellCompDirectiveFilterDirs=16
 
-    # Try system-wide installation first
-    if [[ -w "$completion_dir" ]]; then
-        cp "$(dirname "$0")/bash_completion.sh" "$completion_dir/localgo"
-        echo "Installed system-wide completion to $completion_dir/localgo"
-    elif [[ ! -d "$user_completion_dir" ]]; then
-        mkdir -p "$user_completion_dir"
-        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo"
-        echo "Installed user completion to $user_completion_dir/localgo"
+    local out requestComp lastParam lastChar comp directive args
+
+    # Prepare the command to request completions for the program.
+    # Calling ${words[0]} instead of directly localgo allows handling aliases
+    args=("${words[@]:1}")
+    # Disable ActiveHelp which is not supported for bash completion v1
+    requestComp="LOCALGO_ACTIVE_HELP=0 ${words[0]} __completeNoDesc ${args[*]}"
+
+    lastParam=${words[$((${#words[@]}-1))]}
+    lastChar=${lastParam:$((${#lastParam}-1)):1}
+    __localgo_debug "${FUNCNAME[0]}: lastParam ${lastParam}, lastChar ${lastChar}"
+
+    if [ -z "${cur}" ] && [ "${lastChar}" != "=" ]; then
+        # If the last parameter is complete (there is a space following it)
+        # We add an extra empty parameter so we can indicate this to the go method.
+        __localgo_debug "${FUNCNAME[0]}: Adding extra empty parameter"
+        requestComp="${requestComp} \"\""
+    fi
+
+    __localgo_debug "${FUNCNAME[0]}: calling ${requestComp}"
+    # Use eval to handle any environment variables and such
+    out=$(eval "${requestComp}" 2>/dev/null)
+
+    # Extract the directive integer at the very end of the output following a colon (:)
+    directive=${out##*:}
+    # Remove the directive
+    out=${out%:*}
+    if [ "${directive}" = "${out}" ]; then
+        # There is not directive specified
+        directive=0
+    fi
+    __localgo_debug "${FUNCNAME[0]}: the completion directive is: ${directive}"
+    __localgo_debug "${FUNCNAME[0]}: the completions are: ${out}"
+
+    if [ $((directive & shellCompDirectiveError)) -ne 0 ]; then
+        # Error code.  No completion.
+        __localgo_debug "${FUNCNAME[0]}: received error from custom completion go code"
+        return
     else
-        cp "$(dirname "$0")/bash_completion.sh" "$user_completion_dir/localgo"
-        echo "Installed user completion to $user_completion_dir/localgo"
+        if [ $((directive & shellCompDirectiveNoSpace)) -ne 0 ]; then
+            if [[ $(type -t compopt) = "builtin" ]]; then
+                __localgo_debug "${FUNCNAME[0]}: activating no space"
+                compopt -o nospace
+            fi
+        fi
+        if [ $((directive & shellCompDirectiveNoFileComp)) -ne 0 ]; then
+            if [[ $(type -t compopt) = "builtin" ]]; then
+                __localgo_debug "${FUNCNAME[0]}: activating no file completion"
+                compopt +o default
+            fi
+        fi
     fi
 
-    echo "Please restart your shell or run 'source ~/.bashrc' to enable completion."
+    if [ $((directive & shellCompDirectiveFilterFileExt)) -ne 0 ]; then
+        # File extension filtering
+        local fullFilter filter filteringCmd
+        # Do not use quotes around the $out variable or else newline
+        # characters will be kept.
+        for filter in ${out}; do
+            fullFilter+="$filter|"
+        done
+
+        filteringCmd="_filedir $fullFilter"
+        __localgo_debug "File filtering command: $filteringCmd"
+        $filteringCmd
+    elif [ $((directive & shellCompDirectiveFilterDirs)) -ne 0 ]; then
+        # File completion for directories only
+        local subdir
+        # Use printf to strip any trailing newline
+        subdir=$(printf "%s" "${out}")
+        if [ -n "$subdir" ]; then
+            __localgo_debug "Listing directories in $subdir"
+            __localgo_handle_subdirs_in_dir_flag "$subdir"
+        else
+            __localgo_debug "Listing directories in ."
+            _filedir -d
+        fi
+    else
+        while IFS='' read -r comp; do
+            COMPREPLY+=("$comp")
+        done < <(compgen -W "${out}" -- "$cur")
+    fi
 }
 
-# Function to show completion help
-show_completion_help() {
-    cat << 'EOF'
-LocalGo CLI Bash Completion
+__localgo_handle_reply()
+{
+    __localgo_debug "${FUNCNAME[0]}"
+    local comp
+    case $cur in
+        -*)
+            if [[ $(type -t compopt) = "builtin" ]]; then
+                compopt -o nospace
+            fi
+            local allflags
+            if [ ${#must_have_one_flag[@]} -ne 0 ]; then
+                allflags=("${must_have_one_flag[@]}")
+            else
+                allflags=("${flags[*]} ${two_word_flags[*]}")
+            fi
+            while IFS='' read -r comp; do
+                COMPREPLY+=("$comp")
+            done < <(compgen -W "${allflags[*]}" -- "$cur")
+            if [[ $(type -t compopt) = "builtin" ]]; then
+                [[ "${COMPREPLY[0]}" == *= ]] || compopt +o nospace
+            fi
 
-This script provides intelligent tab completion for the localgo command.
+            # complete after --flag=abc
+            if [[ $cur == *=* ]]; then
+                if [[ $(type -t compopt) = "builtin" ]]; then
+                    compopt +o nospace
+                fi
 
-Features:
-- Command completion (serve, discover, scan, send, info, help, version)
-- Flag completion for each command
-- File path completion for --file flags
-- Directory path completion for --dir flags
-- Smart suggestions for common values (ports, timeouts, etc.)
+                local index flag
+                flag="${cur%=*}"
+                __localgo_index_of_word "${flag}" "${flags_with_completion[@]}"
+                COMPREPLY=()
+                if [[ ${index} -ge 0 ]]; then
+                    PREFIX=""
+                    cur="${cur#*=}"
+                    ${flags_completion[${index}]}
+                    if [ -n "${ZSH_VERSION:-}" ]; then
+                        # zsh completion needs --flag= prefix
+                        eval "COMPREPLY=( \"\${COMPREPLY[@]/#/${flag}=}\" )"
+                    fi
+                fi
+            fi
 
-Installation:
-1. Source this script in your ~/.bashrc:
-   echo "source /path/to/bash_completion.sh" >> ~/.bashrc
-
-2. Or install system-wide:
-   sudo cp bash_completion.sh /etc/bash_completion.d/localgo
-
-3. Or use the installer function:
-   source bash_completion.sh && install_localgo_completion
-
-Usage:
-After installation, you can use tab completion with localgo:
-
-  localgo <TAB>                    # Shows available commands
-  localgo serve --<TAB>            # Shows serve command flags
-  localgo send --file <TAB>        # Completes file paths
-  localgo send --to <TAB>          # Suggests device names
-
-Examples:
-  localgo se<TAB>                  # Completes to "serve"
-  localgo serve --p<TAB>           # Completes to "--port"
-  localgo send --file ~/Doc<TAB>   # Completes file path
-EOF
-}
-
-# If script is run directly, show help
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    case "${1:-}" in
-        install)
-            install_localgo_completion
-            ;;
-        help|--help|-h)
-            show_completion_help
-            ;;
-        *)
-            echo "LocalGo CLI Bash Completion Script"
-            echo ""
-            echo "Usage:"
-            echo "  source $0                 # Load completion into current shell"
-            echo "  $0 install               # Install completion system-wide"
-            echo "  $0 help                  # Show detailed help"
-            echo ""
-            echo "To enable completion, source this script in your ~/.bashrc or install it."
+            if [[ -z "${flag_parsing_disabled}" ]]; then
+                # If flag parsing is enabled, we have completed the flags and can return.
+                # If flag parsing is disabled, we may not know all (or any) of the flags, so we fallthrough
+                # to possibly call handle_go_custom_completion.
+                return 0;
+            fi
             ;;
     esac
+
+    # check if we are handling a flag with special work handling
+    local index
+    __localgo_index_of_word "${prev}" "${flags_with_completion[@]}"
+    if [[ ${index} -ge 0 ]]; then
+        ${flags_completion[${index}]}
+        return
+    fi
+
+    # we are parsing a flag and don't have a special handler, no completion
+    if [[ ${cur} != "${words[cword]}" ]]; then
+        return
+    fi
+
+    local completions
+    completions=("${commands[@]}")
+    if [[ ${#must_have_one_noun[@]} -ne 0 ]]; then
+        completions+=("${must_have_one_noun[@]}")
+    elif [[ -n "${has_completion_function}" ]]; then
+        # if a go completion function is provided, defer to that function
+        __localgo_handle_go_custom_completion
+    fi
+    if [[ ${#must_have_one_flag[@]} -ne 0 ]]; then
+        completions+=("${must_have_one_flag[@]}")
+    fi
+    while IFS='' read -r comp; do
+        COMPREPLY+=("$comp")
+    done < <(compgen -W "${completions[*]}" -- "$cur")
+
+    if [[ ${#COMPREPLY[@]} -eq 0 && ${#noun_aliases[@]} -gt 0 && ${#must_have_one_noun[@]} -ne 0 ]]; then
+        while IFS='' read -r comp; do
+            COMPREPLY+=("$comp")
+        done < <(compgen -W "${noun_aliases[*]}" -- "$cur")
+    fi
+
+    if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
+        if declare -F __localgo_custom_func >/dev/null; then
+            # try command name qualified custom func
+            __localgo_custom_func
+        else
+            # otherwise fall back to unqualified for compatibility
+            declare -F __custom_func >/dev/null && __custom_func
+        fi
+    fi
+
+    # available in bash-completion >= 2, not always present on macOS
+    if declare -F __ltrim_colon_completions >/dev/null; then
+        __ltrim_colon_completions "$cur"
+    fi
+
+    # If there is only 1 completion and it is a flag with an = it will be completed
+    # but we don't want a space after the =
+    if [[ "${#COMPREPLY[@]}" -eq "1" ]] && [[ $(type -t compopt) = "builtin" ]] && [[ "${COMPREPLY[0]}" == --*= ]]; then
+       compopt -o nospace
+    fi
+}
+
+# The arguments should be in the form "ext1|ext2|extn"
+__localgo_handle_filename_extension_flag()
+{
+    local ext="$1"
+    _filedir "@(${ext})"
+}
+
+__localgo_handle_subdirs_in_dir_flag()
+{
+    local dir="$1"
+    pushd "${dir}" >/dev/null 2>&1 && _filedir -d && popd >/dev/null 2>&1 || return
+}
+
+__localgo_handle_flag()
+{
+    __localgo_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+    # if a command required a flag, and we found it, unset must_have_one_flag()
+    local flagname=${words[c]}
+    local flagvalue=""
+    # if the word contained an =
+    if [[ ${words[c]} == *"="* ]]; then
+        flagvalue=${flagname#*=} # take in as flagvalue after the =
+        flagname=${flagname%=*} # strip everything after the =
+        flagname="${flagname}=" # but put the = back
+    fi
+    __localgo_debug "${FUNCNAME[0]}: looking for ${flagname}"
+    if __localgo_contains_word "${flagname}" "${must_have_one_flag[@]}"; then
+        must_have_one_flag=()
+    fi
+
+    # if you set a flag which only applies to this command, don't show subcommands
+    if __localgo_contains_word "${flagname}" "${local_nonpersistent_flags[@]}"; then
+      commands=()
+    fi
+
+    # keep flag value with flagname as flaghash
+    # flaghash variable is an associative array which is only supported in bash > 3.
+    if [[ -z "${BASH_VERSION:-}" || "${BASH_VERSINFO[0]:-}" -gt 3 ]]; then
+        if [ -n "${flagvalue}" ] ; then
+            flaghash[${flagname}]=${flagvalue}
+        elif [ -n "${words[ $((c+1)) ]}" ] ; then
+            flaghash[${flagname}]=${words[ $((c+1)) ]}
+        else
+            flaghash[${flagname}]="true" # pad "true" for bool flag
+        fi
+    fi
+
+    # skip the argument to a two word flag
+    if [[ ${words[c]} != *"="* ]] && __localgo_contains_word "${words[c]}" "${two_word_flags[@]}"; then
+        __localgo_debug "${FUNCNAME[0]}: found a flag ${words[c]}, skip the next argument"
+        c=$((c+1))
+        # if we are looking for a flags value, don't show commands
+        if [[ $c -eq $cword ]]; then
+            commands=()
+        fi
+    fi
+
+    c=$((c+1))
+
+}
+
+__localgo_handle_noun()
+{
+    __localgo_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+    if __localgo_contains_word "${words[c]}" "${must_have_one_noun[@]}"; then
+        must_have_one_noun=()
+    elif __localgo_contains_word "${words[c]}" "${noun_aliases[@]}"; then
+        must_have_one_noun=()
+    fi
+
+    nouns+=("${words[c]}")
+    c=$((c+1))
+}
+
+__localgo_handle_command()
+{
+    __localgo_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+
+    local next_command
+    if [[ -n ${last_command} ]]; then
+        next_command="_${last_command}_${words[c]//:/__}"
+    else
+        if [[ $c -eq 0 ]]; then
+            next_command="_localgo_root_command"
+        else
+            next_command="_${words[c]//:/__}"
+        fi
+    fi
+    c=$((c+1))
+    __localgo_debug "${FUNCNAME[0]}: looking for ${next_command}"
+    declare -F "$next_command" >/dev/null && $next_command
+}
+
+__localgo_handle_word()
+{
+    if [[ $c -ge $cword ]]; then
+        __localgo_handle_reply
+        return
+    fi
+    __localgo_debug "${FUNCNAME[0]}: c is $c words[c] is ${words[c]}"
+    if [[ "${words[c]}" == -* ]]; then
+        __localgo_handle_flag
+    elif __localgo_contains_word "${words[c]}" "${commands[@]}"; then
+        __localgo_handle_command
+    elif [[ $c -eq 0 ]]; then
+        __localgo_handle_command
+    elif __localgo_contains_word "${words[c]}" "${command_aliases[@]}"; then
+        # aliashash variable is an associative array which is only supported in bash > 3.
+        if [[ -z "${BASH_VERSION:-}" || "${BASH_VERSINFO[0]:-}" -gt 3 ]]; then
+            words[c]=${aliashash[${words[c]}]}
+            __localgo_handle_command
+        else
+            __localgo_handle_noun
+        fi
+    else
+        __localgo_handle_noun
+    fi
+    __localgo_handle_word
+}
+
+_localgo_completion()
+{
+    last_command="localgo_completion"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    must_have_one_noun+=("bash")
+    must_have_one_noun+=("fish")
+    must_have_one_noun+=("powershell")
+    must_have_one_noun+=("zsh")
+    noun_aliases=()
+}
+
+_localgo_config_get()
+{
+    last_command="localgo_config_get"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_config_list()
+{
+    last_command="localgo_config_list"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_config_path()
+{
+    last_command="localgo_config_path"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_config_set()
+{
+    last_command="localgo_config_set"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_config()
+{
+    last_command="localgo_config"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("get")
+    commands+=("list")
+    commands+=("path")
+    commands+=("set")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_devices()
+{
+    last_command="localgo_devices"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--json")
+    local_nonpersistent_flags+=("--json")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_discover()
+{
+    last_command="localgo_discover"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--json")
+    local_nonpersistent_flags+=("--json")
+    flags+=("--quiet")
+    local_nonpersistent_flags+=("--quiet")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout=")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_docker-start()
+{
+    last_command="localgo_docker-start"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_health()
+{
+    last_command="localgo_health"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_help()
+{
+    last_command="localgo_help"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    has_completion_function=1
+    noun_aliases=()
+}
+
+_localgo_info()
+{
+    last_command="localgo_info"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--json")
+    local_nonpersistent_flags+=("--json")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_scan()
+{
+    last_command="localgo_scan"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--json")
+    local_nonpersistent_flags+=("--json")
+    flags+=("--port=")
+    two_word_flags+=("--port")
+    local_nonpersistent_flags+=("--port")
+    local_nonpersistent_flags+=("--port=")
+    flags+=("--quiet")
+    local_nonpersistent_flags+=("--quiet")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout=")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_send()
+{
+    last_command="localgo_send"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--alias=")
+    two_word_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias=")
+    flags+=("--file=")
+    two_word_flags+=("--file")
+    local_nonpersistent_flags+=("--file")
+    local_nonpersistent_flags+=("--file=")
+    flags+=("--port=")
+    two_word_flags+=("--port")
+    local_nonpersistent_flags+=("--port")
+    local_nonpersistent_flags+=("--port=")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout")
+    local_nonpersistent_flags+=("--timeout=")
+    flags+=("--to=")
+    two_word_flags+=("--to")
+    local_nonpersistent_flags+=("--to")
+    local_nonpersistent_flags+=("--to=")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_serve()
+{
+    last_command="localgo_serve"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--alias=")
+    two_word_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias=")
+    flags+=("--auto-accept")
+    local_nonpersistent_flags+=("--auto-accept")
+    flags+=("--dir=")
+    two_word_flags+=("--dir")
+    local_nonpersistent_flags+=("--dir")
+    local_nonpersistent_flags+=("--dir=")
+    flags+=("--exec=")
+    two_word_flags+=("--exec")
+    local_nonpersistent_flags+=("--exec")
+    local_nonpersistent_flags+=("--exec=")
+    flags+=("--history=")
+    two_word_flags+=("--history")
+    local_nonpersistent_flags+=("--history")
+    local_nonpersistent_flags+=("--history=")
+    flags+=("--http")
+    local_nonpersistent_flags+=("--http")
+    flags+=("--interval=")
+    two_word_flags+=("--interval")
+    local_nonpersistent_flags+=("--interval")
+    local_nonpersistent_flags+=("--interval=")
+    flags+=("--no-clipboard")
+    local_nonpersistent_flags+=("--no-clipboard")
+    flags+=("--open")
+    local_nonpersistent_flags+=("--open")
+    flags+=("--pin=")
+    two_word_flags+=("--pin")
+    local_nonpersistent_flags+=("--pin")
+    local_nonpersistent_flags+=("--pin=")
+    flags+=("--port=")
+    two_word_flags+=("--port")
+    local_nonpersistent_flags+=("--port")
+    local_nonpersistent_flags+=("--port=")
+    flags+=("--quiet")
+    local_nonpersistent_flags+=("--quiet")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_share()
+{
+    last_command="localgo_share"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--alias=")
+    two_word_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias")
+    local_nonpersistent_flags+=("--alias=")
+    flags+=("--auto-accept")
+    local_nonpersistent_flags+=("--auto-accept")
+    flags+=("--exec=")
+    two_word_flags+=("--exec")
+    local_nonpersistent_flags+=("--exec")
+    local_nonpersistent_flags+=("--exec=")
+    flags+=("--file=")
+    two_word_flags+=("--file")
+    local_nonpersistent_flags+=("--file")
+    local_nonpersistent_flags+=("--file=")
+    flags+=("--history=")
+    two_word_flags+=("--history")
+    local_nonpersistent_flags+=("--history")
+    local_nonpersistent_flags+=("--history=")
+    flags+=("--http")
+    local_nonpersistent_flags+=("--http")
+    flags+=("--no-clipboard")
+    local_nonpersistent_flags+=("--no-clipboard")
+    flags+=("--pin=")
+    two_word_flags+=("--pin")
+    local_nonpersistent_flags+=("--pin")
+    local_nonpersistent_flags+=("--pin=")
+    flags+=("--port=")
+    two_word_flags+=("--port")
+    local_nonpersistent_flags+=("--port")
+    local_nonpersistent_flags+=("--port=")
+    flags+=("--quiet")
+    local_nonpersistent_flags+=("--quiet")
+    flags+=("--zip")
+    local_nonpersistent_flags+=("--zip")
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_version()
+{
+    last_command="localgo_version"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_localgo_root_command()
+{
+    last_command="localgo"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("completion")
+    commands+=("config")
+    commands+=("devices")
+    commands+=("discover")
+    commands+=("docker-start")
+    commands+=("health")
+    commands+=("help")
+    commands+=("info")
+    commands+=("scan")
+    commands+=("send")
+    commands+=("serve")
+    commands+=("share")
+    commands+=("version")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--config=")
+    two_word_flags+=("--config")
+    flags+=("--json")
+    flags+=("--verbose")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+__start_localgo()
+{
+    local cur prev words cword split
+    declare -A flaghash 2>/dev/null || :
+    declare -A aliashash 2>/dev/null || :
+    if declare -F _init_completion >/dev/null 2>&1; then
+        _init_completion -s || return
+    else
+        __localgo_init_completion -n "=" || return
+    fi
+
+    local c=0
+    local flag_parsing_disabled=
+    local flags=()
+    local two_word_flags=()
+    local local_nonpersistent_flags=()
+    local flags_with_completion=()
+    local flags_completion=()
+    local commands=("localgo")
+    local command_aliases=()
+    local must_have_one_flag=()
+    local must_have_one_noun=()
+    local has_completion_function=""
+    local last_command=""
+    local nouns=()
+    local noun_aliases=()
+
+    __localgo_handle_word
+}
+
+if [[ $(type -t compopt) = "builtin" ]]; then
+    complete -o default -F __start_localgo localgo
+else
+    complete -o default -o nospace -F __start_localgo localgo
 fi
+
+# ex: ts=4 sw=4 et filetype=sh

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/bethropolis/localgo/pkg/storage"
-	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 )
 
@@ -193,15 +193,15 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	h.logger.Infof("Starting save for file: %s (ID: %s) to %s", fileInfo.Dto.FileName, reqFileId, destinationPath)
 
-	var bar *progressbar.ProgressBar
-	if !h.config.Quiet {
-		bar = cli.NewFileProgressBar(fileInfo.Dto.FileName, fileInfo.Dto.Size)
+	var trackProgress func(int64)
+	if !h.config.Quiet && session.Progress != nil {
+		trackProgress = session.Progress.AddBar(fileInfo.Dto.FileName, fileInfo.Dto.Size)
 	}
 
 	// --- Progress Callback ---
 	onProgress := func(bytesWritten int64) {
-		if bar != nil {
-			bar.Set64(bytesWritten)
+		if trackProgress != nil {
+			trackProgress(bytesWritten)
 		}
 	}
 
@@ -312,11 +312,19 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 var stdinReader = bufio.NewReader(os.Stdin)
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
-	// Output to stderr to avoid interfering with stdout
-	fmt.Fprintf(os.Stderr, "\n%s Incoming transfer %s\n", cli.ColorYellow, cli.ColorReset)
-	fmt.Fprintf(os.Stderr, "From: %s%s%s (IP: %s)\n", cli.ColorCyan, sender.Alias, cli.ColorReset, sender.IP)
-
+	fileCount := len(files)
 	var totalSize int64
+	for _, f := range files {
+		totalSize += f.Size
+	}
+
+	cli.Notify("LocalGo: Incoming Transfer",
+		fmt.Sprintf("%s wants to send you %d file(s) (%s)", sender.Alias, fileCount, cli.FormatBytes(totalSize)))
+
+	// Output to stderr to avoid interfering with stdout
+	fmt.Fprintf(os.Stderr, "\n%s\n", cli.WarningStyle.Render("Incoming transfer"))
+	fmt.Fprintf(os.Stderr, "From: %s (IP: %s)\n", cli.InfoStyle.Render(sender.Alias), sender.IP)
+
 	var hasText bool
 	fmt.Fprintf(os.Stderr, "Files:\n")
 	for _, file := range files {
@@ -429,6 +437,23 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 	if session != nil {
 		h.logger.Infof("Canceling session %s at user request.", reqSessionId)
 		h.receiveService.CloseSession(reqSessionId)
+		if h.config.OpenDir && !cli.IsContainer() {
+			go func() {
+				var cmd string
+				var args []string
+				if runtime.GOOS == "windows" {
+					cmd = "explorer.exe"
+					args = []string{h.config.DownloadDir}
+				} else if runtime.GOOS == "darwin" {
+					cmd = "open"
+					args = []string{h.config.DownloadDir}
+				} else {
+					cmd = "xdg-open"
+					args = []string{h.config.DownloadDir}
+				}
+				exec.Command(cmd, args...).Run()
+			}()
+		}
 	} else {
 		// Session is already gone (completed or previously cancelled).
 		// The LocalSend protocol always sends /cancel as a cleanup step after a

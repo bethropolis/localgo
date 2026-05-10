@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
@@ -103,7 +104,22 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to bind port %d: %w", s.config.Port, err)
+		// Port occupied – retry with port 0 (OS assigns free port)
+		s.logger.Warnf("Port %d is busy, binding to a free port", s.config.Port)
+		cli.Notify("LocalGo: Port Changed",
+			fmt.Sprintf("Port %d was busy. Now running on a different port.", s.config.Port))
+
+		addr = "0.0.0.0:0"
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("failed to bind port: %w", err)
+		}
+
+		actualPort := ln.Addr().(*net.TCPAddr).Port
+		s.config.Port = actualPort
+		addr = fmt.Sprintf("0.0.0.0:%d", actualPort)
+		s.httpServer.Addr = addr
+		s.logger.Infof("Server bound to port %d", actualPort)
 	}
 
 	serverErrChan := make(chan error, 1)

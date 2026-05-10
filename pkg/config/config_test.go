@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +29,12 @@ func TestLoadConfig_WithEnvVars(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(testLogger)
+	cfg, err := LoadConfig(func() *viper.Viper {
+		v := viper.New()
+		v.SetEnvPrefix("LOCALSEND")
+		v.AutomaticEnv()
+		return v
+	}(), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -75,7 +81,12 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(testLogger)
+	cfg, err := LoadConfig(func() *viper.Viper {
+		v := viper.New()
+		v.SetEnvPrefix("LOCALSEND")
+		v.AutomaticEnv()
+		return v
+	}(), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -108,7 +119,12 @@ func TestToRegisterDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(testLogger)
+	cfg, err := LoadConfig(func() *viper.Viper {
+		v := viper.New()
+		v.SetEnvPrefix("LOCALSEND")
+		v.AutomaticEnv()
+		return v
+	}(), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -147,7 +163,12 @@ func TestToInfoDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(testLogger)
+	cfg, err := LoadConfig(func() *viper.Viper {
+		v := viper.New()
+		v.SetEnvPrefix("LOCALSEND")
+		v.AutomaticEnv()
+		return v
+	}(), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -176,7 +197,12 @@ func TestGetSecurityDir_EnvOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	dir := getSecurityDir()
+	dir := getSecurityDir(func() *viper.Viper {
+		v := viper.New()
+		v.SetEnvPrefix("LOCALSEND")
+		v.AutomaticEnv()
+		return v
+	}())
 	if dir != tmpDir {
 		t.Errorf("Expected security dir '%s', got '%s'", tmpDir, dir)
 	}

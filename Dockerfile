@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Build arguments for version information
 ARG VERSION=docker
@@ -11,7 +11,7 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy module files first for caching
+# Copy go.mod and go.sum, download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -19,7 +19,6 @@ RUN go mod download
 COPY . .
 
 # Build the binary with version information
-# CGO_ENABLED=0 ensures a static binary
 RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
@@ -37,6 +36,9 @@ LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.license="MIT"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.vendor="Bethropolis"
+LABEL org.opencontainers.image.ref.name="localgo"
+LABEL com.centurylinklabs.watchtower.enable="true"
 
 WORKDIR /app
 
@@ -77,8 +79,9 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 STOPSIGNAL SIGTERM
 
 # Health check using HTTP endpoint (faster than CLI which loads config)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:53317/api/localsend/v2/info || exit 1
+# Note: Use HTTPS since server returns 400 on HTTP (needs Host header)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["wget", "--no-check-certificate", "-qO-", "https://localhost:53317/"] || exit 1
 
 # Use entrypoint script to fix permissions (runs as root)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
