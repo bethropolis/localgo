@@ -30,11 +30,7 @@ var sendCmd = &cobra.Command{
 		files := sendfiles
 
 		if len(files) == 0 {
-			file, err := cli.PickFiles()
-			if err != nil {
-				return fmt.Errorf("file selection canceled or failed: %w", err)
-			}
-			files = []string{file}
+			return fmt.Errorf("no file specified: use positional args or --file flag (e.g. 'localgo send --file /path/to/file' or 'localgo send myfile.txt')")
 		}
 
 		for _, file := range files {

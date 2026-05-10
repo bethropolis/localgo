@@ -11,17 +11,15 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy go.mod and vendor for reproducible builds (bypasses module proxy)
+# Copy go.mod and go.sum, download dependencies
 COPY go.mod go.sum ./
-COPY vendor/ ./vendor/
 RUN go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary with version information
-# CGO_ENABLED=0 ensures a static binary
-RUN CGO_ENABLED=0 go build -mod=vendor \
+RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \

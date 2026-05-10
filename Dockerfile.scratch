@@ -9,11 +9,10 @@ WORKDIR /app
 
 RUN apk add --no-cache git make
 COPY go.mod go.sum ./
-COPY vendor/ ./vendor/
 RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 go build -mod=vendor \
+RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \

@@ -10,7 +10,7 @@ All notable changes to this project are documented in this file.
 - **Fixed env template**: `localgo.env.example` changed from hardcoded `/home/user` to `$HOME/Downloads/localgo`
 - **Go 1.24 → 1.26**: updated Dockerfiles, go.mod, README badge, install script minimum version check, and all CI workflows
 - **Reproducible container builds**: all Dockerfiles now use `-mod=vendor` with vendored source, bypassing module proxy entirely
-- **CGO fix**: `sqweek/dialog` split into `file_picker_cgo.go` (CGO-required) and `file_picker_stub.go` (no-op fallback); `CGO_ENABLED=0` builds now succeed inside containers
+- **Removed sqweek/dialog**: native file picker removed; use `--file` flag for sending (CGO-free, smaller binaries, simpler CI)
 
 ### Fixed
 - Container health check now uses HTTPS with `--no-check-certificate` (HTTP returns 400 Bad Request)
@@ -22,8 +22,7 @@ All notable changes to this project are documented in this file.
 - All CLI output functions (`PrintSuccess`, `PrintError`, `PrintWarning`, `PrintInfo`, `WriteProgress`, `WriteSuccess`, `WriteWarning`) now use Nerd Font icons
 
 ### Refactored
-- `PickFiles()` split into platform-specific files to allow CGO-free container builds
-- Removed unused `runtime` import from `pkg/cli/output.go`
+- `PickFiles()` removed; `localgo send` requires `--file` flag explicitly
 
 ## v0.3.6 - 2026-05-04
 

@@ -10,7 +10,6 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
-	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
 	github.com/stretchr/testify v1.10.0
 	github.com/vbauerster/mpb/v7 v7.5.3
 	go.uber.org/zap v1.27.1
@@ -18,7 +17,6 @@ require (
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
-	github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
