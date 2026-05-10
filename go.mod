@@ -1,6 +1,6 @@
 module github.com/bethropolis/localgo
 
-go 1.24
+go 1.26
 
 require (
 	github.com/charmbracelet/huh v1.0.0

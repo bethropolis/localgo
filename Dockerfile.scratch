@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 ARG VERSION=docker
 ARG GIT_COMMIT=unknown
@@ -9,10 +9,11 @@ WORKDIR /app
 
 RUN apk add --no-cache git make
 COPY go.mod go.sum ./
+COPY vendor/ ./vendor/
 RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 go build -mod=vendor \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \
@@ -52,7 +53,7 @@ LABEL com.centurylinklabs.watchtower.enable="true"
 # Graceful shutdown
 STOPSIGNAL SIGTERM
 
-# Health check using localgo health (no shell needed)
+# Health check using HTTP endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/localgo", "health"]
 

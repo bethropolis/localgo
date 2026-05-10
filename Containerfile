@@ -10,7 +10,7 @@
 # - Use --network=host for multicast discovery to work on Linux
 # - On macOS/Windows, Podman runs in a VM so ports must be mapped explicitly
 
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 ARG VERSION=podman
 ARG GIT_COMMIT=unknown
@@ -21,11 +21,12 @@ WORKDIR /app
 RUN apk add --no-cache git make
 
 COPY go.mod go.sum ./
+COPY vendor/ ./vendor/
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 go build -mod=vendor \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \
@@ -64,7 +65,7 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
     LOCALSEND_AUTO_ACCEPT="true"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:53317/api/localsend/v2/info || exit 1
+    CMD wget -qO- http://localhost:53317/api/v2/localhost/info || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["localgo", "serve"]

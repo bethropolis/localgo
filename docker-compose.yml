@@ -79,9 +79,9 @@ services:
       # Optional: Use a custom configuration file
       # - ./localgo.env:/app/localgo.env
 
-    # Health check using localgo health
+    # Health check using HTTPS endpoint
     healthcheck:
-      test: ["/usr/local/bin/localgo", "health"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:53317/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/charmbracelet/huh"
 	"github.com/gen2brain/beeep"
-	"github.com/sqweek/dialog"
 )
 
 // OutputFormat represents the output format type
@@ -69,27 +67,27 @@ func (ow *OutputWriter) WriteMessage(message string) {
 
 // WriteError outputs an error message
 func (ow *OutputWriter) WriteError(err error) {
-	fmt.Fprintf(os.Stderr, "%s\n", ErrorStyle.Render(fmt.Sprintf("Error: %v", err)))
+	fmt.Fprintf(os.Stderr, "%s\n", ErrorStyle.Render(fmt.Sprintf("%s Error: %v", IconCross, err)))
 }
 
 // WriteProgress outputs progress information
 func (ow *OutputWriter) WriteProgress(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("%s\n", InfoStyle.Render(fmt.Sprintf("⏳ %s", message)))
+		fmt.Printf("%s\n", InfoStyle.Render(fmt.Sprintf("%s %s", IconSpinner, message)))
 	}
 }
 
 // WriteSuccess outputs a success message
 func (ow *OutputWriter) WriteSuccess(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("%s\n", SuccessStyle.Render(fmt.Sprintf("✅ %s", message)))
+		fmt.Printf("%s\n", SuccessStyle.Render(fmt.Sprintf("%s %s", IconCheck, message)))
 	}
 }
 
 // WriteWarning outputs a warning message
 func (ow *OutputWriter) WriteWarning(message string) {
 	if ow.format != FormatQuiet {
-		fmt.Printf("%s\n", WarningStyle.Render(fmt.Sprintf("⚠️  %s", message)))
+		fmt.Printf("%s\n", WarningStyle.Render(fmt.Sprintf("%s %s", IconWarning, message)))
 	}
 }
 
@@ -290,19 +288,19 @@ func (pb *ProgressBar) render() {
 // Standalone Print helpers
 
 func PrintSuccess(format string, a ...any) {
-	fmt.Println(SuccessStyle.Render("✅ " + fmt.Sprintf(format, a...)))
+	fmt.Println(SuccessStyle.Render(IconCheck + " " + fmt.Sprintf(format, a...)))
 }
 
 func PrintError(format string, a ...any) {
-	fmt.Println(ErrorStyle.Render("❌ " + fmt.Sprintf(format, a...)))
+	fmt.Println(ErrorStyle.Render(IconCross + " " + fmt.Sprintf(format, a...)))
 }
 
 func PrintWarning(format string, a ...any) {
-	fmt.Println(WarningStyle.Render("⚠️  " + fmt.Sprintf(format, a...)))
+	fmt.Println(WarningStyle.Render(IconWarning + " " + fmt.Sprintf(format, a...)))
 }
 
 func PrintInfo(format string, a ...any) {
-	fmt.Println(InfoStyle.Render("ℹ️  " + fmt.Sprintf(format, a...)))
+	fmt.Println(InfoStyle.Render(IconInfo + " " + fmt.Sprintf(format, a...)))
 }
 
 func PrintHeader(text string) {
@@ -361,12 +359,5 @@ func PickFiles() (string, error) {
 	if IsContainer() {
 		return "", fmt.Errorf("file picker not supported in containers")
 	}
-	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-		path, err := dialog.File().Load()
-		if err != nil {
-			return "", fmt.Errorf("file picker canceled: %w", err)
-		}
-		return path, nil
-	}
-	return "", fmt.Errorf("file picker not supported on %s", runtime.GOOS)
+	return pickFilesNative()
 }

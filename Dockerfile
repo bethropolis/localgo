@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Build arguments for version information
 ARG VERSION=docker
@@ -11,8 +11,9 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy module files first for caching
+# Copy go.mod and vendor for reproducible builds (bypasses module proxy)
 COPY go.mod go.sum ./
+COPY vendor/ ./vendor/
 RUN go mod download
 
 # Copy source code
@@ -20,7 +21,7 @@ COPY . .
 
 # Build the binary with version information
 # CGO_ENABLED=0 ensures a static binary
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 go build -mod=vendor \
     -ldflags "-s -w \
     -X main.Version=${VERSION} \
     -X main.GitCommit=${GIT_COMMIT} \
@@ -80,8 +81,9 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 STOPSIGNAL SIGTERM
 
 # Health check using HTTP endpoint (faster than CLI which loads config)
+# Note: Use HTTPS since server returns 400 on HTTP (needs Host header)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/usr/local/bin/localgo", "health"]
+    CMD ["wget", "--no-check-certificate", "-qO-", "https://localhost:53317/"] || exit 1
 
 # Use entrypoint script to fix permissions (runs as root)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
