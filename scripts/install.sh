@@ -268,7 +268,11 @@ create_directories() {
         sudo chmod 755 "$SYSTEM_DATA_DIR" "$SYSTEM_CONFIG_DIR"
         print_success "System directories created"
     else
-        mkdir -p "$USER_CONFIG_DIR" "$USER_DATA_DIR"
+        # XDG Base Directory Specification paths
+        mkdir -p "$USER_CONFIG_DIR"             # ~/.config/localgo         (config)
+        mkdir -p "$HOME/.local/state/localgo" # ~/.local/state/localgo   (logs)
+        mkdir -p "$HOME/.local/share/localgo"  # ~/.local/share/localgo    (data/history)
+        mkdir -p "$USER_DATA_DIR"              # ~/Downloads/localgo      (downloads)
         print_success "User directories created"
     fi
 }

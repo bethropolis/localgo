@@ -35,9 +35,13 @@ SyslogIdentifier=localgo
 # -----------------------------------------------------------------------
 # Directory management
 # -----------------------------------------------------------------------
-# %h = home directory, %E = XDG_CONFIG_HOME (~/.config)
-# WorkingDirectory is just home — the binary calls os.UserHomeDir() and
-# os.UserConfigDir() itself to resolve all actual paths.
+# systemd creates these directories when the service starts.
+# StateDirectory  → ~/.local/state/localgo   (zap app.log + runtime state)
+# ConfigurationDirectory → ~/.config/localgo (config file)
+StateDirectory=localgo
+ConfigurationDirectory=localgo
+
+# WorkingDirectory is just the initial cwd — binary resolves all paths itself.
 WorkingDirectory=%h
 
 # Optional user overrides — %E expands to XDG_CONFIG_HOME (~/.config).
