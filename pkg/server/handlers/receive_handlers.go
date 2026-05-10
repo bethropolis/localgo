@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"context"
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -182,7 +180,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	// --- File Saving ---
 	rawFileName := fileInfo.Dto.FileName
-	destinationPath := resolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+	destinationPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 
 	// Path traversal prevention: ensure the resolved path is still within DownloadDir
 	cleanPath := filepath.Clean(destinationPath)
@@ -197,24 +195,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	var bar *progressbar.ProgressBar
 	if !h.config.Quiet {
-		desc := fileInfo.Dto.FileName
-		if len(desc) > 30 {
-			desc = desc[:27] + "..."
-		}
-		bar = progressbar.NewOptions64(
-			fileInfo.Dto.Size,
-			progressbar.OptionSetDescription(desc),
-			progressbar.OptionSetWriter(os.Stderr),
-			progressbar.OptionShowBytes(true),
-			progressbar.OptionSetWidth(20),
-			progressbar.OptionThrottle(65*time.Millisecond),
-			progressbar.OptionShowCount(),
-			progressbar.OptionOnCompletion(func() {
-				fmt.Fprint(os.Stderr, "\n")
-			}),
-			progressbar.OptionSpinnerType(14),
-			progressbar.OptionSetRenderBlankState(true),
-		)
+		bar = cli.NewFileProgressBar(fileInfo.Dto.FileName, fileInfo.Dto.Size)
 	}
 
 	// --- Progress Callback ---
@@ -276,7 +257,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Fall-back: save the already-read bytes as a file.
-		destinationPath = resolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 		cleanPath = filepath.Clean(destinationPath)
 		if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
 			cleanPath != filepath.Clean(h.config.DownloadDir) {
@@ -455,28 +436,4 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		h.logger.Infof("/cancel received for already-closed session %s — treating as success.", reqSessionId)
 	}
 	httputil.RespondJSON(w, http.StatusOK, struct{}{})
-}
-
-func resolveDuplicateFilename(dir, baseName string) string {
-	ext := filepath.Ext(baseName)
-	nameWithoutExt := strings.TrimSuffix(baseName, ext)
-
-	candidate := filepath.Join(dir, baseName)
-	if _, err := os.Stat(candidate); os.IsNotExist(err) {
-		return candidate
-	}
-
-	for i := 1; i <= 999; i++ {
-		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
-		candidate = filepath.Join(dir, newName)
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
-		}
-	}
-
-	// Fallback to avoid silent overwrite if (1) through (999) are all taken
-	randomBytes := make([]byte, 3)
-	rand.Read(randomBytes)
-	newName := fmt.Sprintf("%s_%s%s", nameWithoutExt, hex.EncodeToString(randomBytes), ext)
-	return filepath.Join(dir, newName)
 }

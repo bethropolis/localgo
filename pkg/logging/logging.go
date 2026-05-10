@@ -69,17 +69,17 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 	} else {
 		// Coloured console encoder
 		encCfg := zapcore.EncoderConfig{
-			TimeKey:        "T",
-			LevelKey:       "L",
-			NameKey:        "N",
-			CallerKey:      "C",
-			MessageKey:     "M",
-			StacktraceKey:  "S",
-			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    colourLevelEncoder,
-			EncodeTime:     zapcore.TimeEncoderOfLayout("15:04:05"),
-			EncodeDuration: zapcore.StringDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
+			TimeKey:          "T",
+			LevelKey:         "L",
+			NameKey:          "N",
+			CallerKey:        "C",
+			MessageKey:       "M",
+			StacktraceKey:    "S",
+			LineEnding:       zapcore.DefaultLineEnding,
+			EncodeLevel:      colourLevelEncoder,
+			EncodeTime:       zapcore.TimeEncoderOfLayout("15:04:05"),
+			EncodeDuration:   zapcore.StringDurationEncoder,
+			EncodeCaller:     zapcore.ShortCallerEncoder,
 			ConsoleSeparator: "  ",
 		}
 

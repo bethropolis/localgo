@@ -1,10 +1,13 @@
 package storage
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -111,4 +114,29 @@ func (pw *ProgressWriter) Write(p []byte) (n int, err error) {
 		pw.OnProgress(pw.BytesWritten)
 	}
 	return n, err
+}
+
+// ResolveDuplicateFilename finds an available filename by appending numbers if the file exists.
+func ResolveDuplicateFilename(dir, baseName string) string {
+	ext := filepath.Ext(baseName)
+	nameWithoutExt := strings.TrimSuffix(baseName, ext)
+
+	candidate := filepath.Join(dir, baseName)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate
+	}
+
+	for i := 1; i <= 999; i++ {
+		newName := fmt.Sprintf("%s (%d)%s", nameWithoutExt, i, ext)
+		candidate = filepath.Join(dir, newName)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+
+	// Fallback to avoid silent overwrite if (1) through (999) are all taken
+	randomBytes := make([]byte, 3)
+	rand.Read(randomBytes)
+	newName := fmt.Sprintf("%s_%s%s", nameWithoutExt, hex.EncodeToString(randomBytes), ext)
+	return filepath.Join(dir, newName)
 }

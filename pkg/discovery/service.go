@@ -18,7 +18,7 @@ type Service struct {
 	multicast     MulticastDiscoverer
 	devices       map[string]*model.Device
 	devicesMutex  sync.RWMutex
-	handlers[]func(*model.Device)
+	handlers      []func(*model.Device)
 	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
 	logger        *zap.SugaredLogger
@@ -36,8 +36,8 @@ type ServiceConfig struct {
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
 		MulticastConfig:    DefaultMulticastConfig(),
-		AnnounceInterval:   30 * time.Second, 
-		DeviceTimeout:      2 * time.Minute,  
+		AnnounceInterval:   30 * time.Second,
+		DeviceTimeout:      2 * time.Minute,
 		EnableAnnouncement: true,
 	}
 }
@@ -83,7 +83,7 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 		Port:        port,
 		Protocol:    protocol,
 		Download:    true,
-		Announce:    true, 
+		Announce:    true,
 	}
 
 	s.multicast.SetDto(multicastDto)
@@ -133,7 +133,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 		Port:        port,
 		Protocol:    protocol,
 		Download:    isDownloadServer,
-		Announce:    true, 
+		Announce:    true,
 	}
 
 	s.multicast.SetDto(multicastDto)
@@ -147,7 +147,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
 	}
 
-	var lastDevices[]*model.Device
+	var lastDevices []*model.Device
 
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
@@ -166,7 +166,7 @@ func (s *Service) Discover(ctx context.Context, alias string, port int, fingerpr
 }
 
 // GetDevices returns all currently known devices
-func (s *Service) GetDevices()[]*model.Device {
+func (s *Service) GetDevices() []*model.Device {
 	s.devicesMutex.RLock()
 	defer s.devicesMutex.RUnlock()
 

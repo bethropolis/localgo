@@ -58,7 +58,7 @@ func getFilesWithRelativePaths(paths []string) (map[string]string, error) {
 }
 
 // SendFiles sends files or directories to a recipient.
-func SendFiles(ctx context.Context, cfg *config.Config, filePaths[]string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger) error {
+func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -77,23 +77,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths[]string, recip
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
-
-	protocol_type := model.ProtocolTypeHTTP
-	if cfg.HttpsEnabled {
-		protocol_type = model.ProtocolTypeHTTPS
-	}
-
-	multicastDto := model.MulticastDto{
-		Alias:       cfg.Alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: cfg.DeviceModel,
-		DeviceType:  cfg.DeviceType,
-		Fingerprint: cfg.SecurityContext.CertificateHash,
-		Port:        cfg.Port,
-		Protocol:    protocol_type,
-		Download:    false,
-		Announce:    true,
-	}
+	multicastDto := cfg.ToMulticastDto(false)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logger)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, logger)
@@ -150,7 +134,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths[]string, recip
 		return fmt.Errorf("failed to get local IPs: %w", err)
 	}
 
-	var ips[]net.IP
+	var ips []net.IP
 	for _, ip := range localIPs {
 		subnetIPs := network.GetSubnetIPs(ip)
 		ips = append(ips, subnetIPs...)
@@ -182,7 +166,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths[]string, recip
 	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 }
 
-func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths[]string, logger *zap.SugaredLogger) error {
+func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -279,7 +263,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
-	
+
 	// Semaphore to strictly limit active concurrent uploads to 4
 	sem := make(chan struct{}, 4)
 
@@ -293,7 +277,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		wg.Add(1)
 		go func(fID, tkn, fPath string) {
 			defer wg.Done()
-			
+
 			// Acquire slot
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -310,7 +294,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	wg.Wait()
 	close(errCh)
 
-	var uploadErrors[]error
+	var uploadErrors []error
 	for err := range errCh {
 		uploadErrors = append(uploadErrors, err)
 	}

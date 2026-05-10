@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.3.6 - 2026-05-04
+
+### Refactored
+- Extracted DTO factory methods to `pkg/config/dto.go`
+- Moved `resolveDuplicateFilename` to `pkg/storage`
+- Added progress bar helper in `pkg/cli/progress.go`
+- Reduced boilerplate across major CLI commands
+
 ## v0.3.5 - 2026-03-04
 
 ### Highlights
@@ -31,18 +39,13 @@ All notable changes to this project are documented in this file.
 - Systemd units tightened: `MemoryMax=128M`, `TasksMax=64`, `CPUSchedulingPolicy=idle`, `IOSchedulingClass=idle`, `Nice=15`, `LimitNOFILE=4096`, `StandardOutput=null`
 
 ### Fixed
-- `localgo help share` and `localgo help devices` previously printed "Unknown command: share/devices"
-- `devices --quiet` documented in CLI_REFERENCE.md but the flag was never registered — removed from docs
-- `LOCALSEND_DEVICE_TYPE` default was incorrectly documented as `"server"` in CONFIGURATION.md; corrected to `"desktop"`
-- `send --port` and `send --alias` flags missing from CONFIGURATION.md flag tables
-- `share --port` and `share --no-clipboard` missing from CONFIGURATION.md flag tables
-- `serve`, `send`, `discover`, and `scan` had no flags tables at all in CLI_REFERENCE.md
+- Fixed `localgo help share` and `localgo help devices` incorrectly printing "Unknown command"
 
 ### Documentation
-- `docs/CLI_REFERENCE.md` fully rewritten: complete flags tables for every command, phantom `--quiet` on `devices` removed, Global Flags section added
-- `docs/CONFIGURATION.md` fully updated: all flags per command accurate, all env vars listed with correct defaults
-- `docs/GETTING_STARTED.md` expanded: `share`, `devices`, and `info` commands covered; headless + `--no-clipboard` guidance; auto-accept scenario; JSON scripting example
-- `README.md`: added `LOCALSEND_DEVICE_MODEL`, `LOCALSEND_AUTO_ACCEPT`, `LOCALSEND_NO_CLIPBOARD`, `LOCALSEND_LOG_LEVEL` to env var table; Clipboard Integration added to feature list
+- **CLI Reference** (`docs/CLI_REFERENCE.md`): Fully rewritten. Added complete flag tables for all commands (`serve`, `send`, `discover`, `scan`) and removed phantom flags that didn't exist in the code. Added a Global Flags section.
+- **Configuration** (`docs/CONFIGURATION.md`): Fully updated. Ensured all command flags (like `send --port` and `share --no-clipboard`) are documented. Corrected the default `LOCALSEND_DEVICE_TYPE` to `"desktop"`. 
+- **Getting Started** (`docs/GETTING_STARTED.md`): Expanded guides to cover `share`, `devices`, and `info` commands. Added guidance for headless setups, `--no-clipboard` usage, auto-accept scenarios, and a JSON scripting example.
+- **Readme** (`README.md`): Added Clipboard Integration to the features list and documented new environment variables (`LOCALSEND_DEVICE_MODEL`, `LOCALSEND_AUTO_ACCEPT`, `LOCALSEND_NO_CLIPBOARD`, `LOCALSEND_LOG_LEVEL`).
 
 ### Commits (v0.3.2..v0.3.5)
 - `6b7a69f` feat: add clipboard copy support for incoming text transfers

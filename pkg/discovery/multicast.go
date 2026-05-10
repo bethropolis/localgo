@@ -21,7 +21,7 @@ type MulticastDiscovery struct {
 	dto            model.MulticastDto
 	devices        map[string]*model.Device
 	devicesMutex   sync.RWMutex
-	handlers[]func(*model.Device)
+	handlers       []func(*model.Device)
 	handlersMu     sync.RWMutex
 	conn           net.PacketConn
 	connMu         sync.Mutex
@@ -225,7 +225,7 @@ func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
 	}
 }
 
-func (md *MulticastDiscovery) handlePacket(data[]byte, addr net.Addr) error {
+func (md *MulticastDiscovery) handlePacket(data []byte, addr net.Addr) error {
 	var dto model.MulticastDto
 	if err := json.Unmarshal(data, &dto); err != nil {
 		return fmt.Errorf("failed to unmarshal packet: %w", err)
@@ -278,7 +278,7 @@ func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 	}
 }
 
-func (md *MulticastDiscovery) GetDevices()[]*model.Device {
+func (md *MulticastDiscovery) GetDevices() []*model.Device {
 	md.devicesMutex.RLock()
 	defer md.devicesMutex.RUnlock()
 
