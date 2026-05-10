@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -46,27 +44,13 @@ execs serve directly without any permission changes.`,
 			}
 		}
 
-		if err := syscall.Setgid(pgid); err != nil {
-			fmt.Fprintf(os.Stderr, "docker-start: Setgid(%d): %v\n", pgid, err)
-			return err
-		}
-		if err := syscall.Setuid(puid); err != nil {
-			fmt.Fprintf(os.Stderr, "docker-start: Setuid(%d): %v\n", puid, err)
+		if err := setGIDAndUID(pgid, puid); err != nil {
 			return err
 		}
 
 		fmt.Printf("docker-start: running as UID %d / GID %d\n", puid, pgid)
 		return execServe(args)
 	},
-}
-
-func getEnvInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			return n
-		}
-	}
-	return def
 }
 
 func execServe(args []string) error {
@@ -81,7 +65,11 @@ func execServe(args []string) error {
 	}
 
 	env := os.Environ()
-	return syscall.Exec(bin, serveArgv, env)
+
+	if runtime.GOOS == "linux" {
+		return execBinary(bin, serveArgv, env)
+	}
+	return fmt.Errorf("exec not supported on this platform")
 }
 
 func init() {

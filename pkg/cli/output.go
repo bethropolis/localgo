@@ -353,11 +353,4 @@ func PickDevice(devices []*model.Device) *model.Device {
 	return selected
 }
 
-// PickFiles opens a native file picker and returns the selected path.
-// Returns an error on cancel, in containers, or on unsupported platforms.
-func PickFiles() (string, error) {
-	if IsContainer() {
-		return "", fmt.Errorf("file picker not supported in containers")
-	}
-	return pickFilesNative()
-}
+
