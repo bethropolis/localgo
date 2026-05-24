@@ -14,9 +14,6 @@ WORKDIR /app
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/localgo /localgo
 
-# Directory structure
-RUN mkdir -p /app/downloads /app/config/.security
-
 EXPOSE 53317/tcp
 EXPOSE 53317/udp
 
