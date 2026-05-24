@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -392,8 +393,13 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		body = &progressTracker{Reader: file, bar: bar}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	// Wrap with idle timeout: cancel request if no data flows for 15s
+	uploadCtx, cancel := context.WithCancel(ctx)
+	body = NewIdleTimeoutReader(body, 15*time.Second, cancel)
+
+	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, url, body)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("failed to create upload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -401,6 +407,9 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return fmt.Errorf("upload stalled: no data transmitted for 15s")
+		}
 		return fmt.Errorf("failed to send upload request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -410,6 +419,41 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 	}
 
 	return nil
+}
+
+// IdleTimeoutReader wraps an io.ReadCloser and cancels the context if no data
+// is read within the configured idle duration.
+type IdleTimeoutReader struct {
+	r           io.ReadCloser
+	idleTimeout time.Duration
+	timer       *time.Timer
+	cancel      func()
+}
+
+func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration, cancel func()) *IdleTimeoutReader {
+	tr := &IdleTimeoutReader{
+		r:           r,
+		idleTimeout: timeout,
+		cancel:      cancel,
+	}
+	tr.timer = time.AfterFunc(timeout, func() {
+		tr.cancel()
+	})
+	return tr
+}
+
+func (tr *IdleTimeoutReader) Read(p []byte) (int, error) {
+	tr.timer.Reset(tr.idleTimeout)
+	n, err := tr.r.Read(p)
+	if err != nil {
+		tr.timer.Stop()
+	}
+	return n, err
+}
+
+func (tr *IdleTimeoutReader) Close() error {
+	tr.timer.Stop()
+	return tr.r.Close()
 }
 
 type progressBar struct {

@@ -2,8 +2,10 @@ package storage
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,10 +16,18 @@ import (
 	"go.uber.org/zap"
 )
 
-// Thread-safe pool of 32KB buffers for stream copies, reducing GC churn.
-var copyBufferPool = sync.Pool{
+// Thread-safe pool of 32KB buffers for small files.
+var smallBufferPool = sync.Pool{
 	New: func() interface{} {
 		b := make([]byte, 32*1024)
+		return &b
+	},
+}
+
+// Thread-safe pool of 256KB buffers for files over 10MB, reducing syscall overhead on fast LANs.
+var largeBufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 256*1024)
 		return &b
 	},
 }
@@ -35,11 +45,13 @@ func EnsureDirExists(path string) error {
 // It creates necessary directories.
 // It reports progress via the onProgress callback (bytes written).
 func SaveStreamToFile(stream io.Reader, filePath string, onProgress func(bytesWritten int64)) error {
-	return SaveStreamToFileWithMetadata(stream, filePath, nil, nil, onProgress, nil)
+	return SaveStreamToFileWithMetadata(stream, filePath, 0, nil, nil, nil, onProgress, nil)
 }
 
 // SaveStreamToFileWithMetadata saves an io.Reader stream and restores optional timestamps.
-func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *string, accessed *string, onProgress func(bytesWritten int64), logger *zap.SugaredLogger) error {
+// If expectedSha256 is provided, the stream is verified against it after the copy succeeds.
+// fileSize is used to select an optimal copy buffer size.
+func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize int64, modified *string, accessed *string, expectedSha256 *string, onProgress func(bytesWritten int64), logger *zap.SugaredLogger) error {
 	dir := filepath.Dir(filePath)
 	if err := EnsureDirExists(dir); err != nil {
 		return err
@@ -56,11 +68,23 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 		OnProgress: onProgress,
 	}
 
-	// Retrieve a pre-allocated copy buffer from the pool
-	bufPtr := copyBufferPool.Get().(*[]byte)
-	defer copyBufferPool.Put(bufPtr)
+	// Select buffer pool based on file size
+	pool := &smallBufferPool
+	if fileSize > 10*1024*1024 {
+		pool = &largeBufferPool
+	}
+	bufPtr := pool.Get().(*[]byte)
+	defer pool.Put(bufPtr)
 
-	_, err = io.CopyBuffer(progressWriter, stream, *bufPtr)
+	// Optional SHA-256 hashing via TeeReader
+	var hasher hash.Hash
+	var hashingReader io.Reader = stream
+	if expectedSha256 != nil && *expectedSha256 != "" {
+		hasher = sha256.New()
+		hashingReader = io.TeeReader(stream, hasher)
+	}
+
+	_, err = io.CopyBuffer(progressWriter, hashingReader, *bufPtr)
 	if err != nil {
 		outFile.Close()
 		if removeErr := os.Remove(filePath); removeErr != nil {
@@ -76,6 +100,20 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 			logger.Warnw("Failed to remove incomplete file after close error", "path", filePath, "error", removeErr)
 		}
 		return fmt.Errorf("failed to close and flush file %s: %w", filePath, closeErr)
+	}
+
+	// Verify SHA-256 checksum if the sender provided one
+	if hasher != nil {
+		calculatedHash := hex.EncodeToString(hasher.Sum(nil))
+		if calculatedHash != *expectedSha256 {
+			if removeErr := os.Remove(filePath); removeErr != nil && logger != nil {
+				logger.Warnw("Failed to remove corrupted file", "path", filePath, "error", removeErr)
+			}
+			return fmt.Errorf("integrity violation: SHA-256 mismatch (got %s, expected %s)", calculatedHash, *expectedSha256)
+		}
+		if logger != nil {
+			logger.Infow("SHA-256 integrity verified", "path", filePath)
+		}
 	}
 
 	if modified != nil || accessed != nil {

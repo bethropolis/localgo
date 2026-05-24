@@ -277,7 +277,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		savErr := storage.SaveStreamToFileWithMetadata(
-			combinedReader, destinationPath, modified, accessed, onProgress, h.logger,
+			combinedReader, destinationPath, fileInfo.Dto.Size, modified, accessed, fileInfo.Dto.SHA256, onProgress, h.logger,
 		)
 		if savErr != nil {
 			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)
@@ -293,7 +293,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, modified, accessed, onProgress, h.logger)
+	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, fileInfo.Dto.Size, modified, accessed, fileInfo.Dto.SHA256, onProgress, h.logger)
 
 	if err != nil {
 		h.logger.Errorf("Error saving file %s (ID: %s): %v", fileInfo.Dto.FileName, reqFileId, err)

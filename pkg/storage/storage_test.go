@@ -69,8 +69,10 @@ func TestSaveStreamToFileWithMetadata(t *testing.T) {
 	err := SaveStreamToFileWithMetadata(
 		strings.NewReader(content),
 		filePath,
+		0,
 		&modTime,
 		&accTime,
+		nil,
 		nil,
 		testLogger,
 	)
@@ -139,7 +141,9 @@ func TestSaveStreamToFile_InvalidTimestamp(t *testing.T) {
 	err := SaveStreamToFileWithMetadata(
 		strings.NewReader(content),
 		filePath,
+		0,
 		&invalidTime,
+		nil,
 		nil,
 		nil,
 		testLogger,
