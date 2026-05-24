@@ -87,8 +87,27 @@ func (pc *PeerCache) load() {
 		return
 	}
 
+	staleThreshold := 30 * 24 * time.Hour
+	now := time.Now()
+	evictedCount := 0
+
 	for _, d := range list {
+		// Evict peers not seen in the last 30 days
+		if !d.LastSeen.IsZero() && now.Sub(d.LastSeen) > staleThreshold {
+			evictedCount++
+			continue
+		}
 		pc.peers[d.Fingerprint] = d
+	}
+
+	if evictedCount > 0 {
+		pc.logger.Debugf("Evicted %d stale peer(s) from the local cache (older than 30 days)", evictedCount)
+		// Persist the cleaned cache back to disk in the background
+		go func() {
+			pc.mu.Lock()
+			defer pc.mu.Unlock()
+			_ = pc.persist()
+		}()
 	}
 }
 

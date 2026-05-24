@@ -125,7 +125,7 @@ func (ow *OutputWriter) writeDevicesTable(devices []*model.Device, method string
 	// Write devices
 	for _, device := range devices {
 		fmt.Fprintf(ow.writer, "%s\t%s\t%s\t%d\t%s\t%s...\n",
-			truncateString(device.Alias, 20),
+			TruncateString(device.Alias, 20),
 			device.IP,
 			strings.ToUpper(string(device.Protocol)),
 			device.Port,
@@ -211,8 +211,8 @@ func (ow *OutputWriter) writeJSON(data interface{}) error {
 
 // Helper functions
 
-// truncateString truncates a string to maxLen characters
-func truncateString(s string, maxLen int) string {
+// TruncateString truncates a string to maxLen characters
+func TruncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
