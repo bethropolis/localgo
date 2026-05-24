@@ -46,8 +46,7 @@ WORKDIR /app
 # 1. ca-certificates for HTTPS
 # 2. tzdata for timezones
 # 3. su-exec for stepping down from root to localgo user
-# 4. wget for healthcheck
-RUN apk add --no-cache ca-certificates tzdata su-exec wget
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
 # create the user
 RUN adduser -D -u 1000 -h /app localgo
@@ -78,10 +77,9 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 # Graceful shutdown signal
 STOPSIGNAL SIGTERM
 
-# Health check using HTTP endpoint (faster than CLI which loads config)
-# Note: Use HTTPS since server returns 400 on HTTP (needs Host header)
+# Health check using native LocalGo CLI utility
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["wget", "--no-check-certificate", "-qO-", "https://localhost:53317/"] || exit 1
+    CMD ["localgo", "health"]
 
 # Use entrypoint script to fix permissions (runs as root)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

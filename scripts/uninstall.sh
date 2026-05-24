@@ -288,39 +288,34 @@ remove_binaries() {
 remove_completion() {
     local removed=false
 
+    # Always attempt comprehensive clean-up of all possible user shell paths
+    if safe_remove_file "$USER_COMPLETION_DIR/$BINARY_NAME" false; then
+        print_success "Removed user bash completion"
+        removed=true
+    fi
+
+    local zsh_user_completion="$HOME/.local/share/zsh/site-functions/_$BINARY_NAME"
+    if safe_remove_file "$zsh_user_completion" false; then
+        print_success "Removed user zsh completion"
+        removed=true
+    fi
+
+    local fish_user_completion="$HOME/.config/fish/completions/$BINARY_NAME.fish"
+    if safe_remove_file "$fish_user_completion" false; then
+        print_success "Removed user fish completion"
+        removed=true
+    fi
+
+    # System-wide paths cleanup (for complete coverage)
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
-        # System bash completion (legacy cleanup)
         if safe_remove_file "/usr/share/bash-completion/completions/$BINARY_NAME" true; then
             print_success "Removed system bash completion"
             removed=true
         fi
 
-        # System fish completion (legacy cleanup)
         local fish_sys_completion="/usr/share/fish/vendor_completions.d/$BINARY_NAME.fish"
         if safe_remove_file "$fish_sys_completion" true; then
             print_success "Removed system fish completion"
-            removed=true
-        fi
-    fi
-
-    if [[ "$UNINSTALL_MODE" != "system" ]]; then
-        # User bash completion
-        if safe_remove_file "$USER_COMPLETION_DIR/$BINARY_NAME" false; then
-            print_success "Removed user bash completion"
-            removed=true
-        fi
-
-        # User zsh completion
-        local zsh_user_completion="$HOME/.local/share/zsh/site-functions/_$BINARY_NAME"
-        if safe_remove_file "$zsh_user_completion" false; then
-            print_success "Removed user zsh completion"
-            removed=true
-        fi
-
-        # User fish completion
-        local fish_user_completion="$HOME/.config/fish/completions/$BINARY_NAME.fish"
-        if safe_remove_file "$fish_user_completion" false; then
-            print_success "Removed user fish completion"
             removed=true
         fi
     fi

@@ -22,6 +22,7 @@ SERVICE_NAME="localgo"
 SYSTEM_BIN_DIR="/usr/local/bin"
 SYSTEM_CONFIG_DIR="/etc/localgo"
 SYSTEM_DATA_DIR="/var/lib/localgo"
+SYSTEM_SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 USER_BIN_DIR="$HOME/.local/bin"
 USER_CONFIG_DIR="$HOME/.config/localgo"
 USER_DATA_DIR="$HOME/Downloads/localgo"
@@ -38,19 +39,26 @@ BUILT_BINARY=""
 
 # Function to print colored output
 print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}::${NC} $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}OK${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}!!${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}EE${NC} $1"
+}
+
+# Print a section header
+section() {
+    echo
+    echo "  ── $1 ──"
+    echo
 }
 
 # Function to show usage
@@ -401,52 +409,40 @@ install_completion() {
         return
     fi
 
-    print_status "Detecting shell for completions..."
+    print_status "Detecting and installing completions for active shells..."
 
-    local target_shell=""
-    case "$SHELL" in
-        *fish) target_shell="fish" ;;
-        *zsh)  target_shell="zsh"  ;;
-        *)     target_shell="bash" ;;
-    esac
+    # Install Bash completion if bash is present
+    if command -v bash &>/dev/null; then
+        local completion_script="$SCRIPT_DIR/bash_completion.sh"
+        local user_completion_dir="$HOME/.local/share/bash-completion/completions"
+        if [[ -f "$completion_script" ]]; then
+            mkdir -p "$user_completion_dir"
+            cp "$completion_script" "$user_completion_dir/$BINARY_NAME"
+            print_success "Bash completion installed to $user_completion_dir"
+        fi
+    fi
 
-    case "$target_shell" in
-        fish)
-            local fish_completion_script="$SCRIPT_DIR/fish_completion.fish"
-            local fish_user_dir="$HOME/.config/fish/completions"
-            if [[ -f "$fish_completion_script" ]]; then
-                mkdir -p "$fish_user_dir"
-                cp "$fish_completion_script" "$fish_user_dir/$BINARY_NAME.fish"
-                print_success "Fish completion installed to $fish_user_dir"
-            else
-                print_warning "Fish completion script not found: $fish_completion_script"
-            fi
-            ;;
-        zsh)
-            local zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
-            local completion_script="$SCRIPT_DIR/zsh_completion.zsh"
-            if [[ -f "$completion_script" ]]; then
-                mkdir -p "$zsh_completion_dir"
-                cp "$completion_script" "$zsh_completion_dir/_$BINARY_NAME"
-                print_success "Zsh completion installed to $zsh_completion_dir"
-                print_status "Add '$zsh_completion_dir' to your fpath if not already present."
-            else
-                print_warning "Completion script not found: $completion_script"
-            fi
-            ;;
-        bash)
-            local completion_script="$SCRIPT_DIR/bash_completion.sh"
-            local user_completion_dir="$HOME/.local/share/bash-completion/completions"
-            if [[ -f "$completion_script" ]]; then
-                mkdir -p "$user_completion_dir"
-                cp "$completion_script" "$user_completion_dir/$BINARY_NAME"
-                print_success "Bash completion installed to $user_completion_dir"
-                print_status "Restart your shell or run: source $user_completion_dir/$BINARY_NAME"
-            else
-                print_warning "Completion script not found: $completion_script"
-            fi
-            ;;
-    esac
+    # Install Zsh completion if zsh is present
+    if command -v zsh &>/dev/null; then
+        local zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
+        local completion_script="$SCRIPT_DIR/zsh_completion.zsh"
+        if [[ -f "$completion_script" ]]; then
+            mkdir -p "$zsh_completion_dir"
+            cp "$completion_script" "$zsh_completion_dir/_$BINARY_NAME"
+            print_success "Zsh completion installed to $zsh_completion_dir"
+        fi
+    fi
+
+    # Install Fish completion if fish is present
+    if command -v fish &>/dev/null; then
+        local fish_completion_script="$SCRIPT_DIR/fish_completion.fish"
+        local fish_user_dir="$HOME/.config/fish/completions"
+        if [[ -f "$fish_completion_script" ]]; then
+            mkdir -p "$fish_user_dir"
+            cp "$fish_completion_script" "$fish_user_dir/$BINARY_NAME.fish"
+            print_success "Fish completion installed to $fish_user_dir"
+        fi
+    fi
 }
 
 # Function to test installation
@@ -490,11 +486,13 @@ test_installation() {
 
 # Function to show post-installation instructions
 show_post_install() {
-    print_success "LocalGo installation completed!"
+    echo "  ┌─ Installation Complete ────────────────────────────┐"
+    echo "  │  LocalGo is ready to use!                         │"
+    echo "  └────────────────────────────────────────────────────┘"
     echo
 
     if [[ "$INSTALL_MODE" == "user" ]]; then
-        print_status "Next steps:"
+        print_status "Quick Start:"
 
         if [[ ":$PATH:" != *":$USER_BIN_DIR:"* ]]; then
             print_warning "Add $USER_BIN_DIR to your PATH:"
@@ -511,53 +509,79 @@ show_post_install() {
                     echo "    source ~/.bashrc"
                     ;;
             esac
+            echo
         fi
 
-        echo "1. Edit $USER_CONFIG_DIR/localgo.env to customize settings"
-        echo "2. Run: $BINARY_NAME info"
-        echo "3. Start server: $BINARY_NAME serve"
+        printf "  %s %s\n" "1." "Edit $USER_CONFIG_DIR/localgo.env to customize settings"
+        printf "  %s %s\n" "2." "Run: $BINARY_NAME info"
+        printf "  %s %s\n" "3." "Start server: $BINARY_NAME serve"
+        echo
 
         if [[ "$INSTALL_SERVICE" == true ]]; then
+            print_status "User Service:"
+            echo "    systemctl --user enable $SERVICE_NAME           # Enable on login"
+            echo "    systemctl --user start $SERVICE_NAME            # Start now"
+            echo "    systemctl --user status $SERVICE_NAME           # Check status"
+            echo "    journalctl --user -u $SERVICE_NAME -f           # View logs"
             echo
-            print_status "User service commands:"
-            echo "  systemctl --user enable $SERVICE_NAME   # Enable on login"
-            echo "  systemctl --user start $SERVICE_NAME    # Start now"
-            echo "  systemctl --user status $SERVICE_NAME   # Check status"
-            echo "  journalctl --user -u $SERVICE_NAME -f   # View logs"
-            echo
-            print_status "To keep the service running after logout:"
+            print_status "Keep service alive after logout:"
             echo "    loginctl enable-linger $USER"
+            echo
+        fi
+
+        print_status "Installed Paths:"
+        echo "    Binary:        $USER_BIN_DIR/$BINARY_NAME"
+        echo "    Config:        $USER_CONFIG_DIR/localgo.env"
+        if [[ "$INSTALL_SERVICE" == true ]]; then
+            echo "    Service:       ~/.config/systemd/user/$SERVICE_NAME.service"
         fi
     else
-        print_status "Next steps:"
-        echo "1. Edit $SYSTEM_CONFIG_DIR/localgo.env to customize settings"
+        print_status "Quick Start:"
+        echo "    1. Edit $SYSTEM_CONFIG_DIR/localgo.env to customize settings"
+        echo
 
         if [[ "$INSTALL_SERVICE" == true ]]; then
-            echo "2. Enable service: sudo systemctl enable $SERVICE_NAME"
-            echo "3. Start service:  sudo systemctl start $SERVICE_NAME"
-            echo "4. Check status:   sudo systemctl status $SERVICE_NAME"
+            print_status "System Service:"
+            echo "    sudo systemctl enable $SERVICE_NAME       # Enable on boot"
+            echo "    sudo systemctl start $SERVICE_NAME        # Start now"
+            echo "    sudo systemctl status $SERVICE_NAME      # Check status"
+            echo "    sudo journalctl -u $SERVICE_NAME -f      # View logs"
             echo
-            print_status "Service log:"
-            echo "  sudo journalctl -u $SERVICE_NAME -f"
         else
-            echo "2. Test installation: $BINARY_NAME info"
-            echo "3. Start server:      $BINARY_NAME serve"
+            echo "    2. Test: $BINARY_NAME info"
+            echo "    3. Run:  $BINARY_NAME serve"
+            echo
+        fi
+
+        print_status "Installed Paths:"
+        echo "    Binary:  $SYSTEM_BIN_DIR/$BINARY_NAME"
+        echo "    Config:  $SYSTEM_CONFIG_DIR/localgo.env"
+        if [[ "$INSTALL_SERVICE" == true ]]; then
+            echo "    Service: $SYSTEM_SERVICE_FILE"
         fi
     fi
 
     echo
-    print_status "Useful commands:"
-    echo "  $BINARY_NAME help           # Show help"
-    echo "  $BINARY_NAME info           # Show device info"
-    echo "  $BINARY_NAME serve          # Start server"
-    echo "  $BINARY_NAME discover       # Find devices"
-    echo "  $BINARY_NAME send --help    # Send file help"
+    print_status "Useful Commands:"
+    echo "    $BINARY_NAME help            # Show help"
+    echo "    $BINARY_NAME info            # Show device info"
+    echo "    $BINARY_NAME serve           # Start server"
+    echo "    $BINARY_NAME discover        # Find devices on your network"
+    echo "    $BINARY_NAME send --help     # Send files"
 }
 
 # Main installation function
 main() {
-    echo "LocalGo Installation Script"
-    echo "==========================="
+    printf "\n"
+    printf "    _           _____     _    ____    \n"
+    printf "   | |         / ____|   | |  / __ \   \n"
+    printf "   | |        | |  __    | | | |  | |  \n"
+    printf "   | |        | | |_ |   | | | |  | |  \n"
+    printf "   | |____    | |__| |   | | | |__| |  \n"
+    printf "   |______|    \_____|   |_|  \____/   \n"
+    printf "\n"
+    echo "  LocalGo — A LocalSend v2.1 Protocol CLI"
+    echo "  ───────────────────────────────────────"
     echo
 
     # Parse command line arguments
@@ -605,23 +629,42 @@ main() {
         exit 1
     fi
 
-    print_status "Installation mode: $INSTALL_MODE"
-    print_status "Install service:   $INSTALL_SERVICE"
-    print_status "Install completion: $INSTALL_COMPLETION"
+    echo "  ┌─ Installation Summary ─────────────────────────────┐"
+    printf "  │  %-22s  %-16s  │\n" "Mode:" "$INSTALL_MODE"
+    printf "  │  %-22s  %-16s  │\n" "Build Binary:" "$BUILD_BINARY"
+    printf "  │  %-22s  %-16s  │\n" "Service:" "$INSTALL_SERVICE"
+    printf "  │  %-22s  %-16s  │\n" "Completions:" "$INSTALL_COMPLETION"
     if [[ "$INSTALL_MODE" == "system" ]]; then
-        print_status "Create system user: $CREATE_USER"
+        printf "  │  %-22s  %-16s  │\n" "Create User:" "$CREATE_USER"
     fi
+    echo "  └────────────────────────────────────────────────────┘"
     echo
 
     # Run installation steps
+    section "Prerequisites"
     check_prerequisites
+
+    section "Building"
     build_binary
+
+    section "Directories"
     create_directories
+
+    section "Binary"
     install_binary
+
+    section "Configuration"
     install_configuration
+
+    section "Service"
     install_service
+
+    section "Completions"
     install_completion
+
+    section "Verification"
     test_installation
+
     show_post_install
 }
 

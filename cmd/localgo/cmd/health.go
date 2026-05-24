@@ -16,7 +16,7 @@ var healthCmd = &cobra.Command{
 	Long:  `Exits 0 if the server is responding on the configured port, exits 1 otherwise. Useful for container HEALTHCHECK directives.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port := getServePort()
-		url := fmt.Sprintf("https://127.0.0.1:%d/api/v2/localhost/info", port)
+		url := fmt.Sprintf("https://127.0.0.1:%d/api/localsend/v2/info", port)
 
 		tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 		client := &http.Client{Timeout: 3 * time.Second, Transport: tr}
