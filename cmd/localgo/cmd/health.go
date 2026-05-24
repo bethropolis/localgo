@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"crypto/tls"
 	"net/http"
 	"os"
 	"time"
@@ -15,9 +16,10 @@ var healthCmd = &cobra.Command{
 	Long:  `Exits 0 if the server is responding on the configured port, exits 1 otherwise. Useful for container HEALTHCHECK directives.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port := getServePort()
-		url := fmt.Sprintf("http://127.0.0.1:%d/api/localsend/v2/info", port)
+		url := fmt.Sprintf("https://127.0.0.1:%d/api/localsend/v2/info", port)
 
-		client := &http.Client{Timeout: 3 * time.Second}
+		tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		client := &http.Client{Timeout: 3 * time.Second, Transport: tr}
 		resp, err := client.Get(url)
 		if err != nil {
 			return fmt.Errorf("health check failed: %w", err)

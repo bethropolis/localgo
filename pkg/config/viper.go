@@ -22,6 +22,7 @@ func InitViper() *viper.Viper {
 	// Set defaults
 	v.SetDefault("port", DefaultPort)
 	v.SetDefault("multicast_group", DefaultMulticastGroup)
+	v.SetDefault("concurrency", 4)
 	// We'll handle DownloadDir default in LoadConfig since it depends on os.UserHomeDir
 
 	_ = v.ReadInConfig() // ignore error if config file doesn't exist

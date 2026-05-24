@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
+	"github.com/charmbracelet/huh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -79,13 +82,18 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
+	discoverySvcConfig.MulticastConfig.InterfaceName = cfg.MulticastInterface
 	multicastDto := cfg.ToMulticastDto(false)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logger)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, logger)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
 
+	peerCache := discovery.NewPeerCache(logger)
+	multicast.SetPeerCache(peerCache)
+
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logger)
+	discoverySvc.SetPeerCache(peerCache)
 
 	foundChan := make(chan *model.Device, 1)
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
@@ -116,6 +124,9 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	if targetDevice != nil {
+		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+			return err
+		}
 		return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
@@ -165,7 +176,45 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	logger.Infof("Discovered recipient via HTTP Scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
 
+	if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+		return err
+	}
+
 	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+}
+
+// verifyDeviceFingerprint checks if a cached fingerprint differs from the target's
+// and prompts the user to trust the updated fingerprint before proceeding.
+func verifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model.Device) error {
+	if targetDevice == nil || targetDevice.Fingerprint == "" {
+		return nil
+	}
+
+	cachedPeers := peerCache.GetPeers()
+	for _, cached := range cachedPeers {
+		if cached.Alias == targetDevice.Alias && cached.Fingerprint != targetDevice.Fingerprint {
+			cli.PrintWarning("The security fingerprint for '%s' has changed!", targetDevice.Alias)
+
+			var trust bool
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("Trust this new device fingerprint and update cache?").
+						Value(&trust).
+						Affirmative("Trust & Save").
+						Negative("Abort"),
+				),
+			).WithTheme(huh.ThemeCharm())
+
+			if err := form.Run(); err != nil || !trust {
+				return fmt.Errorf("security verification failed: untrusted certificate hash change")
+			}
+
+			peerCache.Save(targetDevice)
+			break
+		}
+	}
+	return nil
 }
 
 func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
@@ -182,6 +231,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		client.Transport = tr
+		defer tr.CloseIdleConnections()
 	}
 
 	fileMap, err := getFilesWithRelativePaths(filePaths)
@@ -207,6 +257,12 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		n, _ := file.Read(buffer)
 		file.Close()
 		contentType := http.DetectContentType(buffer[:n])
+
+		// If this is a temporary clipboard file, sanitize display name to text_transfer.txt
+		if strings.HasPrefix(filepath.Base(filePath), "localgo-clip-") {
+			remoteName = "text_transfer.txt"
+			contentType = "text/plain"
+		}
 
 		modTime := fileInfo.ModTime().Format(time.RFC3339)
 
@@ -268,7 +324,11 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
 
-	sem := make(chan struct{}, 4)
+	concurrency := cfg.Concurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	sem := make(chan struct{}, concurrency)
 
 	for fileID, token := range prepareResponse.Files {
 		filePath, exists := filePathMap[fileID]
@@ -340,8 +400,13 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		body = &progressTracker{Reader: file, bar: bar}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	// Wrap with idle timeout: cancel request if no data flows for 15s
+	uploadCtx, cancel := context.WithCancel(ctx)
+	body = NewIdleTimeoutReader(body, 15*time.Second, cancel)
+
+	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, url, body)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("failed to create upload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -349,6 +414,9 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return fmt.Errorf("upload stalled: no data transmitted for 15s")
+		}
 		return fmt.Errorf("failed to send upload request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -358,6 +426,41 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 	}
 
 	return nil
+}
+
+// IdleTimeoutReader wraps an io.ReadCloser and cancels the context if no data
+// is read within the configured idle duration.
+type IdleTimeoutReader struct {
+	r           io.ReadCloser
+	idleTimeout time.Duration
+	timer       *time.Timer
+	cancel      func()
+}
+
+func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration, cancel func()) *IdleTimeoutReader {
+	tr := &IdleTimeoutReader{
+		r:           r,
+		idleTimeout: timeout,
+		cancel:      cancel,
+	}
+	tr.timer = time.AfterFunc(timeout, func() {
+		tr.cancel()
+	})
+	return tr
+}
+
+func (tr *IdleTimeoutReader) Read(p []byte) (int, error) {
+	tr.timer.Reset(tr.idleTimeout)
+	n, err := tr.r.Read(p)
+	if err != nil {
+		tr.timer.Stop()
+	}
+	return n, err
+}
+
+func (tr *IdleTimeoutReader) Close() error {
+	tr.timer.Stop()
+	return tr.r.Close()
 }
 
 type progressBar struct {

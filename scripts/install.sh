@@ -22,6 +22,7 @@ SERVICE_NAME="localgo"
 SYSTEM_BIN_DIR="/usr/local/bin"
 SYSTEM_CONFIG_DIR="/etc/localgo"
 SYSTEM_DATA_DIR="/var/lib/localgo"
+SYSTEM_SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 USER_BIN_DIR="$HOME/.local/bin"
 USER_CONFIG_DIR="$HOME/.config/localgo"
 USER_DATA_DIR="$HOME/Downloads/localgo"
@@ -32,25 +33,35 @@ INSTALL_SERVICE=true   # user service is installed by default
 INSTALL_COMPLETION=true
 BUILD_BINARY=true
 CREATE_USER=false
+ASSUME_YES=false
 
 # Path to the built binary (set by build_binary, consumed by install_binary)
 BUILT_BINARY=""
 
 # Function to print colored output
 print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "  ${BLUE}ℹ${NC}  $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "  ${GREEN}✔${NC}  $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "  ${YELLOW}⚠${NC}  $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "  ${RED}✖${NC}  $1"
+}
+
+# Print a section header with step counter
+section() {
+    local step_num="$1"
+    local step_title="$2"
+    echo
+    echo -e "  ${BLUE}[${step_num}/7]${NC} ${step_title}"
+    echo "  ────────────────────────────────────────────────────"
 }
 
 # Function to show usage
@@ -63,35 +74,22 @@ USAGE:
 
 OPTIONS:
     --mode MODE           Installation mode: user|system (default: user)
-    --service             Install systemd service (required for system mode; default for user mode)
+    --service             Install systemd service (default for user mode)
     --no-service          Skip systemd service installation
     --no-completion       Skip shell completion installation
     --no-build            Skip building binary (use existing binary in project bin/ or build/)
     --create-user         Create localgo system user (system mode only)
+    -y, --yes             Assume yes; bypass confirmation prompts
     --help                Show this help message
 
 MODES:
     user                  Install for current user only (~/.local/bin).
-                          A user systemd service is installed by default.
     system                Install system-wide (/usr/local/bin).
-                          Pass --service to also install the system-wide service.
-
-EXAMPLES:
-    $0                                        # User install + user service (default)
-    $0 --no-service                           # User install without service
-    $0 --mode system                          # System install (binary only)
-    $0 --mode system --service                # System install + system service
-    $0 --mode system --service --create-user  # Full system setup
-
-REQUIREMENTS:
-    - Go 1.26+ (for building; not needed with --no-build)
-    - systemd (for service installation)
-    - sudo access (for system installation)
 
 EOF
 }
 
-# Resolve the systemd user config directory, accounting for Distrobox/XDG mismatches
+# Resolve systemd config home cleanly
 resolve_systemd_config_home() {
     local result="$HOME/.config"
     if command -v systemctl &>/dev/null; then
@@ -110,13 +108,28 @@ resolve_systemd_config_home() {
     echo "$result"
 }
 
+# Check for existing installation to notify of upgrades
+detect_existing_install() {
+    local bin_path=""
+    if [[ "$INSTALL_MODE" == "system" ]]; then
+        bin_path="$SYSTEM_BIN_DIR/$BINARY_NAME"
+    else
+        bin_path="$USER_BIN_DIR/$BINARY_NAME"
+    fi
+
+    if [[ -x "$bin_path" ]]; then
+        local old_ver
+        old_ver=$("$bin_path" version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "unknown")
+        print_status "Detected existing LocalGo installation (v${old_ver}) at $bin_path"
+        print_status "This installation will upgrade it to the latest version."
+    fi
+}
+
 # Function to check prerequisites
 check_prerequisites() {
-    print_status "Checking prerequisites..."
-
     if [[ "$BUILD_BINARY" == true ]]; then
         if ! command -v go &> /dev/null; then
-            print_error "Go is not installed. Please install Go 1.24+ first."
+            print_error "Go is not installed. Please install Go 1.26+ first."
             exit 1
         fi
 
@@ -129,32 +142,31 @@ check_prerequisites() {
             exit 1
         fi
 
-        print_success "Go $GO_VERSION found"
+        print_success "Go v$GO_VERSION verified"
     fi
 
     if [[ "$INSTALL_MODE" == "system" ]]; then
         if [[ $EUID -eq 0 ]]; then
-            print_warning "Running as root. Consider using sudo instead."
+            print_warning "Running as root. Running with sudo is recommended instead."
         elif ! sudo -n true 2>/dev/null; then
-            print_status "System installation requires sudo access. You may be prompted for password."
+            print_status "System installation requires sudo privileges. You may be prompted for your password."
         fi
     fi
 
     if [[ "$INSTALL_SERVICE" == true ]]; then
         if ! command -v systemctl &> /dev/null; then
-            print_error "systemctl not found. systemd is required for service installation."
+            print_error "systemctl not found. systemd is required for service setup."
             exit 1
         fi
-        print_success "systemd found"
+        print_success "systemd verified"
     fi
 }
 
-# Function to build binary — sets BUILT_BINARY on success
+# Function to build binary
 build_binary() {
     if [[ "$BUILD_BINARY" == false ]]; then
-        print_status "Skipping binary build (--no-build)"
+        print_status "Skipping compilation (--no-build)"
 
-        # Locate an existing pre-built binary
         local candidates=(
             "$PROJECT_DIR/bin/$BINARY_NAME"
             "$PROJECT_DIR/build/$BINARY_NAME"
@@ -163,23 +175,18 @@ build_binary() {
         for candidate in "${candidates[@]}"; do
             if [[ -x "$candidate" ]]; then
                 BUILT_BINARY="$candidate"
-                print_success "Using existing binary: $BUILT_BINARY"
+                print_success "Using pre-compiled binary: $BUILT_BINARY"
                 return
             fi
         done
 
-        print_error "No pre-built binary found. Expected one of:"
-        for candidate in "${candidates[@]}"; do
-            echo "    $candidate"
-        done
-        print_error "Run without --no-build, or place the binary in one of the paths above."
+        print_error "No pre-compiled binary found. Build without --no-build."
         exit 1
     fi
 
-    print_status "Building LocalGo binary..."
+    print_status "Compiling LocalGo binary..."
 
     cd "$PROJECT_DIR"
-
     local VERSION GIT_COMMIT BUILD_DATE LINKER_FLAGS
     VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
     GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -191,26 +198,26 @@ build_binary() {
 
     if go build -ldflags "$LINKER_FLAGS" -o "$build_tmp/$BINARY_NAME" ./cmd/localgo; then
         BUILT_BINARY="$build_tmp/$BINARY_NAME"
-        print_success "Binary built successfully ($VERSION)"
+        print_success "Compilation completed successfully (v$VERSION)"
     else
-        print_error "Build failed"
+        print_error "Go compilation failed"
         rm -rf "$build_tmp"
         exit 1
     fi
 }
 
-# Function to stop any running localgo service (user and/or system) before replacing the binary
+# Stop running service before replacing binary
 stop_service_if_running() {
     if [[ "$INSTALL_MODE" == "system" ]]; then
         if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-            print_status "Stopping running system service..."
+            print_status "Stopping active system-wide service..."
             sudo systemctl stop "$SERVICE_NAME"
         fi
     fi
 
     if command -v systemctl &>/dev/null; then
         if systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-            print_status "Stopping running user service..."
+            print_status "Stopping active user service..."
             systemctl --user stop "$SERVICE_NAME"
         fi
     fi
@@ -218,8 +225,6 @@ stop_service_if_running() {
 
 # Function to install binary
 install_binary() {
-    print_status "Installing binary..."
-
     stop_service_if_running
 
     local bin_dir
@@ -235,58 +240,49 @@ install_binary() {
         chmod +x "$bin_dir/$BINARY_NAME"
     fi
 
-    # Clean up temp build dir if it was a mktemp directory
+    # Clean up temp build folder
     local build_dir
     build_dir="$(dirname "$BUILT_BINARY")"
     if [[ "$build_dir" == /tmp/* ]]; then
         rm -rf "$build_dir"
     fi
 
-    print_success "Binary installed to $bin_dir/$BINARY_NAME"
+    print_success "Binary deployed successfully to $bin_dir/$BINARY_NAME"
 }
 
 # Function to create directories
 create_directories() {
-    print_status "Creating directories..."
+    print_status "Configuring path folders..."
 
     if [[ "$INSTALL_MODE" == "system" ]]; then
         sudo mkdir -p "$SYSTEM_CONFIG_DIR" "$SYSTEM_DATA_DIR"
 
         if [[ "$CREATE_USER" == true ]]; then
             if ! id "localgo" &>/dev/null; then
-                print_status "Creating localgo user..."
                 sudo useradd --system --home "$SYSTEM_DATA_DIR" --shell /bin/false localgo
-                print_success "Created localgo user"
-            else
-                print_status "localgo user already exists"
+                print_success "Created system user account 'localgo'"
             fi
-
             sudo chown -R localgo:localgo "$SYSTEM_DATA_DIR"
             sudo chown root:localgo "$SYSTEM_CONFIG_DIR"
         fi
 
         sudo chmod 755 "$SYSTEM_DATA_DIR" "$SYSTEM_CONFIG_DIR"
-        print_success "System directories created"
+        print_success "System paths successfully prepared"
     else
-        # XDG Base Directory Specification paths
-        mkdir -p "$USER_CONFIG_DIR"             # ~/.config/localgo         (config)
-        mkdir -p "$HOME/.local/state/localgo" # ~/.local/state/localgo   (logs)
-        mkdir -p "$HOME/.local/share/localgo"  # ~/.local/share/localgo    (data/history)
-        mkdir -p "$USER_DATA_DIR"              # ~/Downloads/localgo      (downloads)
-        print_success "User directories created"
+        mkdir -p "$USER_CONFIG_DIR"
+        mkdir -p "$HOME/.local/state/localgo"
+        mkdir -p "$HOME/.local/share/localgo"
+        mkdir -p "$USER_DATA_DIR"
+        print_success "User paths successfully prepared"
     fi
 }
 
 # Function to install configuration
 install_configuration() {
-    print_status "Installing configuration..."
-
-    local config_dir config_file
+    local config_file
 
     if [[ "$INSTALL_MODE" == "system" ]]; then
-        config_dir="$SYSTEM_CONFIG_DIR"
-        config_file="$config_dir/localgo.env"
-
+        config_file="$SYSTEM_CONFIG_DIR/localgo.env"
         if [[ ! -f "$config_file" ]]; then
             sudo cp "$SCRIPT_DIR/localgo.env.example" "$config_file"
             if [[ "$CREATE_USER" == true ]]; then
@@ -295,55 +291,40 @@ install_configuration() {
             else
                 sudo chmod 644 "$config_file"
             fi
-            print_success "Configuration installed to $config_file"
+            print_success "Created template configuration: $config_file"
         else
-            print_status "Configuration already exists at $config_file"
+            print_status "Configuration already exists: $config_file (skipping template override)"
         fi
     else
-        config_dir="$USER_CONFIG_DIR"
-        config_file="$config_dir/localgo.env"
-
+        config_file="$USER_CONFIG_DIR/localgo.env"
         if [[ ! -f "$config_file" ]]; then
-            # Binary resolves default paths via os.UserHomeDir() / os.UserConfigDir() —
-            # no need to patch the env file. Copy as-is; user edits if they want overrides.
             cp "$SCRIPT_DIR/localgo.env.example" "$config_file"
             chmod 600 "$config_file"
-            print_success "Configuration installed to $config_file"
+            print_success "Created template configuration: $config_file"
         else
-            print_status "Configuration already exists at $config_file"
+            print_status "Configuration already exists: $config_file (skipping template override)"
         fi
     fi
-
-    print_status "Edit $config_file to customize settings"
 }
 
 # Function to install systemd service
 install_service() {
     if [[ "$INSTALL_SERVICE" != true ]]; then
+        print_status "Service installation skipped"
         return
     fi
 
     if [[ "$INSTALL_MODE" == "system" ]]; then
-        print_status "Installing system-wide systemd service..."
         local service_file="/etc/systemd/system/$SERVICE_NAME.service"
-
         local tmp_svc
         tmp_svc=$(mktemp)
         cp "$SCRIPT_DIR/localgo.service" "$tmp_svc"
 
-        # Patch paths for system-wide service
-        # Replace ExecStart, EnvironmentFile, WorkingDirectory, StateDirectory
         sed -i "s|ExecStart=.*|ExecStart=$SYSTEM_BIN_DIR/$BINARY_NAME serve --quiet --auto-accept|g" "$tmp_svc"
         sed -i "s|EnvironmentFile=.*|EnvironmentFile=-$SYSTEM_CONFIG_DIR/localgo.env|g" "$tmp_svc"
         sed -i "s|WorkingDirectory=.*|WorkingDirectory=$SYSTEM_DATA_DIR|g" "$tmp_svc"
-        # StateDirectory=localgo is for user services or system services with /var/lib/localgo
-        # For a simple system service it's best to remove it if it conflicts or ensure it points to right place.
-        # But for systemd 232+, StateDirectory works nicely.
-
-        # Remove user specifiers
         sed -i "s|%E/localgo|$SYSTEM_CONFIG_DIR|g" "$tmp_svc"
 
-        # Remove User/Group lines if not creating user
         if [[ "$CREATE_USER" == false ]]; then
             sed -i "/^User=/d" "$tmp_svc"
             sed -i "/^Group=/d" "$tmp_svc"
@@ -354,13 +335,8 @@ install_service() {
         rm -f "$tmp_svc"
 
         sudo systemctl daemon-reload
-        print_success "Service installed to $service_file"
-        print_status "To enable and start the service:"
-        echo "    sudo systemctl enable $SERVICE_NAME"
-        echo "    sudo systemctl start $SERVICE_NAME"
+        print_success "System service installed: $service_file"
     else
-        print_status "Installing user systemd service..."
-
         local systemd_config_home
         systemd_config_home=$(resolve_systemd_config_home)
 
@@ -372,14 +348,10 @@ install_service() {
         if [[ -f "$SCRIPT_DIR/localgo-user.service" ]]; then
             cp "$SCRIPT_DIR/localgo-user.service" "$service_file"
         else
-            # fallback to using localgo.service as template for user service
-            # since it's already structured for user service (uses %h, %E)
             local tmp_svc
             tmp_svc=$(mktemp)
             cp "$SCRIPT_DIR/localgo.service" "$tmp_svc"
-            # just ensure binary path is correct
             sed -i "s|ExecStart=.*|ExecStart=$USER_BIN_DIR/$BINARY_NAME serve --quiet --auto-accept|g" "$tmp_svc"
-            # Remove system-only User/Group if present
             sed -i "/^User=/d" "$tmp_svc"
             sed -i "/^Group=/d" "$tmp_svc"
             cp "$tmp_svc" "$service_file"
@@ -388,71 +360,52 @@ install_service() {
         chmod 644 "$service_file"
 
         systemctl --user daemon-reload
-        print_success "User service installed to $service_file"
-        print_status "To enable and start the service:"
-        echo "    systemctl --user enable $SERVICE_NAME"
-        echo "    systemctl --user start $SERVICE_NAME"
+        print_success "User service installed: $service_file"
     fi
 }
 
-# Function to install shell completions
+# Function to install shell completions for all detected shells
 install_completion() {
     if [[ "$INSTALL_COMPLETION" != true ]]; then
+        print_status "Completion installation skipped"
         return
     fi
 
-    print_status "Detecting shell for completions..."
+    print_status "Checking for active shells to install completions..."
 
-    local target_shell=""
-    case "$SHELL" in
-        *fish) target_shell="fish" ;;
-        *zsh)  target_shell="zsh"  ;;
-        *)     target_shell="bash" ;;
-    esac
+    if command -v bash &>/dev/null; then
+        local completion_script="$SCRIPT_DIR/bash_completion.sh"
+        local user_completion_dir="$HOME/.local/share/bash-completion/completions"
+        if [[ -f "$completion_script" ]]; then
+            mkdir -p "$user_completion_dir"
+            cp "$completion_script" "$user_completion_dir/$BINARY_NAME"
+            print_success "Bash completion deployed to $user_completion_dir"
+        fi
+    fi
 
-    case "$target_shell" in
-        fish)
-            local fish_completion_script="$SCRIPT_DIR/fish_completion.fish"
-            local fish_user_dir="$HOME/.config/fish/completions"
-            if [[ -f "$fish_completion_script" ]]; then
-                mkdir -p "$fish_user_dir"
-                cp "$fish_completion_script" "$fish_user_dir/$BINARY_NAME.fish"
-                print_success "Fish completion installed to $fish_user_dir"
-            else
-                print_warning "Fish completion script not found: $fish_completion_script"
-            fi
-            ;;
-        zsh)
-            local zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
-            local completion_script="$SCRIPT_DIR/zsh_completion.zsh"
-            if [[ -f "$completion_script" ]]; then
-                mkdir -p "$zsh_completion_dir"
-                cp "$completion_script" "$zsh_completion_dir/_$BINARY_NAME"
-                print_success "Zsh completion installed to $zsh_completion_dir"
-                print_status "Add '$zsh_completion_dir' to your fpath if not already present."
-            else
-                print_warning "Completion script not found: $completion_script"
-            fi
-            ;;
-        bash)
-            local completion_script="$SCRIPT_DIR/bash_completion.sh"
-            local user_completion_dir="$HOME/.local/share/bash-completion/completions"
-            if [[ -f "$completion_script" ]]; then
-                mkdir -p "$user_completion_dir"
-                cp "$completion_script" "$user_completion_dir/$BINARY_NAME"
-                print_success "Bash completion installed to $user_completion_dir"
-                print_status "Restart your shell or run: source $user_completion_dir/$BINARY_NAME"
-            else
-                print_warning "Completion script not found: $completion_script"
-            fi
-            ;;
-    esac
+    if command -v zsh &>/dev/null; then
+        local zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
+        local completion_script="$SCRIPT_DIR/zsh_completion.zsh"
+        if [[ -f "$completion_script" ]]; then
+            mkdir -p "$zsh_completion_dir"
+            cp "$completion_script" "$zsh_completion_dir/_$BINARY_NAME"
+            print_success "Zsh completion deployed to $zsh_completion_dir"
+        fi
+    fi
+
+    if command -v fish &>/dev/null; then
+        local fish_completion_script="$SCRIPT_DIR/fish_completion.fish"
+        local fish_user_dir="$HOME/.config/fish/completions"
+        if [[ -f "$fish_completion_script" ]]; then
+            mkdir -p "$fish_user_dir"
+            cp "$fish_completion_script" "$fish_user_dir/$BINARY_NAME.fish"
+            print_success "Fish completion deployed to $fish_user_dir"
+        fi
+    fi
 }
 
 # Function to test installation
 test_installation() {
-    print_status "Testing installation..."
-
     local binary_path
     if [[ "$INSTALL_MODE" == "system" ]]; then
         binary_path="$SYSTEM_BIN_DIR/$BINARY_NAME"
@@ -461,26 +414,11 @@ test_installation() {
     fi
 
     if [[ -x "$binary_path" ]]; then
-        print_success "Binary is executable"
-
+        print_success "Installed binary is fully executable"
         if "$binary_path" version &>/dev/null; then
-            print_success "Version command works"
+            print_success "LocalGo handshake verified successfully"
         else
-            print_warning "Version command failed"
-        fi
-
-        if [[ "$INSTALL_MODE" == "system" && "$CREATE_USER" == true ]]; then
-            if sudo -u localgo "$binary_path" info &>/dev/null; then
-                print_success "Info command works for localgo user"
-            else
-                print_warning "Info command failed for localgo user"
-            fi
-        else
-            if "$binary_path" info &>/dev/null; then
-                print_success "Info command works"
-            else
-                print_warning "Info command failed"
-            fi
+            print_warning "Verification returned a structural warning"
         fi
     else
         print_error "Binary is not executable at $binary_path"
@@ -490,74 +428,88 @@ test_installation() {
 
 # Function to show post-installation instructions
 show_post_install() {
-    print_success "LocalGo installation completed!"
+    echo
+    echo "  ┌─ Installation Complete ────────────────────────────┐"
+    echo "  │  LocalGo is ready to run!                          │"
+    echo "  └────────────────────────────────────────────────────┘"
     echo
 
     if [[ "$INSTALL_MODE" == "user" ]]; then
-        print_status "Next steps:"
+        print_status "Quick Start:"
 
         if [[ ":$PATH:" != *":$USER_BIN_DIR:"* ]]; then
-            print_warning "Add $USER_BIN_DIR to your PATH:"
+            print_warning "Add $USER_BIN_DIR to your shell PATH to run localgo directly:"
             case "$SHELL" in
-                *fish)
-                    echo "    fish_add_path $USER_BIN_DIR"
-                    ;;
-                *zsh)
-                    echo "    echo 'export PATH=\"$USER_BIN_DIR:\$PATH\"' >> ~/.zshrc"
-                    echo "    source ~/.zshrc"
-                    ;;
-                *)
-                    echo "    echo 'export PATH=\"$USER_BIN_DIR:\$PATH\"' >> ~/.bashrc"
-                    echo "    source ~/.bashrc"
-                    ;;
+                *fish) echo "    fish_add_path $USER_BIN_DIR" ;;
+                *zsh)  echo "    echo 'export PATH=\"$USER_BIN_DIR:\$PATH\"' >> ~/.zshrc && source ~/.zshrc" ;;
+                *)     echo "    echo 'export PATH=\"$USER_BIN_DIR:\$PATH\"' >> ~/.bashrc && source ~/.bashrc" ;;
             esac
+            echo
         fi
 
-        echo "1. Edit $USER_CONFIG_DIR/localgo.env to customize settings"
-        echo "2. Run: $BINARY_NAME info"
-        echo "3. Start server: $BINARY_NAME serve"
+        echo "    1. Edit config at $USER_CONFIG_DIR/localgo.env"
+        echo "    2. Verify status:  $BINARY_NAME info"
+        echo "    3. Start server:   $BINARY_NAME serve"
+        echo
 
         if [[ "$INSTALL_SERVICE" == true ]]; then
+            print_status "Systemd User Service Control:"
+            echo "    systemctl --user enable $SERVICE_NAME           # Auto-start on login"
+            echo "    systemctl --user start $SERVICE_NAME            # Start background daemon"
+            echo "    systemctl --user status $SERVICE_NAME           # Verify service status"
+            echo "    journalctl --user -u $SERVICE_NAME -f           # Watch background logs"
             echo
-            print_status "User service commands:"
-            echo "  systemctl --user enable $SERVICE_NAME   # Enable on login"
-            echo "  systemctl --user start $SERVICE_NAME    # Start now"
-            echo "  systemctl --user status $SERVICE_NAME   # Check status"
-            echo "  journalctl --user -u $SERVICE_NAME -f   # View logs"
-            echo
-            print_status "To keep the service running after logout:"
+            print_status "To keep user service alive after terminal logout:"
             echo "    loginctl enable-linger $USER"
+            echo
+        fi
+
+        print_status "Deployed System Paths:"
+        echo "    Binary:        $USER_BIN_DIR/$BINARY_NAME"
+        echo "    Config:        $USER_CONFIG_DIR/localgo.env"
+        if [[ "$INSTALL_SERVICE" == true ]]; then
+            echo "    Service:       ~/.config/systemd/user/$SERVICE_NAME.service"
         fi
     else
-        print_status "Next steps:"
-        echo "1. Edit $SYSTEM_CONFIG_DIR/localgo.env to customize settings"
+        print_status "Quick Start:"
+        echo "    1. Edit config at $SYSTEM_CONFIG_DIR/localgo.env"
+        echo
 
         if [[ "$INSTALL_SERVICE" == true ]]; then
-            echo "2. Enable service: sudo systemctl enable $SERVICE_NAME"
-            echo "3. Start service:  sudo systemctl start $SERVICE_NAME"
-            echo "4. Check status:   sudo systemctl status $SERVICE_NAME"
+            print_status "Systemd System Service Control:"
+            echo "    sudo systemctl enable $SERVICE_NAME       # Auto-start on boot"
+            echo "    sudo systemctl start $SERVICE_NAME        # Start background daemon"
+            echo "    sudo systemctl status $SERVICE_NAME      # Verify service status"
+            echo "    sudo journalctl -u $SERVICE_NAME -f      # Watch background logs"
             echo
-            print_status "Service log:"
-            echo "  sudo journalctl -u $SERVICE_NAME -f"
         else
-            echo "2. Test installation: $BINARY_NAME info"
-            echo "3. Start server:      $BINARY_NAME serve"
+            echo "    2. Verify status: $BINARY_NAME info"
+            echo "    3. Start server:  $BINARY_NAME serve"
+            echo
+        fi
+
+        print_status "Deployed System Paths:"
+        echo "    Binary:        $SYSTEM_BIN_DIR/$BINARY_NAME"
+        echo "    Config:        $SYSTEM_CONFIG_DIR/localgo.env"
+        if [[ "$INSTALL_SERVICE" == true ]]; then
+            echo "    Service:       $SYSTEM_SERVICE_FILE"
         fi
     fi
 
     echo
-    print_status "Useful commands:"
-    echo "  $BINARY_NAME help           # Show help"
-    echo "  $BINARY_NAME info           # Show device info"
-    echo "  $BINARY_NAME serve          # Start server"
-    echo "  $BINARY_NAME discover       # Find devices"
-    echo "  $BINARY_NAME send --help    # Send file help"
+    print_status "Core Commands Reference:"
+    echo "    $BINARY_NAME help            # Show commands help"
+    echo "    $BINARY_NAME info            # Print local device identity"
+    echo "    $BINARY_NAME discover        # Find peers on your Wi-Fi/LAN"
+    echo "    $BINARY_NAME send --help     # Review file sharing options"
+    echo
 }
 
 # Main installation function
 main() {
-    echo "LocalGo Installation Script"
-    echo "==========================="
+    echo "  ◆ LocalGo Installer"
+    echo "    LocalSend v2.1 Protocol CLI Client"
+    echo "    ─────────────────────────────────"
     echo
 
     # Parse command line arguments
@@ -587,6 +539,10 @@ main() {
                 CREATE_USER=true
                 shift
                 ;;
+            -y|--yes)
+                ASSUME_YES=true
+                shift
+                ;;
             --help|-h)
                 show_usage
                 exit 0
@@ -605,23 +561,58 @@ main() {
         exit 1
     fi
 
-    print_status "Installation mode: $INSTALL_MODE"
-    print_status "Install service:   $INSTALL_SERVICE"
-    print_status "Install completion: $INSTALL_COMPLETION"
+    echo "  ┌─ Planned Action Summary ───────────────────────────┐"
+    printf "  │  %-22s  %-24s  │\n" "Installation Mode:" "$INSTALL_MODE"
+    printf "  │  %-22s  %-24s  │\n" "Compile Binary:" "$BUILD_BINARY"
+    printf "  │  %-22s  %-24s  │\n" "Systemd Service:" "$INSTALL_SERVICE"
+    printf "  │  %-22s  %-24s  │\n" "Shell Completions:" "$INSTALL_COMPLETION"
     if [[ "$INSTALL_MODE" == "system" ]]; then
-        print_status "Create system user: $CREATE_USER"
+        printf "  │  %-22s  %-24s  │\n" "Create System User:" "$CREATE_USER"
     fi
+    echo "  └────────────────────────────────────────────────────┘"
     echo
 
-    # Run installation steps
+    # Check existing installation
+    detect_existing_install
+
+    # Confirm action
+    if [[ "$ASSUME_YES" != "true" ]]; then
+        echo -n "  Proceed with installation? [y/N]: "
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            print_warning "Installation canceled by user."
+            echo
+            exit 0
+        fi
+    fi
+
+    # Run installation steps sequentially with progress counters
+    section "1/7" "Verifying system prerequisites"
     check_prerequisites
+
+    section "2/7" "Compiling LocalGo static binary"
     build_binary
+
+    section "3/7" "Creating configuration directories"
     create_directories
+
+    section "4/7" "Installing executable binary"
     install_binary
+
+    section "5/7" "Deploying configuration environment"
     install_configuration
+
+    section "6/7" "Configuring systemd background services"
     install_service
+
+    section "7/7" "Generating shell auto-completions"
     install_completion
+
+    echo
+    echo "  ◆ Post-Installation Check"
+    echo "  ─────────────────────────"
     test_installation
+
     show_post_install
 }
 

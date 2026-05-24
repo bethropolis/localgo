@@ -41,6 +41,8 @@ type Config struct {
 	Quiet             bool                          `json:"-"` // quiet mode - minimal output
 	ExecHook          string                        `json:"-"` // shell command to run after receiving file
 	OpenDir           bool                          `json:"-"` // open download directory after transfer
+	Concurrency       int                           `json:"-"` // max parallel uploads (0 = use default)
+	MulticastInterface string                        `json:"-"` // multicast network interface name
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -129,6 +131,8 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		}
 	}
 
+	multicastInterface := v.GetString("multicast_interface")
+
 	// Parse LOCALSEND_FORCE_HTTP
 	forceHTTP := v.GetString("force_http") == "true" || v.GetString("force_http") == "1"
 	HttpsEnabled := !forceHTTP
@@ -173,6 +177,8 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 
 	execHook := v.GetString("exec")
 
+	concurrency := v.GetInt("concurrency")
+
 	cfg := &Config{
 		Alias:             alias,
 		Port:              port,
@@ -190,6 +196,8 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		HistoryFile:       historyFile,
 		Quiet:             quiet,
 		ExecHook:          execHook,
+		Concurrency:       concurrency,
+		MulticastInterface: multicastInterface,
 	}
 
 	return cfg, nil

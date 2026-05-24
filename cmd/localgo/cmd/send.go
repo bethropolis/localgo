@@ -3,24 +3,34 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
 var (
-	sendfiles   []string
-	sendto      string
-	sendport    int
-	sendtimeout int
-	sendalias   string
+	sendfiles       []string
+	sendto          string
+	sendport        int
+	sendtimeout     int
+	sendalias       string
+	sendconcurrency int
+	sendmulticastiface string
+	sendclipboard   bool
 )
 
 var sendCmd = &cobra.Command{
@@ -29,30 +39,117 @@ var sendCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
 
+		// Interactive fallback: if no files specified, check clipboard for text content
+		if len(files) == 0 && !sendclipboard {
+			if clipboard.Available() {
+				text, err := clipboard.Read()
+				if err == nil && strings.TrimSpace(text) != "" {
+					preview := strings.ReplaceAll(text, "\n", " ")
+					if len(preview) > 50 {
+						preview = preview[:50] + "…"
+					}
+
+					var useClip bool = true
+					form := huh.NewForm(
+						huh.NewGroup(
+							huh.NewConfirm().
+								Title("No files specified. Send clipboard content instead?").
+								Description(fmt.Sprintf("Current clipboard: %q", preview)).
+								Value(&useClip),
+						),
+					).WithTheme(huh.ThemeCharm())
+
+					if err := form.Run(); err == nil && useClip {
+						sendclipboard = true
+					}
+				}
+			}
+		}
+
+		if sendclipboard {
+			text, err := clipboard.Read()
+			if err != nil {
+				return fmt.Errorf("failed to read from clipboard: %w", err)
+			}
+			if strings.TrimSpace(text) == "" {
+				return fmt.Errorf("clipboard is empty or does not contain text")
+			}
+
+			tempFile, err := os.CreateTemp("", "localgo-clip-*.txt")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary file for clipboard: %w", err)
+			}
+			defer os.Remove(tempFile.Name())
+
+			if _, err := tempFile.WriteString(text); err != nil {
+				tempFile.Close()
+				return fmt.Errorf("failed to write clipboard text: %w", err)
+			}
+			tempFile.Close()
+			files = []string{tempFile.Name()}
+		}
+
 		if len(files) == 0 {
-			return fmt.Errorf("no file specified: use positional args or --file flag (e.g. 'localgo send --file /path/to/file' or 'localgo send myfile.txt')")
+			return fmt.Errorf("no file specified: use positional args, --file flag, or --clipboard")
 		}
 
 		for _, file := range files {
-			if _, err := os.Stat(file); os.IsNotExist(err) {
+			if _, err := os.Stat(file); os.IsNotExist(err) && !sendclipboard {
 				return fmt.Errorf("file not found: %s", file)
 			}
 		}
 
 		target := sendto
 		if target == "" {
-			cli.PrintHeader("Looking for devices...")
-			devices, err := discovery.DiscoverDevices(
-				context.Background(),
-				discovery.DefaultServiceConfig(),
-				Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
-				Cfg.DeviceModel, Cfg.HttpsEnabled,
-			)
-			if err != nil {
-				return fmt.Errorf("discovery failed: %w", err)
+			sendConfig := discovery.DefaultServiceConfig()
+			sendConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
+
+			var devices []*model.Device
+			var discErr error
+
+			_ = spinner.New().
+				Title("Looking for devices on your network (multicast)...").
+				Action(func() {
+					devices, discErr = discovery.DiscoverDevices(
+						context.Background(),
+						sendConfig,
+						Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
+						Cfg.DeviceModel, Cfg.HttpsEnabled,
+					)
+				}).
+				Run()
+
+			if discErr != nil {
+				return fmt.Errorf("discovery failed: %w", discErr)
 			}
+
+			// Unicast fallback: if multicast finds nothing, automatically scan subnets
 			if len(devices) == 0 {
-				return fmt.Errorf("no devices found on the network")
+				localIPs, ipErr := network.GetLocalIPAddresses()
+				if ipErr == nil && len(localIPs) > 0 {
+					_ = spinner.New().
+						Title("No devices via multicast. Scanning local subnets...").
+						Action(func() {
+							registerDto := Cfg.ToRegisterDto()
+							httpFallback := discovery.NewHTTPDiscovery(nil, registerDto, nil, nil)
+
+							var ips []net.IP
+							for _, ip := range localIPs {
+								ips = append(ips, network.GetSubnetIPs(ip)...)
+							}
+							ips = append(ips, net.ParseIP("127.0.0.1"))
+
+							scanCtx, cancelScan := context.WithTimeout(context.Background(), 10*time.Second)
+							defer cancelScan()
+
+							devices, _ = httpFallback.ScanNetwork(scanCtx, ips, Cfg.Port)
+						}).
+						Run()
+				}
+			}
+
+			if len(devices) == 0 {
+				return fmt.Errorf("no devices found on the network via multicast or subnet scan")
 			}
 
 			selected := cli.PickDevice(devices)
@@ -65,6 +162,12 @@ var sendCmd = &cobra.Command{
 
 		if sendalias != "" {
 			Cfg.Alias = sendalias
+		}
+		if sendconcurrency > 0 {
+			Cfg.Concurrency = sendconcurrency
+		}
+		if sendmulticastiface != "" {
+			Cfg.MulticastInterface = sendmulticastiface
 		}
 
 		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
@@ -97,6 +200,9 @@ func init() {
 	sendCmd.Flags().IntVar(&sendport, "port", 0, "Target device port")
 	sendCmd.Flags().IntVar(&sendtimeout, "timeout", 30, "Send timeout in seconds")
 	sendCmd.Flags().StringVar(&sendalias, "alias", "", "Sender alias")
+	sendCmd.Flags().IntVar(&sendconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
+	sendCmd.Flags().StringVar(&sendmulticastiface, "iface", "", "Multicast network interface name")
+	sendCmd.Flags().BoolVarP(&sendclipboard, "clipboard", "c", false, "Send current system clipboard text directly")
 
 	sendCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("send"); h != nil {

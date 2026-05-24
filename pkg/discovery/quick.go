@@ -30,7 +30,12 @@ func DiscoverDevices(ctx context.Context, cfg *ServiceConfig, alias string, port
 	}
 
 	multicast := NewMulticastDiscovery(cfg.MulticastConfig, multicastDto, nil)
+
+	peerCache := NewPeerCache(nil)
+	multicast.SetPeerCache(peerCache)
+
 	svc := NewService(cfg, multicast, nil)
+	svc.SetPeerCache(peerCache)
 
 	if err := svc.Start(ctx, alias, port, fingerprint, model.DeviceTypeDesktop, deviceModel, httpsEnabled); err != nil {
 		return nil, err

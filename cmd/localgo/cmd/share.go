@@ -17,6 +17,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -35,6 +36,8 @@ var (
 	shareexecHook    string
 	sharequiet       bool
 	sharezip         bool
+	shareconcurrency int
+	sharemulticastiface string
 )
 
 var shareCmd = &cobra.Command{
@@ -75,6 +78,12 @@ var shareCmd = &cobra.Command{
 		if sharequiet {
 			Cfg.Quiet = true
 		}
+		if shareconcurrency > 0 {
+			Cfg.Concurrency = shareconcurrency
+		}
+		if sharemulticastiface != "" {
+			Cfg.MulticastInterface = sharemulticastiface
+		}
 
 		protocol := "HTTPS"
 		if !Cfg.HttpsEnabled {
@@ -97,6 +106,11 @@ var shareCmd = &cobra.Command{
 			fileInfo, err := os.Stat(file)
 			if err != nil {
 				return fmt.Errorf("file not found: %s", err)
+			}
+
+			// Reject directories that won't be zipped
+			if fileInfo.IsDir() && !sharezip {
+				return fmt.Errorf("cannot share directory '%s' without --zip flag", file)
 			}
 
 			// Zip directory if requested
@@ -168,13 +182,18 @@ var shareCmd = &cobra.Command{
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
+		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 		multicastDto := Cfg.ToMulticastDto(true)
 
 		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
 		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
 		multicast.SetHTTPDiscoverer(httpDiscoverer)
 
+		peerCache := discovery.NewPeerCache(zap.S())
+		multicast.SetPeerCache(peerCache)
+
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc.SetPeerCache(peerCache)
 
 		// Start server first
 		serverErrChan := make(chan error, 1)
@@ -198,6 +217,21 @@ var shareCmd = &cobra.Command{
 
 		if !sharequiet {
 			cli.PrintSuccess("Server ready! Waiting for connections...")
+
+			// Retrieve active network interfaces to display direct URLs
+			localIPs, err := network.GetLocalIPAddresses()
+			if err == nil && len(localIPs) > 0 {
+				cli.PrintHeader("\nAccess URLs:")
+				for _, ip := range localIPs {
+					scheme := "https"
+					if !Cfg.HttpsEnabled {
+						scheme = "http"
+					}
+					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
+				}
+				fmt.Println()
+			}
+
 			cli.PrintWarning("Press Ctrl+C to stop sharing")
 		}
 
@@ -210,7 +244,6 @@ var shareCmd = &cobra.Command{
 		if !sharequiet {
 			cli.PrintInfo("Web share stopped")
 		}
-		return nil
 		return nil
 	},
 }
@@ -228,6 +261,8 @@ func init() {
 	shareCmd.Flags().StringVar(&shareexecHook, "exec", "", "Shell command to run")
 	shareCmd.Flags().BoolVar(&sharequiet, "quiet", false, "Quiet mode")
 	shareCmd.Flags().BoolVar(&sharezip, "zip", false, "Zip directories before sharing")
+	shareCmd.Flags().IntVar(&shareconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
+	shareCmd.Flags().StringVar(&sharemulticastiface, "iface", "", "Multicast network interface name")
 
 	shareCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("share"); h != nil {

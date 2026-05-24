@@ -79,31 +79,22 @@ localgo discover
 # Send a file
 localgo send --file document.pdf --to "My Phone"
 
+# Send clipboard contents directly
+localgo send --clipboard --to "My Phone"
+
+# Inspect transfer history logs
+localgo history
+
 # Share files for web download
 localgo share --file document.pdf
 ```
 
+> [!TIP]
+> To get the best visual experience with localgo's modern terminal interface, using a [Nerd Font](https://www.nerdfonts.com/) (e.g. JetBrainsMono, FiraCode) is highly recommended.
+
 ### Docker and Podman
 
-LocalGo ships in two image variants:
-
-| Image | Base | Size | Use case |
-|-------|------|------|----------|
-| `ghcr.io/bethropolis/localgo:latest` | Alpine | ~25 MB | General use, includes shell |
-| `ghcr.io/bethropolis/localgo:scratch` | scratch | ~10 MB | Production hardening, no shell |
-
-The **scratch** image is recommended for production. It contains only the binary and CA certificates — no shell, no package manager, minimal attack surface. It uses `localgo docker-start` to handle permission setup internally via `syscall.Setuid`/`Setgid`.
-
-```bash
-# Run the scratch image (recommended)
-docker run -d --network host \
-  -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/config:/app/config \
-  -e PUID=$(id -u) -e PGID=$(id -g) \
-  ghcr.io/bethropolis/localgo:scratch
-```
-
-For full details — macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
+For full details — deployment, macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
 
 ## Configuration
 
@@ -140,6 +131,7 @@ localgo serve
 | `discover` | Find devices via multicast |
 | `scan` | Find devices via HTTP scan |
 | `send` | Send files to a device |
+| `history`| Show file transfer history log |
 | `info` | Show device information |
 | `devices` | List discovered devices |
 

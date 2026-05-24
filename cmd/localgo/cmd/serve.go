@@ -12,6 +12,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -30,6 +31,7 @@ var (
 	servehistory     string
 	serveexecHook    string
 	serveopen        bool
+	servemulticastiface string
 )
 
 var serveCmd = &cobra.Command{
@@ -71,6 +73,9 @@ var serveCmd = &cobra.Command{
 		if servequiet {
 			Cfg.Quiet = true
 		}
+		if servemulticastiface != "" {
+			Cfg.MulticastInterface = servemulticastiface
+		}
 
 		// Create download directory if it doesn't exist
 		if err := os.MkdirAll(Cfg.DownloadDir, 0755); err != nil {
@@ -105,6 +110,7 @@ var serveCmd = &cobra.Command{
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
+		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 
 		if serveinterval > 0 {
 			discoverySvcConfig.AnnounceInterval = time.Duration(serveinterval) * time.Second
@@ -117,7 +123,11 @@ var serveCmd = &cobra.Command{
 		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
 		multicast.SetHTTPDiscoverer(httpDiscoverer)
 
+		peerCache := discovery.NewPeerCache(zap.S())
+		multicast.SetPeerCache(peerCache)
+
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc.SetPeerCache(peerCache)
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !servequiet {
@@ -151,6 +161,20 @@ var serveCmd = &cobra.Command{
 		if !servequiet {
 			zap.S().Infof("Server ready! Waiting for files...")
 			cli.PrintSuccess("Server ready! Waiting for files...")
+
+			localIPs, err := network.GetLocalIPAddresses()
+			if err == nil && len(localIPs) > 0 {
+				cli.PrintHeader("\nListening Addresses:")
+				for _, ip := range localIPs {
+					scheme := "https"
+					if !Cfg.HttpsEnabled {
+						scheme = "http"
+					}
+					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
+				}
+				fmt.Println()
+			}
+
 			cli.PrintWarning("Press Ctrl+C to stop")
 		}
 
@@ -184,6 +208,7 @@ func init() {
 	serveCmd.Flags().StringVar(&servehistory, "history", "", "Path to transfer history JSONL file (default: ~/.local/share/localgo/history.jsonl)")
 	serveCmd.Flags().StringVar(&serveexecHook, "exec", "", "Shell command to run after each received file")
 	serveCmd.Flags().BoolVar(&serveopen, "open", false, "Open download directory after transfer completes")
+	serveCmd.Flags().StringVar(&servemulticastiface, "iface", "", "Multicast network interface name")
 
 	serveCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("serve"); h != nil {

@@ -6,8 +6,11 @@ import "os/exec"
 
 // detect probes for pbcopy, which ships with every macOS installation.
 func detect() *clipProvider {
-	if lookPath("pbcopy") {
-		return &clipProvider{cmd: "pbcopy"}
+	if lookPath("pbcopy") && lookPath("pbpaste") {
+		return &clipProvider{
+			cmd:     "pbcopy",
+			readCmd: "pbpaste",
+		}
 	}
 	return nil
 }

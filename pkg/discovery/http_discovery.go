@@ -48,9 +48,17 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 	client := &http.Client{
 		Timeout: config.RequestTimeout,
 		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   500 * time.Millisecond,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   1 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
 

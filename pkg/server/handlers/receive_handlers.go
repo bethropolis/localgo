@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -25,6 +25,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/bethropolis/localgo/pkg/storage"
+	"github.com/charmbracelet/huh"
 	"go.uber.org/zap"
 )
 
@@ -86,6 +87,23 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	if len(requestDto.Files) == 0 {
 		httputil.RespondError(w, http.StatusBadRequest, "Request must contain at least one file")
 		return
+	}
+
+	// --- Check Disk Space ---
+	var totalSize int64
+	for _, f := range requestDto.Files {
+		totalSize += f.Size
+	}
+
+	freeSpace, fsErr := storage.CheckFreeSpace(h.config.DownloadDir)
+	if fsErr == nil {
+		const safetyBuffer = 50 * 1024 * 1024
+		if freeSpace < uint64(totalSize)+safetyBuffer {
+			h.logger.Warnf("Rejected transfer from %s: Insufficient disk space (Required: %s, Available: %s)",
+				requestDto.Info.Alias, cli.FormatBytes(totalSize), cli.FormatBytes(int64(freeSpace)))
+			httputil.RespondError(w, http.StatusBadRequest, "Insufficient storage space on receiver")
+			return
+		}
 	}
 
 	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", requestDto.Info.Alias, r.RemoteAddr, len(requestDto.Files))
@@ -246,6 +264,10 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 				preview = preview[:80] + "…"
 			}
 			h.logger.Infof("Copied text to clipboard from %s: %q", fileInfo.Dto.FileName, preview)
+
+			// Mark the progress bar as completed since no file write occurs
+			onProgress(fileInfo.Dto.Size)
+
 			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, "<clipboard>", int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusClipboard)
 			h.runExecHook("<clipboard>", rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
@@ -256,7 +278,14 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			h.logger.Warnf("Clipboard unavailable (%v), saving text as file instead", clipErr)
 		}
 
-		// Fall-back: save the already-read bytes as a file.
+		// Fall-back: save the full stream as a file.
+		var combinedReader io.Reader
+		if int64(len(textBytes)) > maxTextSize {
+			// Re-combine the already-read prefix with the remaining socket stream.
+			combinedReader = io.MultiReader(bytes.NewReader(textBytes), bodyReader)
+		} else {
+			combinedReader = bytes.NewReader(textBytes)
+		}
 		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 		cleanPath = filepath.Clean(destinationPath)
 		if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
@@ -265,7 +294,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		savErr := storage.SaveStreamToFileWithMetadata(
-			strings.NewReader(text), destinationPath, modified, accessed, onProgress, h.logger,
+			combinedReader, destinationPath, fileInfo.Dto.Size, modified, accessed, fileInfo.Dto.SHA256, onProgress, h.logger,
 		)
 		if savErr != nil {
 			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)
@@ -281,7 +310,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, modified, accessed, onProgress, h.logger)
+	err := storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, fileInfo.Dto.Size, modified, accessed, fileInfo.Dto.SHA256, onProgress, h.logger)
 
 	if err != nil {
 		h.logger.Errorf("Error saving file %s (ID: %s): %v", fileInfo.Dto.FileName, reqFileId, err)
@@ -307,11 +336,11 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 	h.PrepareUploadHandlerV2(w, r)
 }
 
-// stdinReader is used to prevent creating multiple bufio.Readers on os.Stdin
-// which can steal bytes from each other.
-var stdinReader = bufio.NewReader(os.Stdin)
-
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
+	if cli.IsContainer() {
+		return false
+	}
+
 	fileCount := len(files)
 	var totalSize int64
 	for _, f := range files {
@@ -321,60 +350,61 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 	cli.Notify("LocalGo: Incoming Transfer",
 		fmt.Sprintf("%s wants to send you %d file(s) (%s)", sender.Alias, fileCount, cli.FormatBytes(totalSize)))
 
-	// Output to stderr to avoid interfering with stdout
-	fmt.Fprintf(os.Stderr, "\n%s\n", cli.WarningStyle.Render("Incoming transfer"))
-	fmt.Fprintf(os.Stderr, "From: %s (IP: %s)\n", cli.InfoStyle.Render(sender.Alias), sender.IP)
+	// Build a structured summary of the incoming files
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("From: %s (IP: %s)\n\nFiles:\n", sender.Alias, sender.IP))
 
-	var hasText bool
-	fmt.Fprintf(os.Stderr, "Files:\n")
+	count := 0
 	for _, file := range files {
+		if count >= 5 {
+			sb.WriteString(fmt.Sprintf("  ... and %d more files\n", fileCount-5))
+			break
+		}
 		isText := strings.HasPrefix(file.FileType, "text/plain")
 		if isText {
-			hasText = true
 			preview := ""
 			if file.Preview != nil && *file.Preview != "" {
 				preview = *file.Preview
-				if len(preview) > 80 {
-					preview = preview[:80] + "…"
+				if len(preview) > 50 {
+					preview = preview[:50] + "…"
 				}
-				fmt.Fprintf(os.Stderr, "  - [text] %q\n", preview)
+				sb.WriteString(fmt.Sprintf("  %s [Text] %q\n", cli.IconFile, preview))
 			} else {
-				fmt.Fprintf(os.Stderr, "  - [text] %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+				sb.WriteString(fmt.Sprintf("  %s [Text] %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "  - %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+			sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
 		}
-		totalSize += file.Size
-	}
-	if !hasText {
-		fmt.Fprintf(os.Stderr, "Total size: %s\n", cli.FormatBytes(totalSize))
-	}
-	if hasText && !h.config.NoClipboard {
-		fmt.Fprintf(os.Stderr, "(text will be copied to clipboard)\n")
+		count++
 	}
 
-	fmt.Fprintf(os.Stderr, "\nAccept transfer? [Y/n] (auto-rejects in 30s): ")
+	if totalSize > 0 {
+		sb.WriteString(fmt.Sprintf("\nTotal Size: %s", cli.FormatBytes(totalSize)))
+	}
 
-	// Read with timeout - use context to prevent goroutine leak
+	var accept bool = true
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Accept Incoming File Transfer?").
+				Description(sb.String()).
+				Value(&accept).
+				Affirmative("Accept").
+				Negative("Reject"),
+		),
+	).WithTheme(huh.ThemeCharm())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	ch := make(chan string, 1)
-	go func() {
-		input, _ := stdinReader.ReadString('\n')
-		select {
-		case ch <- strings.TrimSpace(strings.ToLower(input)):
-		case <-ctx.Done():
-		}
-	}()
-
-	select {
-	case input := <-ch:
-		return input == "" || input == "y" || input == "yes"
-	case <-ctx.Done():
-		fmt.Fprintf(os.Stderr, "\nTransfer auto-rejected (timeout).\n")
+	err := form.RunWithContext(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s Transfer automatically rejected.\n", cli.WarningStyle.Render(cli.IconWarning))
 		return false
 	}
+
+	return accept
 }
 
 func (h *ReceiveHandler) logTransfer(senderAlias, senderIP, fileName, filePath string, size int64, fileType, status string) {
@@ -402,7 +432,12 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 
 	go func() {
 		h.logger.Infof("Running exec hook: %s", h.config.ExecHook)
-		cmd := exec.Command("sh", "-c", h.config.ExecHook)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/c", h.config.ExecHook)
+		} else {
+			cmd = exec.Command("sh", "-c", h.config.ExecHook)
+		}
 		cmd.Env = append(os.Environ(),
 			"LOCALGO_FILE="+filePath,
 			"LOCALGO_NAME="+fileName,

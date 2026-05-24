@@ -9,6 +9,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -47,10 +48,16 @@ var discoverCmd = &cobra.Command{
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
+		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 		multicastDto := Cfg.ToMulticastDto(false)
 
 		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+
+		peerCache := discovery.NewPeerCache(zap.S())
+		multicast.SetPeerCache(peerCache)
+
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc.SetPeerCache(peerCache)
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !discoverquiet {
@@ -63,10 +70,23 @@ var discoverCmd = &cobra.Command{
 		discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discoverTimeout)*time.Second)
 		defer cancel()
 
-		foundDevices, err := discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
-		if err != nil && !discoverquiet {
-			zap.S().Warnf("Discovery completed with warnings: %v", err)
-			cli.PrintWarning("Discovery completed with warnings: %v", err)
+		var foundDevices []*model.Device
+		var discErr error
+
+		if !discoverquiet {
+			_ = spinner.New().
+				Title(fmt.Sprintf("Searching for devices on multicast group %s...", Cfg.MulticastGroup)).
+				Action(func() {
+					foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
+				}).
+				Run()
+		} else {
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
+		}
+
+		if discErr != nil && !discoverquiet {
+			zap.S().Warnf("Discovery completed with warnings: %v", discErr)
+			cli.PrintWarning("Discovery completed with warnings: %v", discErr)
 		}
 
 		if !discoverquiet && len(foundDevices) == 0 {

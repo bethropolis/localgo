@@ -39,10 +39,11 @@ func ShowMainUsage() {
 	}{
 		{"serve", "Start the LocalGo server to receive files"},
 		{"share", "Share files so other devices can download them"},
-		{"send", "Send a file to another device"},
+		{"send", "Send a file or clipboard text to another device"},
 		{"discover", "Discover devices using multicast"},
 		{"scan", "Scan network for devices using HTTP"},
 		{"devices", "List recently discovered devices"},
+		{"history", "Show file transfer history log"},
 		{"info", "Show device information"},
 		{"help", "Show help information"},
 		{"version", "Show version information"},
@@ -63,7 +64,9 @@ func ShowMainUsage() {
 		"localgo serve --port 8080 --http",
 		"localgo discover --timeout 10",
 		"localgo send --file document.pdf --to MyPhone",
+		"localgo send --clipboard --to MyPhone",
 		"localgo share --file document.pdf",
+		"localgo history --limit 20",
 		"localgo help send",
 	}
 
@@ -238,20 +241,35 @@ func GetCommandHelp(commandName string) *CommandHelp {
 		},
 		"send": {
 			Name:        "send",
-			Description: "Send a file to another LocalGo device",
-			Usage:       "localgo send --file FILE --to DEVICE [OPTIONS]",
+			Description: "Send a file or clipboard text to another LocalGo device",
+			Usage:       "localgo send [OPTIONS]",
 			Examples: []string{
 				"localgo send --file document.pdf --to MyPhone",
-				"localgo send --file /path/to/file.txt --to 'John's Laptop'",
-				"localgo send --file image.jpg --file text.txt --to MyDevice",
-				"localgo send --file data.zip --to RemotePC --timeout 60",
+				"localgo send --clipboard --to MyPhone",
+				"localgo send -c --to MyPhone",
+				"localgo send (starts interactive clipboard or file picker if empty)",
 			},
 			Flags: []FlagHelp{
-				{Name: "--file", Type: "string", Default: "", Description: "File or directory to send (required, can be specified multiple times)"},
-				{Name: "--to", Type: "string", Default: "", Description: "Target device alias (required)"},
+				{Name: "--file", Type: "string", Default: "", Description: "File or directory to send (optional, can be specified multiple times)"},
+				{Name: "--to", Type: "string", Default: "", Description: "Target device alias (omit to pick interactively)"},
+				{Name: "--clipboard, -c", Type: "bool", Default: "false", Description: "Send current system clipboard text directly"},
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},
 				{Name: "--timeout", Type: "int", Default: "30", Description: "Send timeout in seconds"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Sender alias"},
+			},
+		},
+		"history": {
+			Name:        "history",
+			Description: "Show file transfer history log",
+			Usage:       "localgo history [OPTIONS]",
+			Examples: []string{
+				"localgo history",
+				"localgo history --limit 20",
+				"localgo history --clear",
+			},
+			Flags: []FlagHelp{
+				{Name: "--limit", Type: "int", Default: "10", Description: "Maximum number of entries to display"},
+				{Name: "--clear", Type: "bool", Default: "false", Description: "Clear all transfer history logs"},
 			},
 		},
 		"devices": {
@@ -260,9 +278,11 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Usage:       "localgo devices [OPTIONS]",
 			Examples: []string{
 				"localgo devices",
+				"localgo devices --probe",
 				"localgo devices --json",
 			},
 			Flags: []FlagHelp{
+				{Name: "--probe, -p", Type: "bool", Default: "false", Description: "Probe cached devices to verify if they are currently online"},
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
 			},
 		},

@@ -23,10 +23,11 @@ type MulticastDiscovery struct {
 	devicesMutex   sync.RWMutex
 	handlers       []func(*model.Device)
 	handlersMu     sync.RWMutex
-	conn           net.PacketConn
-	connMu         sync.Mutex
+	conns          []net.PacketConn
+	connsMu        sync.Mutex
 	closed         atomic.Bool
 	httpDiscoverer *HTTPDiscovery
+	peerCache      *PeerCache
 	logger         *zap.SugaredLogger
 }
 
@@ -34,6 +35,7 @@ type MulticastDiscovery struct {
 type MulticastConfig struct {
 	MulticastAddr   string
 	Port            int
+	InterfaceName   string
 	AnnounceTimeout time.Duration
 	ListenTimeout   time.Duration
 }
@@ -72,40 +74,88 @@ func (md *MulticastDiscovery) AddDeviceHandler(handler func(*model.Device)) {
 	md.handlers = append(md.handlers, handler)
 }
 
-// StartListening starts listening for multicast announcements
+// StartListening starts listening for multicast announcements on all suitable interfaces.
+// If InterfaceName is set in config, only that interface is used.
 func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
-	if md.conn != nil {
+	md.connsMu.Lock()
+	if len(md.conns) > 0 {
+		md.connsMu.Unlock()
 		return fmt.Errorf("already listening")
 	}
+	md.connsMu.Unlock()
 
 	addr, err := net.ResolveUDPAddr("udp4", md.config.MulticastAddr)
 	if err != nil {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
 	}
 
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on multicast socket: %w", err)
+	var targetIfaces []net.Interface
+	if md.config.InterfaceName != "" {
+		iface, err := net.InterfaceByName(md.config.InterfaceName)
+		if err != nil {
+			return fmt.Errorf("multicast interface '%s' not found: %w", md.config.InterfaceName, err)
+		}
+		if (iface.Flags & net.FlagUp) == 0 {
+			return fmt.Errorf("multicast interface '%s' is down", md.config.InterfaceName)
+		}
+		if (iface.Flags & net.FlagMulticast) == 0 {
+			return fmt.Errorf("multicast interface '%s' does not support multicast", md.config.InterfaceName)
+		}
+		targetIfaces = append(targetIfaces, *iface)
+	} else {
+		allIfaces, err := net.Interfaces()
+		if err != nil {
+			return fmt.Errorf("failed to list network interfaces: %w", err)
+		}
+		for _, iface := range allIfaces {
+			if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagMulticast) == 0 {
+				continue
+			}
+			targetIfaces = append(targetIfaces, iface)
+		}
 	}
 
-	conn.SetReadBuffer(2048)
-	md.conn = conn
+	if len(targetIfaces) == 0 {
+		return fmt.Errorf("no suitable multicast interface found")
+	}
 
-	go md.listenLoop(ctx)
+	for _, iface := range targetIfaces {
+		conn, err := net.ListenMulticastUDP("udp4", &iface, addr)
+		if err != nil {
+			md.logger.Warnf("Failed to listen on interface %s: %v", iface.Name, err)
+			continue
+		}
+		conn.SetReadBuffer(2048)
 
-	md.logger.Debugf("Multicast discovery listening on %s", md.config.MulticastAddr)
+		md.connsMu.Lock()
+		md.conns = append(md.conns, conn)
+		md.connsMu.Unlock()
+
+		go md.listenLoop(ctx, conn)
+
+		md.logger.Debugf("Multicast discovery listening on %s (interface: %s)", md.config.MulticastAddr, iface.Name)
+	}
+
+	md.connsMu.Lock()
+	listening := len(md.conns)
+	md.connsMu.Unlock()
+
+	if listening == 0 {
+		return fmt.Errorf("failed to listen on any multicast interface")
+	}
+
 	return nil
 }
 
-// Stop stops the multicast discovery
+// Stop stops the multicast discovery and closes all listeners.
 func (md *MulticastDiscovery) Stop() {
 	md.closed.Store(true)
-	md.connMu.Lock()
-	if md.conn != nil {
-		md.conn.Close()
-		md.conn = nil
+	md.connsMu.Lock()
+	for _, conn := range md.conns {
+		conn.Close()
 	}
-	md.connMu.Unlock()
+	md.conns = nil
+	md.connsMu.Unlock()
 }
 
 // SendDiscoveryAnnouncement sends a multicast announcement
@@ -123,7 +173,23 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
 	}
 
-	conn, err := net.DialUDP("udp4", nil, addr)
+	var localAddr *net.UDPAddr
+	if md.config.InterfaceName != "" {
+		iface, err := net.InterfaceByName(md.config.InterfaceName)
+		if err == nil {
+			addrs, err := iface.Addrs()
+			if err == nil {
+				for _, a := range addrs {
+					if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+						localAddr = &net.UDPAddr{IP: ipnet.IP}
+						break
+					}
+				}
+			}
+		}
+	}
+
+	conn, err := net.DialUDP("udp4", localAddr, addr)
 	if err != nil {
 		return fmt.Errorf("failed to create UDP connection: %w", err)
 	}
@@ -182,7 +248,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 	return nil
 }
 
-func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
+func (md *MulticastDiscovery) listenLoop(ctx context.Context, conn net.PacketConn) {
 	buffer := make([]byte, 2048)
 
 	for {
@@ -193,14 +259,6 @@ func (md *MulticastDiscovery) listenLoop(ctx context.Context) {
 		}
 
 		if md.closed.Load() {
-			return
-		}
-
-		md.connMu.Lock()
-		conn := md.conn
-		md.connMu.Unlock()
-
-		if conn == nil {
 			return
 		}
 
@@ -267,6 +325,10 @@ func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 	}
 	md.devicesMutex.Unlock()
 
+	if md.peerCache != nil {
+		md.peerCache.Save(device)
+	}
+
 	// Always fire upward to Service so it can handle timestamps properly
 	md.handlersMu.RLock()
 	handlers := make([]func(*model.Device), len(md.handlers))
@@ -296,6 +358,10 @@ func (md *MulticastDiscovery) SetDto(dto model.MulticastDto) {
 
 func (md *MulticastDiscovery) SetHTTPDiscoverer(hd *HTTPDiscovery) {
 	md.httpDiscoverer = hd
+}
+
+func (md *MulticastDiscovery) SetPeerCache(cache *PeerCache) {
+	md.peerCache = cache
 }
 
 func getShortFingerprint(fingerprint string) string {

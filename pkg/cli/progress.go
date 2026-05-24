@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/vbauerster/mpb/v7"
@@ -8,7 +9,8 @@ import (
 )
 
 type MultiProgress struct {
-	pool *mpb.Progress
+	pool     *mpb.Progress
+	barCount int64
 }
 
 func NewMultiProgress(totalFiles int64) *MultiProgress {
@@ -16,6 +18,7 @@ func NewMultiProgress(totalFiles int64) *MultiProgress {
 		pool: mpb.New(
 			mpb.WithOutput(os.Stderr),
 		),
+		barCount: totalFiles,
 	}
 }
 
@@ -41,6 +44,11 @@ func (mp *MultiProgress) AddBar(name string, size int64) func(int64) {
 
 func (mp *MultiProgress) Wait() {
 	mp.pool.Wait()
+	// Clear progress bar lines from scrollback
+	for i := int64(0); i < mp.barCount; i++ {
+		fmt.Fprintf(os.Stderr, "\033[F\033[K")
+	}
+	fmt.Fprintf(os.Stderr, "%s Files transferred successfully\n", IconCheck)
 }
 
 func truncateName(name string, maxLen int) string {

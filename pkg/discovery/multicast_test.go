@@ -130,7 +130,10 @@ func TestMulticastDiscovery_IgnoreSelf(t *testing.T) {
 	defer cancel()
 
 	md.StartListening(ctx)
-	if md.conn == nil {
+	md.connsMu.Lock()
+	connCount := len(md.conns)
+	md.connsMu.Unlock()
+	if connCount == 0 {
 		t.Skipf("multicast socket unavailable (CI/sandbox environment)")
 	}
 	defer md.Stop()

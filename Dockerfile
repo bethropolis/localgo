@@ -1,31 +1,3 @@
-# Build Stage
-FROM golang:1.26-alpine AS builder
-
-# Build arguments for version information
-ARG VERSION=docker
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
-WORKDIR /app
-
-# Install build dependencies
-RUN apk add --no-cache git make
-
-# Copy go.mod and go.sum, download dependencies
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the binary with version information
-RUN CGO_ENABLED=0 go build \
-    -ldflags "-s -w \
-    -X main.Version=${VERSION} \
-    -X main.GitCommit=${GIT_COMMIT} \
-    -X main.BuildDate=${BUILD_DATE}" \
-    -o localgo ./cmd/localgo
-
 # Runtime Stage
 FROM alpine:3.21
 
@@ -33,9 +5,7 @@ LABEL org.opencontainers.image.title="LocalGo"
 LABEL org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go"
 LABEL org.opencontainers.image.url="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
-LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.license="MIT"
-LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.vendor="Bethropolis"
 LABEL org.opencontainers.image.ref.name="localgo"
 LABEL com.centurylinklabs.watchtower.enable="true"
@@ -43,19 +13,16 @@ LABEL com.centurylinklabs.watchtower.enable="true"
 WORKDIR /app
 
 # Install runtime dependencies:
-# 1. ca-certificates for HTTPS
-# 2. tzdata for timezones
-# 3. su-exec for stepping down from root to localgo user
-# 4. wget for healthcheck
-RUN apk add --no-cache ca-certificates tzdata su-exec wget
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
 # create the user
 RUN adduser -D -u 1000 -h /app localgo
 
-# Copy binary from builder
-COPY --from=builder /app/localgo /usr/local/bin/localgo
+# Copy binary for the correct platform compiled by GoReleaser
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/localgo /usr/local/bin/localgo
 
-# Copy entrypoint script
+# Copy entrypoint script (referenced in extra_files)
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -78,10 +45,9 @@ ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
 # Graceful shutdown signal
 STOPSIGNAL SIGTERM
 
-# Health check using HTTP endpoint (faster than CLI which loads config)
-# Note: Use HTTPS since server returns 400 on HTTP (needs Host header)
+# Health check using the native localgo health check tool
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["wget", "--no-check-certificate", "-qO-", "https://localhost:53317/"] || exit 1
+    CMD ["localgo", "health"]
 
 # Use entrypoint script to fix permissions (runs as root)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
