@@ -32,6 +32,15 @@ var largeBufferPool = sync.Pool{
 	},
 }
 
+// CheckFreeSpace returns the available bytes on the volume containing the specified path.
+func CheckFreeSpace(dirPath string) (uint64, error) {
+	cleanPath := filepath.Clean(dirPath)
+	if err := os.MkdirAll(cleanPath, 0755); err != nil {
+		return 0, fmt.Errorf("failed to verify path: %w", err)
+	}
+	return getAvailableBytes(cleanPath)
+}
+
 // EnsureDirExists creates a directory if it doesn't exist.
 func EnsureDirExists(path string) error {
 	err := os.MkdirAll(path, 0755)

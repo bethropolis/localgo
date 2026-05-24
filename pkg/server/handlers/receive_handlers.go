@@ -89,6 +89,23 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// --- Check Disk Space ---
+	var totalSize int64
+	for _, f := range requestDto.Files {
+		totalSize += f.Size
+	}
+
+	freeSpace, fsErr := storage.CheckFreeSpace(h.config.DownloadDir)
+	if fsErr == nil {
+		const safetyBuffer = 50 * 1024 * 1024
+		if freeSpace < uint64(totalSize)+safetyBuffer {
+			h.logger.Warnf("Rejected transfer from %s: Insufficient disk space (Required: %s, Available: %s)",
+				requestDto.Info.Alias, cli.FormatBytes(totalSize), cli.FormatBytes(int64(freeSpace)))
+			httputil.RespondError(w, http.StatusBadRequest, "Insufficient storage space on receiver")
+			return
+		}
+	}
+
 	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", requestDto.Info.Alias, r.RemoteAddr, len(requestDto.Files))
 
 	// Extract IP from RemoteAddr

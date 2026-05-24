@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
@@ -52,7 +54,7 @@ var sendCmd = &cobra.Command{
 			var discErr error
 
 			_ = spinner.New().
-				Title("Looking for devices on your network...").
+				Title("Looking for devices on your network (multicast)...").
 				Action(func() {
 					devices, discErr = discovery.DiscoverDevices(
 						context.Background(),
@@ -66,8 +68,34 @@ var sendCmd = &cobra.Command{
 			if discErr != nil {
 				return fmt.Errorf("discovery failed: %w", discErr)
 			}
+
+			// Unicast fallback: if multicast finds nothing, automatically scan subnets
 			if len(devices) == 0 {
-				return fmt.Errorf("no devices found on the network")
+				localIPs, ipErr := network.GetLocalIPAddresses()
+				if ipErr == nil && len(localIPs) > 0 {
+					_ = spinner.New().
+						Title("No devices via multicast. Scanning local subnets...").
+						Action(func() {
+							registerDto := Cfg.ToRegisterDto()
+							httpFallback := discovery.NewHTTPDiscovery(nil, registerDto, nil, nil)
+
+							var ips []net.IP
+							for _, ip := range localIPs {
+								ips = append(ips, network.GetSubnetIPs(ip)...)
+							}
+							ips = append(ips, net.ParseIP("127.0.0.1"))
+
+							scanCtx, cancelScan := context.WithTimeout(context.Background(), 10*time.Second)
+							defer cancelScan()
+
+							devices, _ = httpFallback.ScanNetwork(scanCtx, ips, Cfg.Port)
+						}).
+						Run()
+				}
+			}
+
+			if len(devices) == 0 {
+				return fmt.Errorf("no devices found on the network via multicast or subnet scan")
 			}
 
 			selected := cli.PickDevice(devices)
