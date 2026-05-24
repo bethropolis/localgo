@@ -91,6 +91,12 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("multicast interface '%s' not found: %w", md.config.InterfaceName, err)
 		}
+		if (iface.Flags & net.FlagUp) == 0 {
+			return fmt.Errorf("multicast interface '%s' is down", md.config.InterfaceName)
+		}
+		if (iface.Flags & net.FlagMulticast) == 0 {
+			return fmt.Errorf("multicast interface '%s' does not support multicast", md.config.InterfaceName)
+		}
 	}
 
 	conn, err := net.ListenMulticastUDP("udp4", iface, addr)

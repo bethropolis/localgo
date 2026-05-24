@@ -187,6 +187,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		client.Transport = tr
+		defer tr.CloseIdleConnections()
 	}
 
 	fileMap, err := getFilesWithRelativePaths(filePaths)

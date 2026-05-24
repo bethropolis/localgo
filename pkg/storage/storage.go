@@ -40,6 +40,7 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
+	defer outFile.Close()
 
 	progressWriter := &ProgressWriter{
 		Writer:     outFile,
@@ -58,6 +59,9 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 	}
 
 	if closeErr := outFile.Close(); closeErr != nil {
+		if removeErr := os.Remove(filePath); removeErr != nil && logger != nil {
+			logger.Warnw("Failed to remove incomplete file after close error", "path", filePath, "error", removeErr)
+		}
 		return fmt.Errorf("failed to close and flush file %s: %w", filePath, closeErr)
 	}
 
