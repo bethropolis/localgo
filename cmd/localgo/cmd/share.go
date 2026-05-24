@@ -17,6 +17,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -216,6 +217,21 @@ var shareCmd = &cobra.Command{
 
 		if !sharequiet {
 			cli.PrintSuccess("Server ready! Waiting for connections...")
+
+			// Retrieve active network interfaces to display direct URLs
+			localIPs, err := network.GetLocalIPAddresses()
+			if err == nil && len(localIPs) > 0 {
+				cli.PrintHeader("\nAccess URLs:")
+				for _, ip := range localIPs {
+					scheme := "https"
+					if !Cfg.HttpsEnabled {
+						scheme = "http"
+					}
+					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
+				}
+				fmt.Println()
+			}
+
 			cli.PrintWarning("Press Ctrl+C to stop sharing")
 		}
 

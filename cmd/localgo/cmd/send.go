@@ -10,7 +10,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/send"
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -45,15 +47,24 @@ var sendCmd = &cobra.Command{
 		if target == "" {
 			sendConfig := discovery.DefaultServiceConfig()
 			sendConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
-			cli.PrintHeader("Looking for devices...")
-			devices, err := discovery.DiscoverDevices(
-				context.Background(),
-				sendConfig,
-				Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
-				Cfg.DeviceModel, Cfg.HttpsEnabled,
-			)
-			if err != nil {
-				return fmt.Errorf("discovery failed: %w", err)
+
+			var devices []*model.Device
+			var discErr error
+
+			_ = spinner.New().
+				Title("Looking for devices on your network...").
+				Action(func() {
+					devices, discErr = discovery.DiscoverDevices(
+						context.Background(),
+						sendConfig,
+						Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
+						Cfg.DeviceModel, Cfg.HttpsEnabled,
+					)
+				}).
+				Run()
+
+			if discErr != nil {
+				return fmt.Errorf("discovery failed: %w", discErr)
 			}
 			if len(devices) == 0 {
 				return fmt.Errorf("no devices found on the network")

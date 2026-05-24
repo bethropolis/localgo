@@ -20,6 +20,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
+	"github.com/charmbracelet/huh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -121,6 +122,9 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	if targetDevice != nil {
+		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+			return err
+		}
 		return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
@@ -170,7 +174,45 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	logger.Infof("Discovered recipient via HTTP Scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
 
+	if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+		return err
+	}
+
 	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+}
+
+// verifyDeviceFingerprint checks if a cached fingerprint differs from the target's
+// and prompts the user to trust the updated fingerprint before proceeding.
+func verifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model.Device) error {
+	if targetDevice == nil || targetDevice.Fingerprint == "" {
+		return nil
+	}
+
+	cachedPeers := peerCache.GetPeers()
+	for _, cached := range cachedPeers {
+		if cached.Alias == targetDevice.Alias && cached.Fingerprint != targetDevice.Fingerprint {
+			cli.PrintWarning("The security fingerprint for '%s' has changed!", targetDevice.Alias)
+
+			var trust bool
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("Trust this new device fingerprint and update cache?").
+						Value(&trust).
+						Affirmative("Trust & Save").
+						Negative("Abort"),
+				),
+			).WithTheme(huh.ThemeCharm())
+
+			if err := form.Run(); err != nil || !trust {
+				return fmt.Errorf("security verification failed: untrusted certificate hash change")
+			}
+
+			peerCache.Save(targetDevice)
+			break
+		}
+	}
+	return nil
 }
 
 func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gen2brain/beeep"
 )
 
@@ -163,26 +164,41 @@ type DeviceInfo struct {
 	MulticastAddr string `json:"multicastAddr"`
 }
 
-// writeDeviceInfoTable outputs device info in table format
+// writeDeviceInfoTable outputs device info in a stylized card layout
 func (ow *OutputWriter) writeDeviceInfoTable(info DeviceInfo) error {
-	fmt.Println("LocalGo Device Information")
-	fmt.Println("==========================")
-	fmt.Printf("Alias:           %s\n", info.Alias)
-	fmt.Printf("Protocol:        LocalSend v%s\n", info.Version)
-	fmt.Printf("Device Model:    %s\n", info.DeviceModel)
-	fmt.Printf("Device Type:     %s\n", info.DeviceType)
-	fmt.Printf("Port:            %d\n", info.Port)
-	fmt.Printf("Transport:       %s\n", strings.ToUpper(info.Protocol))
-	fmt.Printf("Download Dir:    %s\n", info.DownloadDir)
-	fmt.Printf("PIN Protection:  %s\n", func() string {
-		if info.HasPin {
-			return "Enabled"
-		}
-		return "Disabled"
-	}())
-	fmt.Printf("Multicast:       %s\n", info.MulticastAddr)
-	fmt.Printf("Fingerprint:     %s\n", info.Fingerprint)
+	titleStyle := HeaderStyle.Padding(0, 1).MarginBottom(1)
+	borderStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62")).Padding(1, 2)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("242")).Width(18).Bold(true)
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 
+	fields := []struct {
+		label string
+		value string
+	}{
+		{"Alias", info.Alias},
+		{"Protocol", "LocalSend v" + info.Version},
+		{"Device Model", info.DeviceModel},
+		{"Device Type", info.DeviceType},
+		{"Port", fmt.Sprintf("%d", info.Port)},
+		{"Transport", strings.ToUpper(info.Protocol)},
+		{"Download Dir", info.DownloadDir},
+		{"PIN Protection", func() string {
+			if info.HasPin {
+				return "Enabled"
+			}
+			return "Disabled"
+		}()},
+		{"Multicast", info.MulticastAddr},
+		{"Fingerprint", info.Fingerprint},
+	}
+
+	var content strings.Builder
+	for _, f := range fields {
+		content.WriteString(fmt.Sprintf("%s %s\n", labelStyle.Render(f.label+":"), valueStyle.Render(f.value)))
+	}
+
+	fmt.Println(titleStyle.Render(IconDevice + "  LocalGo Device Information"))
+	fmt.Println(borderStyle.Render(content.String()))
 	return nil
 }
 

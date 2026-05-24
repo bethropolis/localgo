@@ -12,6 +12,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -160,6 +161,20 @@ var serveCmd = &cobra.Command{
 		if !servequiet {
 			zap.S().Infof("Server ready! Waiting for files...")
 			cli.PrintSuccess("Server ready! Waiting for files...")
+
+			localIPs, err := network.GetLocalIPAddresses()
+			if err == nil && len(localIPs) > 0 {
+				cli.PrintHeader("\nListening Addresses:")
+				for _, ip := range localIPs {
+					scheme := "https"
+					if !Cfg.HttpsEnabled {
+						scheme = "http"
+					}
+					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
+				}
+				fmt.Println()
+			}
+
 			cli.PrintWarning("Press Ctrl+C to stop")
 		}
 

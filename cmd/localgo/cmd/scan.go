@@ -9,7 +9,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
+	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -62,10 +64,23 @@ var scanCmd = &cobra.Command{
 		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scanTimeout)*time.Second)
 		defer cancel()
 
-		foundDevices, err := httpDiscoverer.ScanNetwork(scanCtx, ips, scanPort)
-		if err != nil && !scanquiet {
-			zap.S().Warnf("Scan completed with warnings: %v", err)
-			cli.PrintWarning("Scan completed with warnings: %v", err)
+		var foundDevices []*model.Device
+		var scanErr error
+
+		if !scanquiet {
+			_ = spinner.New().
+				Title(fmt.Sprintf("Scanning %d IP addresses on port %d...", len(ips), scanPort)).
+				Action(func() {
+					foundDevices, scanErr = httpDiscoverer.ScanNetwork(scanCtx, ips, scanPort)
+				}).
+				Run()
+		} else {
+			foundDevices, scanErr = httpDiscoverer.ScanNetwork(scanCtx, ips, scanPort)
+		}
+
+		if scanErr != nil && !scanquiet {
+			zap.S().Warnf("Scan completed with warnings: %v", scanErr)
+			cli.PrintWarning("Scan completed with warnings: %v", scanErr)
 		}
 
 		if !scanquiet && len(foundDevices) == 0 {
