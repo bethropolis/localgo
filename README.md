@@ -79,9 +79,18 @@ localgo discover
 # Send a file
 localgo send --file document.pdf --to "My Phone"
 
+# Send clipboard contents directly
+localgo send --clipboard --to "My Phone"
+
+# Inspect transfer history logs
+localgo history
+
 # Share files for web download
 localgo share --file document.pdf
 ```
+
+> [!TIP]
+> To get the best visual experience with localgo's modern terminal interface, using a [Nerd Font](https://www.nerdfonts.com/) (e.g. JetBrainsMono, FiraCode) is highly recommended.
 
 ### Docker and Podman
 
@@ -122,6 +131,7 @@ localgo serve
 | `discover` | Find devices via multicast |
 | `scan` | Find devices via HTTP scan |
 | `send` | Send files to a device |
+| `history`| Show file transfer history log |
 | `info` | Show device information |
 | `devices` | List discovered devices |
 
