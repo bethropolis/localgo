@@ -247,6 +247,10 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 				preview = preview[:80] + "…"
 			}
 			h.logger.Infof("Copied text to clipboard from %s: %q", fileInfo.Dto.FileName, preview)
+
+			// Mark the progress bar as completed since no file write occurs
+			onProgress(fileInfo.Dto.Size)
+
 			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, "<clipboard>", int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusClipboard)
 			h.runExecHook("<clipboard>", rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))

@@ -135,11 +135,20 @@ func (s *ReceiveService) CloseSession(sessionID string) {
 // RemoveFileFromSession removes a file from the current session.
 func (s *ReceiveService) RemoveFileFromSession(sessionID, fileID string) {
 	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
-	if session, ok := s.sessions[sessionID]; ok {
-		delete(session.Files, fileID)
-		if len(session.Files) == 0 {
-			delete(s.sessions, sessionID)
-		}
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		s.sessionMutex.Unlock()
+		return
+	}
+	delete(session.Files, fileID)
+	sessionEmpty := len(session.Files) == 0
+	if sessionEmpty {
+		delete(s.sessions, sessionID)
+	}
+	s.sessionMutex.Unlock()
+
+	// Gracefully stop the progress bar rendering goroutine when the session ends
+	if sessionEmpty && session.Progress != nil {
+		go session.Progress.Wait()
 	}
 }
