@@ -34,7 +34,8 @@ jobs:
           version: "~> v2"
           # --snapshot: build without a tag, no publish
           # --clean: remove previous dist/ before building
-          args: release --snapshot --clean
+          # skip docker: images built only during tagged releases via release.yml
+          args: release --snapshot --clean --skip=docker
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
