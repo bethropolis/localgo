@@ -27,6 +27,7 @@ type MulticastDiscovery struct {
 	connMu         sync.Mutex
 	closed         atomic.Bool
 	httpDiscoverer *HTTPDiscovery
+	peerCache      *PeerCache
 	logger         *zap.SugaredLogger
 }
 
@@ -34,6 +35,7 @@ type MulticastDiscovery struct {
 type MulticastConfig struct {
 	MulticastAddr   string
 	Port            int
+	InterfaceName   string
 	AnnounceTimeout time.Duration
 	ListenTimeout   time.Duration
 }
@@ -83,7 +85,15 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
 	}
 
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	var iface *net.Interface
+	if md.config.InterfaceName != "" {
+		iface, err = net.InterfaceByName(md.config.InterfaceName)
+		if err != nil {
+			return fmt.Errorf("multicast interface '%s' not found: %w", md.config.InterfaceName, err)
+		}
+	}
+
+	conn, err := net.ListenMulticastUDP("udp4", iface, addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on multicast socket: %w", err)
 	}
@@ -123,7 +133,23 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
 	}
 
-	conn, err := net.DialUDP("udp4", nil, addr)
+	var localAddr *net.UDPAddr
+	if md.config.InterfaceName != "" {
+		iface, err := net.InterfaceByName(md.config.InterfaceName)
+		if err == nil {
+			addrs, err := iface.Addrs()
+			if err == nil {
+				for _, a := range addrs {
+					if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+						localAddr = &net.UDPAddr{IP: ipnet.IP}
+						break
+					}
+				}
+			}
+		}
+	}
+
+	conn, err := net.DialUDP("udp4", localAddr, addr)
 	if err != nil {
 		return fmt.Errorf("failed to create UDP connection: %w", err)
 	}
@@ -267,6 +293,10 @@ func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 	}
 	md.devicesMutex.Unlock()
 
+	if md.peerCache != nil {
+		md.peerCache.Save(device)
+	}
+
 	// Always fire upward to Service so it can handle timestamps properly
 	md.handlersMu.RLock()
 	handlers := make([]func(*model.Device), len(md.handlers))
@@ -296,6 +326,10 @@ func (md *MulticastDiscovery) SetDto(dto model.MulticastDto) {
 
 func (md *MulticastDiscovery) SetHTTPDiscoverer(hd *HTTPDiscovery) {
 	md.httpDiscoverer = hd
+}
+
+func (md *MulticastDiscovery) SetPeerCache(cache *PeerCache) {
+	md.peerCache = cache
 }
 
 func getShortFingerprint(fingerprint string) string {

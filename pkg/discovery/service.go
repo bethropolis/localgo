@@ -21,6 +21,7 @@ type Service struct {
 	handlers      []func(*model.Device)
 	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
+	peerCache     *PeerCache
 	logger        *zap.SugaredLogger
 }
 
@@ -68,6 +69,14 @@ func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *za
 	return s
 }
 
+// SetPeerCache sets the persistent peer cache for both service and multicast.
+func (s *Service) SetPeerCache(cache *PeerCache) {
+	s.peerCache = cache
+	if mc, ok := s.multicast.(interface{ SetPeerCache(*PeerCache) }); ok {
+		mc.SetPeerCache(cache)
+	}
+}
+
 // Start initializes and starts the discovery service for listening and periodic announcements
 func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) error {
 	protocol := model.ProtocolTypeHTTP
@@ -98,6 +107,17 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 
 	if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {
 		s.logger.Errorf("Failed to send initial discovery announcement: %v", err)
+	}
+
+	// Probe cached peers in the background
+	if s.peerCache != nil {
+		probeCtx, cancelProbe := context.WithTimeout(ctx, 10*time.Second)
+		go func() {
+			defer cancelProbe()
+			ProbeCached(probeCtx, s.peerCache, func(device *model.Device) {
+				s.updateDevice(device)
+			}, s.logger)
+		}()
 	}
 
 	return nil

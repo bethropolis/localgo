@@ -37,11 +37,8 @@ Thumbs.db
 *.coverprofile
 coverage.*
 
-# AI files
-GEMINI.md
-FIX.md
-config/.security
-codebase.md
+
+/config
 test
 dist/
 .coverage/

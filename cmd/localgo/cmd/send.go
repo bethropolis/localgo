@@ -16,11 +16,13 @@ import (
 )
 
 var (
-	sendfiles   []string
-	sendto      string
-	sendport    int
-	sendtimeout int
-	sendalias   string
+	sendfiles       []string
+	sendto          string
+	sendport        int
+	sendtimeout     int
+	sendalias       string
+	sendconcurrency int
+	sendmulticastiface string
 )
 
 var sendCmd = &cobra.Command{
@@ -41,10 +43,12 @@ var sendCmd = &cobra.Command{
 
 		target := sendto
 		if target == "" {
+			sendConfig := discovery.DefaultServiceConfig()
+			sendConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 			cli.PrintHeader("Looking for devices...")
 			devices, err := discovery.DiscoverDevices(
 				context.Background(),
-				discovery.DefaultServiceConfig(),
+				sendConfig,
 				Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
 				Cfg.DeviceModel, Cfg.HttpsEnabled,
 			)
@@ -65,6 +69,12 @@ var sendCmd = &cobra.Command{
 
 		if sendalias != "" {
 			Cfg.Alias = sendalias
+		}
+		if sendconcurrency > 0 {
+			Cfg.Concurrency = sendconcurrency
+		}
+		if sendmulticastiface != "" {
+			Cfg.MulticastInterface = sendmulticastiface
 		}
 
 		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
@@ -97,6 +107,8 @@ func init() {
 	sendCmd.Flags().IntVar(&sendport, "port", 0, "Target device port")
 	sendCmd.Flags().IntVar(&sendtimeout, "timeout", 30, "Send timeout in seconds")
 	sendCmd.Flags().StringVar(&sendalias, "alias", "", "Sender alias")
+	sendCmd.Flags().IntVar(&sendconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
+	sendCmd.Flags().StringVar(&sendmulticastiface, "iface", "", "Multicast network interface name")
 
 	sendCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("send"); h != nil {

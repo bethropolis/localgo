@@ -47,10 +47,16 @@ var discoverCmd = &cobra.Command{
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
+		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 		multicastDto := Cfg.ToMulticastDto(false)
 
 		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+
+		peerCache := discovery.NewPeerCache(zap.S())
+		multicast.SetPeerCache(peerCache)
+
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc.SetPeerCache(peerCache)
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !discoverquiet {

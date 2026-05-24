@@ -79,13 +79,18 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
+	discoverySvcConfig.MulticastConfig.InterfaceName = cfg.MulticastInterface
 	multicastDto := cfg.ToMulticastDto(false)
 
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logger)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, logger)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
 
+	peerCache := discovery.NewPeerCache(logger)
+	multicast.SetPeerCache(peerCache)
+
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logger)
+	discoverySvc.SetPeerCache(peerCache)
 
 	foundChan := make(chan *model.Device, 1)
 	discoverySvc.AddDeviceHandler(func(device *model.Device) {
@@ -268,7 +273,11 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
 
-	sem := make(chan struct{}, 4)
+	concurrency := cfg.Concurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	sem := make(chan struct{}, concurrency)
 
 	for fileID, token := range prepareResponse.Files {
 		filePath, exists := filePathMap[fileID]

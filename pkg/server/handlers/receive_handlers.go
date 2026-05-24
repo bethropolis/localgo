@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -256,7 +257,14 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			h.logger.Warnf("Clipboard unavailable (%v), saving text as file instead", clipErr)
 		}
 
-		// Fall-back: save the already-read bytes as a file.
+		// Fall-back: save the full stream as a file.
+		var combinedReader io.Reader
+		if int64(len(textBytes)) > maxTextSize {
+			// Re-combine the already-read prefix with the remaining socket stream.
+			combinedReader = io.MultiReader(bytes.NewReader(textBytes), bodyReader)
+		} else {
+			combinedReader = bytes.NewReader(textBytes)
+		}
 		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 		cleanPath = filepath.Clean(destinationPath)
 		if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
@@ -265,7 +273,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		savErr := storage.SaveStreamToFileWithMetadata(
-			strings.NewReader(text), destinationPath, modified, accessed, onProgress, h.logger,
+			combinedReader, destinationPath, modified, accessed, onProgress, h.logger,
 		)
 		if savErr != nil {
 			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)

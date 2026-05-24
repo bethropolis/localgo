@@ -85,25 +85,7 @@ localgo share --file document.pdf
 
 ### Docker and Podman
 
-LocalGo ships in two image variants:
-
-| Image | Base | Size | Use case |
-|-------|------|------|----------|
-| `ghcr.io/bethropolis/localgo:latest` | Alpine | ~25 MB | General use, includes shell |
-| `ghcr.io/bethropolis/localgo:scratch` | scratch | ~10 MB | Production hardening, no shell |
-
-The **scratch** image is recommended for production. It contains only the binary and CA certificates — no shell, no package manager, minimal attack surface. It uses `localgo docker-start` to handle permission setup internally via `syscall.Setuid`/`Setgid`.
-
-```bash
-# Run the scratch image (recommended)
-docker run -d --network host \
-  -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/config:/app/config \
-  -e PUID=$(id -u) -e PGID=$(id -g) \
-  ghcr.io/bethropolis/localgo:scratch
-```
-
-For full details — macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
+For full details — deployment, macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
 
 ## Configuration
 

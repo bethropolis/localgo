@@ -40,7 +40,6 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
-	defer outFile.Close()
 
 	progressWriter := &ProgressWriter{
 		Writer:     outFile,
@@ -58,7 +57,9 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 		return fmt.Errorf("failed to copy stream to file %s: %w", filePath, err)
 	}
 
-	outFile.Close()
+	if closeErr := outFile.Close(); closeErr != nil {
+		return fmt.Errorf("failed to close and flush file %s: %w", filePath, closeErr)
+	}
 
 	if modified != nil || accessed != nil {
 		mtime := time.Now()
