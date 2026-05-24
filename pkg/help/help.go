@@ -260,9 +260,11 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Usage:       "localgo devices [OPTIONS]",
 			Examples: []string{
 				"localgo devices",
+				"localgo devices --probe",
 				"localgo devices --json",
 			},
 			Flags: []FlagHelp{
+				{Name: "--probe, -p", Type: "bool", Default: "false", Description: "Probe cached devices to verify if they are currently online"},
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
 			},
 		},

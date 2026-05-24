@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/acarl005/stripansi"
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/charmbracelet/lipgloss"
@@ -120,14 +119,6 @@ var historyCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func padRight(str string, length int) string {
-	plain := stripansi.Strip(str)
-	if len(plain) >= length {
-		return str
-	}
-	return str + strings.Repeat(" ", length-len(plain))
 }
 
 func init() {
