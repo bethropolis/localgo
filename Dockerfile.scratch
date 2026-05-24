@@ -1,35 +1,18 @@
-# Build Stage
-FROM golang:1.26.3-alpine AS builder
-
-ARG VERSION=docker
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
-WORKDIR /app
-
-RUN apk add --no-cache git make
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-
-RUN CGO_ENABLED=0 go build \
-    -ldflags "-s -w \
-    -X main.Version=${VERSION} \
-    -X main.GitCommit=${GIT_COMMIT} \
-    -X main.BuildDate=${BUILD_DATE}" \
-    -o localgo ./cmd/localgo
+# Harvest certificates from alpine
+FROM alpine:3.21 AS certs
 
 # Runtime Stage — scratch (no OS, no shell)
 FROM scratch
 
 # CA certificates for HTTPS
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder /etc/ssl/certs/ /etc/ssl/certs/
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /etc/ssl/certs/ /etc/ssl/certs/
 
 WORKDIR /app
 
-# LocalGo binary (static, no CGO)
-COPY --from=builder /app/localgo /localgo
+# Copy binary for the correct platform compiled by GoReleaser
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/localgo /localgo
 
 # Directory structure
 RUN mkdir -p /app/downloads /app/config/.security
@@ -42,9 +25,7 @@ LABEL org.opencontainers.image.title="LocalGo"
 LABEL org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go"
 LABEL org.opencontainers.image.url="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
-LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.license="MIT"
-LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.vendor="Bethropolis"
 LABEL org.opencontainers.image.ref.name="localgo"
 LABEL com.centurylinklabs.watchtower.enable="true"
@@ -52,7 +33,7 @@ LABEL com.centurylinklabs.watchtower.enable="true"
 # Graceful shutdown
 STOPSIGNAL SIGTERM
 
-# Health check using HTTP endpoint
+# Health check using native LocalGo CLI utility
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/localgo", "health"]
 

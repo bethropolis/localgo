@@ -264,3 +264,35 @@ nfpms:
     scripts:
       postinstall: scripts/pkg-postinstall.sh
       preremove:   scripts/pkg-preremove.sh
+
+# ---------------------------------------------------------------------------
+# Docker builds using v2 engine (multi-arch buildx manifests)
+# ---------------------------------------------------------------------------
+dockers_v2:
+  - id: localgo-alpine
+    dockerfile: Dockerfile
+    ids:
+      - localgo
+    images:
+      - "ghcr.io/bethropolis/localgo"
+    tags:
+      - "{{.Version}}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    extra_files:
+      - scripts/docker-entrypoint.sh
+
+  - id: localgo-scratch
+    dockerfile: Dockerfile.scratch
+    ids:
+      - localgo
+    images:
+      - "ghcr.io/bethropolis/localgo"
+    tags:
+      - "{{.Version}}-scratch"
+      - scratch
+    platforms:
+      - linux/amd64
+      - linux/arm64
