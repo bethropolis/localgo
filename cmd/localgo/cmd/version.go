@@ -6,10 +6,16 @@ import (
 )
 
 var (
-	Version   = "0.4.0"
+	Version   = "dev"
 	GitCommit = "unknown"
 	BuildDate = "unknown"
 )
+
+func SetVersionInfo(version, commit, date string) {
+	Version = version
+	GitCommit = commit
+	BuildDate = date
+}
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
