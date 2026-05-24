@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -256,6 +257,12 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		n, _ := file.Read(buffer)
 		file.Close()
 		contentType := http.DetectContentType(buffer[:n])
+
+		// If this is a temporary clipboard file, sanitize display name to text_transfer.txt
+		if strings.HasPrefix(filepath.Base(filePath), "localgo-clip-") {
+			remoteName = "text_transfer.txt"
+			contentType = "text/plain"
+		}
 
 		modTime := fileInfo.ModTime().Format(time.RFC3339)
 

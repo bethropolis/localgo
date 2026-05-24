@@ -8,18 +8,30 @@ import "os/exec"
 // Prefers Wayland (wl-copy) when WAYLAND_DISPLAY is set, then X11 tools.
 func detect() *clipProvider {
 	// Wayland
-	if lookPath("wl-copy") {
-		return &clipProvider{cmd: "wl-copy"}
+	if lookPath("wl-copy") && lookPath("wl-paste") {
+		return &clipProvider{
+			cmd:     "wl-copy",
+			readCmd: "wl-paste",
+		}
 	}
 	// X11 via xclip
 	if lookPath("xclip") {
-		return &clipProvider{cmd: "xclip", args: []string{"-selection", "clipboard"}}
+		return &clipProvider{
+			cmd:      "xclip",
+			args:     []string{"-selection", "clipboard"},
+			readCmd:  "xclip",
+			readArgs: []string{"-selection", "clipboard", "-o"},
+		}
 	}
 	// X11 via xsel
 	if lookPath("xsel") {
-		return &clipProvider{cmd: "xsel", args: []string{"--clipboard", "--input"}}
+		return &clipProvider{
+			cmd:      "xsel",
+			args:     []string{"--clipboard", "--input"},
+			readCmd:  "xsel",
+			readArgs: []string{"--clipboard", "--output"},
+		}
 	}
-	// xdotool / xdg-open are not clipboard tools; nothing else to try
 	return nil
 }
 

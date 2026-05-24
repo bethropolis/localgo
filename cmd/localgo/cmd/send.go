@@ -6,14 +6,17 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -27,6 +30,7 @@ var (
 	sendalias       string
 	sendconcurrency int
 	sendmulticastiface string
+	sendclipboard   bool
 )
 
 var sendCmd = &cobra.Command{
@@ -35,12 +39,62 @@ var sendCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
 
+		// Interactive fallback: if no files specified, check clipboard for text content
+		if len(files) == 0 && !sendclipboard {
+			if clipboard.Available() {
+				text, err := clipboard.Read()
+				if err == nil && strings.TrimSpace(text) != "" {
+					preview := strings.ReplaceAll(text, "\n", " ")
+					if len(preview) > 50 {
+						preview = preview[:50] + "…"
+					}
+
+					var useClip bool = true
+					form := huh.NewForm(
+						huh.NewGroup(
+							huh.NewConfirm().
+								Title("No files specified. Send clipboard content instead?").
+								Description(fmt.Sprintf("Current clipboard: %q", preview)).
+								Value(&useClip),
+						),
+					).WithTheme(huh.ThemeCharm())
+
+					if err := form.Run(); err == nil && useClip {
+						sendclipboard = true
+					}
+				}
+			}
+		}
+
+		if sendclipboard {
+			text, err := clipboard.Read()
+			if err != nil {
+				return fmt.Errorf("failed to read from clipboard: %w", err)
+			}
+			if strings.TrimSpace(text) == "" {
+				return fmt.Errorf("clipboard is empty or does not contain text")
+			}
+
+			tempFile, err := os.CreateTemp("", "localgo-clip-*.txt")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary file for clipboard: %w", err)
+			}
+			defer os.Remove(tempFile.Name())
+
+			if _, err := tempFile.WriteString(text); err != nil {
+				tempFile.Close()
+				return fmt.Errorf("failed to write clipboard text: %w", err)
+			}
+			tempFile.Close()
+			files = []string{tempFile.Name()}
+		}
+
 		if len(files) == 0 {
-			return fmt.Errorf("no file specified: use positional args or --file flag (e.g. 'localgo send --file /path/to/file' or 'localgo send myfile.txt')")
+			return fmt.Errorf("no file specified: use positional args, --file flag, or --clipboard")
 		}
 
 		for _, file := range files {
-			if _, err := os.Stat(file); os.IsNotExist(err) {
+			if _, err := os.Stat(file); os.IsNotExist(err) && !sendclipboard {
 				return fmt.Errorf("file not found: %s", file)
 			}
 		}
@@ -148,6 +202,7 @@ func init() {
 	sendCmd.Flags().StringVar(&sendalias, "alias", "", "Sender alias")
 	sendCmd.Flags().IntVar(&sendconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
 	sendCmd.Flags().StringVar(&sendmulticastiface, "iface", "", "Multicast network interface name")
+	sendCmd.Flags().BoolVarP(&sendclipboard, "clipboard", "c", false, "Send current system clipboard text directly")
 
 	sendCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("send"); h != nil {
