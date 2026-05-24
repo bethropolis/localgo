@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/subtle"
@@ -26,6 +25,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/bethropolis/localgo/pkg/storage"
+	"github.com/charmbracelet/huh"
 	"go.uber.org/zap"
 )
 
@@ -319,11 +319,11 @@ func (h *ReceiveHandler) PrepareUploadHandlerV1(w http.ResponseWriter, r *http.R
 	h.PrepareUploadHandlerV2(w, r)
 }
 
-// stdinReader is used to prevent creating multiple bufio.Readers on os.Stdin
-// which can steal bytes from each other.
-var stdinReader = bufio.NewReader(os.Stdin)
-
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
+	if cli.IsContainer() {
+		return false
+	}
+
 	fileCount := len(files)
 	var totalSize int64
 	for _, f := range files {
@@ -333,60 +333,61 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 	cli.Notify("LocalGo: Incoming Transfer",
 		fmt.Sprintf("%s wants to send you %d file(s) (%s)", sender.Alias, fileCount, cli.FormatBytes(totalSize)))
 
-	// Output to stderr to avoid interfering with stdout
-	fmt.Fprintf(os.Stderr, "\n%s\n", cli.WarningStyle.Render("Incoming transfer"))
-	fmt.Fprintf(os.Stderr, "From: %s (IP: %s)\n", cli.InfoStyle.Render(sender.Alias), sender.IP)
+	// Build a structured summary of the incoming files
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("From: %s (IP: %s)\n\nFiles:\n", sender.Alias, sender.IP))
 
-	var hasText bool
-	fmt.Fprintf(os.Stderr, "Files:\n")
+	count := 0
 	for _, file := range files {
+		if count >= 5 {
+			sb.WriteString(fmt.Sprintf("  ... and %d more files\n", fileCount-5))
+			break
+		}
 		isText := strings.HasPrefix(file.FileType, "text/plain")
 		if isText {
-			hasText = true
 			preview := ""
 			if file.Preview != nil && *file.Preview != "" {
 				preview = *file.Preview
-				if len(preview) > 80 {
-					preview = preview[:80] + "…"
+				if len(preview) > 50 {
+					preview = preview[:50] + "…"
 				}
-				fmt.Fprintf(os.Stderr, "  - [text] %q\n", preview)
+				sb.WriteString(fmt.Sprintf("  %s [Text] %q\n", cli.IconFile, preview))
 			} else {
-				fmt.Fprintf(os.Stderr, "  - [text] %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+				sb.WriteString(fmt.Sprintf("  %s [Text] %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "  - %s (%s)\n", file.FileName, cli.FormatBytes(file.Size))
+			sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
 		}
-		totalSize += file.Size
-	}
-	if !hasText {
-		fmt.Fprintf(os.Stderr, "Total size: %s\n", cli.FormatBytes(totalSize))
-	}
-	if hasText && !h.config.NoClipboard {
-		fmt.Fprintf(os.Stderr, "(text will be copied to clipboard)\n")
+		count++
 	}
 
-	fmt.Fprintf(os.Stderr, "\nAccept transfer? [Y/n] (auto-rejects in 30s): ")
+	if totalSize > 0 {
+		sb.WriteString(fmt.Sprintf("\nTotal Size: %s", cli.FormatBytes(totalSize)))
+	}
 
-	// Read with timeout - use context to prevent goroutine leak
+	var accept bool = true
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Accept Incoming File Transfer?").
+				Description(sb.String()).
+				Value(&accept).
+				Affirmative("Accept").
+				Negative("Reject"),
+		),
+	).WithTheme(huh.ThemeCharm())
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	ch := make(chan string, 1)
-	go func() {
-		input, _ := stdinReader.ReadString('\n')
-		select {
-		case ch <- strings.TrimSpace(strings.ToLower(input)):
-		case <-ctx.Done():
-		}
-	}()
-
-	select {
-	case input := <-ch:
-		return input == "" || input == "y" || input == "yes"
-	case <-ctx.Done():
-		fmt.Fprintf(os.Stderr, "\nTransfer auto-rejected (timeout).\n")
+	err := form.RunWithContext(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s Transfer automatically rejected.\n", cli.WarningStyle.Render(cli.IconWarning))
 		return false
 	}
+
+	return accept
 }
 
 func (h *ReceiveHandler) logTransfer(senderAlias, senderIP, fileName, filePath string, size int64, fileType, status string) {
