@@ -410,7 +410,12 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 
 	go func() {
 		h.logger.Infof("Running exec hook: %s", h.config.ExecHook)
-		cmd := exec.Command("sh", "-c", h.config.ExecHook)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/c", h.config.ExecHook)
+		} else {
+			cmd = exec.Command("sh", "-c", h.config.ExecHook)
+		}
 		cmd.Env = append(os.Environ(),
 			"LOCALGO_FILE="+filePath,
 			"LOCALGO_NAME="+fileName,

@@ -152,7 +152,9 @@ func ProbeCached(ctx context.Context, cache *PeerCache, onFound func(*model.Devi
 		return
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}

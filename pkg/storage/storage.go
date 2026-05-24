@@ -8,10 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// Thread-safe pool of 32KB buffers for stream copies, reducing GC churn.
+var copyBufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 32*1024)
+		return &b
+	},
+}
 
 // EnsureDirExists creates a directory if it doesn't exist.
 func EnsureDirExists(path string) error {
@@ -47,7 +56,11 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, modified *s
 		OnProgress: onProgress,
 	}
 
-	_, err = io.Copy(progressWriter, stream)
+	// Retrieve a pre-allocated copy buffer from the pool
+	bufPtr := copyBufferPool.Get().(*[]byte)
+	defer copyBufferPool.Put(bufPtr)
+
+	_, err = io.CopyBuffer(progressWriter, stream, *bufPtr)
 	if err != nil {
 		outFile.Close()
 		if removeErr := os.Remove(filePath); removeErr != nil {
