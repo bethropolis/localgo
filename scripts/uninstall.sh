@@ -33,32 +33,40 @@ REMOVE_DATA=false
 REMOVE_USER=false
 FORCE=false
 DRY_RUN=false
-INTERACTIVE=true
 UNINSTALL_MODE="all"   # all | user | system
 
 # Function to print colored output
 print_status() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "  ${BLUE}ℹ${NC}  $1"
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "  ${GREEN}✔${NC}  $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "  ${YELLOW}⚠${NC}  $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "  ${RED}✖${NC}  $1"
 }
 
 print_action() {
     if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would: $1"
+        echo -e "  ${YELLOW}⚡${NC}  Would: $1"
     else
-        echo -e "${GREEN}[REMOVING]${NC} $1"
+        echo -e "  ${GREEN}✔${NC}  $1"
     fi
+}
+
+# Print a section header with step counter
+section() {
+    local step_num="$1"
+    local step_title="$2"
+    echo
+    echo -e "  ${BLUE}[${step_num}/5]${NC} ${step_title}"
+    echo "  ────────────────────────────────────────────────────"
 }
 
 # Function to show usage
@@ -76,13 +84,13 @@ OPTIONS:
     --remove-user         Remove localgo system user (system mode only)
     --force               Skip confirmation prompts
     --dry-run             Show what would be removed without actually removing
-    --non-interactive     Don't ask for confirmations (use with --force)
+    -y, --yes             Assume yes; bypass confirmation prompts
     --help                Show this help message
 
 MODES:
     all                   Remove both user and system artifacts (default)
-    user                  Remove only user-mode artifacts (~/.local/bin, user service, etc.)
-    system                Remove only system-wide artifacts (/usr/local/bin, system service, etc.)
+    user                  Remove only user-mode artifacts
+    system                Remove only system-wide artifacts
 
 EXAMPLES:
     $0                                          # Basic uninstall (keeps config and data)
@@ -91,7 +99,7 @@ EXAMPLES:
     $0 --remove-config                          # Remove including configuration
     $0 --remove-config --remove-data            # Complete removal
     $0 --dry-run                                # Preview what would be removed
-    $0 --force --remove-config --remove-data    # Force complete removal
+    $0 -y --remove-config --remove-data         # Force complete removal
 
 SAFETY:
     By default, this script preserves:
@@ -134,13 +142,13 @@ user_service_file() {
 # Function to ask for confirmation
 # Returns 0 (yes) or 1 (no). Does NOT rely on set -e propagating the non-zero return.
 confirm_action() {
-    if [[ "$FORCE" == true ]] || [[ "$INTERACTIVE" == false ]]; then
+    if [[ "$FORCE" == true ]]; then
         return 0
     fi
 
     local message="$1"
-    echo -e "${YELLOW}$message${NC}"
-    read -p "Continue? [y/N] " -n 1 -r
+    echo -e "  ${YELLOW}?${NC}  $message"
+    read -p "  Continue? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         return 0
@@ -224,7 +232,7 @@ remove_service() {
     # System service
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         if [[ -f "$SYSTEM_SERVICE_FILE" ]] || systemctl list-unit-files 2>/dev/null | grep -q "^$SERVICE_NAME.service"; then
-            print_status "Found system-wide service, removing..."
+            print_status "Removing system-wide service..."
             if [[ "$DRY_RUN" != true ]]; then
                 systemctl is-active  --quiet "$SERVICE_NAME" 2>/dev/null && sudo systemctl stop    "$SERVICE_NAME" || true
                 systemctl is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && sudo systemctl disable "$SERVICE_NAME" || true
@@ -241,13 +249,12 @@ remove_service() {
     # User service
     if [[ "$UNINSTALL_MODE" != "system" ]]; then
         if [[ -f "$user_svc" ]] || systemctl --user list-unit-files 2>/dev/null | grep -q "^$SERVICE_NAME.service"; then
-            print_status "Found user service, removing..."
+            print_status "Removing user service..."
             if [[ "$DRY_RUN" != true ]]; then
                 systemctl --user is-active  --quiet "$SERVICE_NAME" 2>/dev/null && systemctl --user stop    "$SERVICE_NAME" || true
                 systemctl --user is-enabled --quiet "$SERVICE_NAME" 2>/dev/null && systemctl --user disable "$SERVICE_NAME" || true
             fi
             if ! safe_remove_file "$user_svc" false; then
-                # Fallback to hardcoded default in case XDG detection mismatched at install time
                 safe_remove_file "$HOME/.config/systemd/user/$SERVICE_NAME.service" false || true
             fi
             if [[ "$DRY_RUN" != true ]]; then
@@ -255,7 +262,7 @@ remove_service() {
                 systemctl --user reset-failed 2>/dev/null || true
             fi
             print_success "User service removed"
-            print_status "If you enabled lingering, you can clean it up with:"
+            print_status "If you enabled lingering, clean up with:"
             echo "    loginctl disable-linger $USER"
         fi
     fi
@@ -267,14 +274,14 @@ remove_binaries() {
 
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         if safe_remove_file "$SYSTEM_BIN_DIR/$BINARY_NAME" true; then
-            print_success "Removed system binary"
+            print_success "System binary removed"
             removed=true
         fi
     fi
 
     if [[ "$UNINSTALL_MODE" != "system" ]]; then
         if safe_remove_file "$USER_BIN_DIR/$BINARY_NAME" false; then
-            print_success "Removed user binary"
+            print_success "User binary removed"
             removed=true
         fi
     fi
@@ -288,34 +295,34 @@ remove_binaries() {
 remove_completion() {
     local removed=false
 
-    # Always attempt comprehensive clean-up of all possible user shell paths
+    # User paths (always checked)
     if safe_remove_file "$USER_COMPLETION_DIR/$BINARY_NAME" false; then
-        print_success "Removed user bash completion"
+        print_success "Bash completion removed"
         removed=true
     fi
 
     local zsh_user_completion="$HOME/.local/share/zsh/site-functions/_$BINARY_NAME"
     if safe_remove_file "$zsh_user_completion" false; then
-        print_success "Removed user zsh completion"
+        print_success "Zsh completion removed"
         removed=true
     fi
 
     local fish_user_completion="$HOME/.config/fish/completions/$BINARY_NAME.fish"
     if safe_remove_file "$fish_user_completion" false; then
-        print_success "Removed user fish completion"
+        print_success "Fish completion removed"
         removed=true
     fi
 
-    # System-wide paths cleanup (for complete coverage)
+    # System paths (when mode allows)
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         if safe_remove_file "/usr/share/bash-completion/completions/$BINARY_NAME" true; then
-            print_success "Removed system bash completion"
+            print_success "System bash completion removed"
             removed=true
         fi
 
         local fish_sys_completion="/usr/share/fish/vendor_completions.d/$BINARY_NAME.fish"
         if safe_remove_file "$fish_sys_completion" true; then
-            print_success "Removed system fish completion"
+            print_success "System fish completion removed"
             removed=true
         fi
     fi
@@ -338,7 +345,7 @@ remove_configuration() {
         if [[ -d "$SYSTEM_CONFIG_DIR" ]]; then
             if confirm_action "Remove system configuration directory: $SYSTEM_CONFIG_DIR"; then
                 safe_remove_dir "$SYSTEM_CONFIG_DIR" true true
-                print_success "Removed system configuration"
+                print_success "System configuration removed"
                 removed=true
             fi
         fi
@@ -348,7 +355,7 @@ remove_configuration() {
         if [[ -d "$USER_CONFIG_DIR" ]]; then
             if confirm_action "Remove user configuration directory: $USER_CONFIG_DIR"; then
                 safe_remove_dir "$USER_CONFIG_DIR" false true
-                print_success "Removed user configuration"
+                print_success "User configuration removed"
                 removed=true
             fi
         fi
@@ -372,7 +379,7 @@ remove_data() {
         if [[ -d "$SYSTEM_DATA_DIR" ]]; then
             if confirm_action "Remove system data directory (including downloads): $SYSTEM_DATA_DIR"; then
                 safe_remove_dir "$SYSTEM_DATA_DIR" true true
-                print_success "Removed system data directory"
+                print_success "System data directory removed"
                 removed=true
             fi
         fi
@@ -383,14 +390,13 @@ remove_data() {
         if [[ -d "$USER_DATA_DIR" ]]; then
             if confirm_action "Remove user data directory: $USER_DATA_DIR"; then
                 safe_remove_dir "$USER_DATA_DIR" false true
-                print_success "Removed user data directory"
+                print_success "User data directory removed"
                 removed=true
             fi
         fi
     fi
 
     # Security directories (checked regardless of mode)
-    # Security dir is now ~/.config/localgo/.security (via os.UserConfigDir())
     local security_dirs=("$HOME/.config/localgo/.security" "/var/lib/localgo/.security")
     for dir in "${security_dirs[@]}"; do
         if [[ -d "$dir" ]]; then
@@ -400,7 +406,7 @@ remove_data() {
                 else
                     safe_remove_dir "$dir" false true
                 fi
-                print_success "Removed security directory: $dir"
+                print_success "Security directory removed: $dir"
                 removed=true
             fi
         fi
@@ -430,7 +436,7 @@ remove_system_user() {
                 sudo userdel localgo 2>/dev/null || true
                 sudo groupdel localgo 2>/dev/null || true
             fi
-            print_success "Removed system user and group"
+            print_success "System user and group removed"
         fi
     else
         print_status "System user 'localgo' not found"
@@ -452,51 +458,53 @@ show_removal_plan() {
     user_svc=$(user_service_file)
 
     echo
-    print_status "LocalGo Uninstall Plan  (mode: $UNINSTALL_MODE)"
-    echo "==========================================="
+    echo "  ┌─ Removal Plan ─────────────────────────────┐"
+    printf "  │  %-22s  %-16s  │\n" "Mode:" "$UNINSTALL_MODE"
+    echo "  └────────────────────────────────────────────┘"
     echo
 
-    echo "Components to remove:"
+    echo "  Components to remove:"
+    echo
 
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         if [[ "$found_system_binary" == true ]]; then
-            echo "  + System binary:   $SYSTEM_BIN_DIR/$BINARY_NAME"
+            echo "    System binary   $SYSTEM_BIN_DIR/$BINARY_NAME"
         fi
         if [[ "$found_system_service" == true ]]; then
-            echo "  + System service:  $SYSTEM_SERVICE_FILE"
+            echo "    System service  $SYSTEM_SERVICE_FILE"
         fi
     fi
 
     if [[ "$UNINSTALL_MODE" != "system" ]]; then
         if [[ "$found_user_binary" == true ]]; then
-            echo "  + User binary:     $USER_BIN_DIR/$BINARY_NAME"
+            echo "    User binary     $USER_BIN_DIR/$BINARY_NAME"
         fi
         if [[ "$found_user_service" == true ]]; then
-            echo "  + User service:    $user_svc"
+            echo "    User service    $user_svc"
         fi
     fi
 
-    echo "  + Shell completion files"
+    echo "    Shell completion files"
 
     if [[ "$REMOVE_CONFIG" == true ]]; then
-        echo "  + Configuration directories"
+        echo "    Configuration directories"
     else
-        echo "  - Configuration directories  (preserved; use --remove-config)"
+        echo "    Configuration directories  (preserved; use --remove-config)"
     fi
 
     if [[ "$REMOVE_DATA" == true ]]; then
-        echo "  + Data directories and downloads"
-        echo "  + Security certificates"
+        echo "    Data directories and downloads"
+        echo "    Security certificates"
     else
-        echo "  - Data directories and downloads  (preserved; use --remove-data)"
-        echo "  - Security certificates           (preserved; use --remove-data)"
+        echo "    Data directories and downloads  (preserved; use --remove-data)"
+        echo "    Security certificates           (preserved; use --remove-data)"
     fi
 
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
         if [[ "$REMOVE_USER" == true ]]; then
-            echo "  + System user 'localgo'"
+            echo "    System user 'localgo'"
         else
-            echo "  - System user 'localgo'  (preserved; use --remove-user)"
+            echo "    System user 'localgo'  (preserved; use --remove-user)"
         fi
     fi
 
@@ -521,33 +529,15 @@ verify_removal() {
     user_svc=$(user_service_file)
 
     if [[ "$UNINSTALL_MODE" != "user" ]]; then
-        if [[ -f "$SYSTEM_BIN_DIR/$BINARY_NAME" ]]; then
-            print_warning "System binary still exists: $SYSTEM_BIN_DIR/$BINARY_NAME"
-            issues_found=true
-        fi
-        if [[ -f "$SYSTEM_SERVICE_FILE" ]]; then
-            print_warning "System service file still exists: $SYSTEM_SERVICE_FILE"
-            issues_found=true
-        fi
-        if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-            print_warning "System service is still running"
-            issues_found=true
-        fi
+        [[ -f "$SYSTEM_BIN_DIR/$BINARY_NAME" ]]        && print_warning "System binary still exists: $SYSTEM_BIN_DIR/$BINARY_NAME"   && issues_found=true
+        [[ -f "$SYSTEM_SERVICE_FILE" ]]                && print_warning "System service file still exists: $SYSTEM_SERVICE_FILE"   && issues_found=true
+        systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null && print_warning "System service is still running"            && issues_found=true
     fi
 
     if [[ "$UNINSTALL_MODE" != "system" ]]; then
-        if [[ -f "$USER_BIN_DIR/$BINARY_NAME" ]]; then
-            print_warning "User binary still exists: $USER_BIN_DIR/$BINARY_NAME"
-            issues_found=true
-        fi
-        if [[ -f "$user_svc" ]]; then
-            print_warning "User service file still exists: $user_svc"
-            issues_found=true
-        fi
-        if systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
-            print_warning "User service is still running"
-            issues_found=true
-        fi
+        [[ -f "$USER_BIN_DIR/$BINARY_NAME" ]]          && print_warning "User binary still exists: $USER_BIN_DIR/$BINARY_NAME"     && issues_found=true
+        [[ -f "$user_svc" ]]                           && print_warning "User service file still exists: $user_svc"                && issues_found=true
+        systemctl --user is-active --quiet "$SERVICE_NAME" 2>/dev/null && print_warning "User service is still running"           && issues_found=true
     fi
 
     if [[ "$issues_found" != true ]]; then
@@ -559,8 +549,9 @@ verify_removal() {
 
 # Main uninstall function
 main() {
-    echo "LocalGo Uninstall Script"
-    echo "========================"
+    echo "  ◆ LocalGo Uninstaller"
+    echo "    LocalSend v2.1 Protocol CLI Client"
+    echo "    ─────────────────────────────────"
     echo
 
     # Parse command line arguments
@@ -590,8 +581,8 @@ main() {
                 DRY_RUN=true
                 shift
                 ;;
-            --non-interactive)
-                INTERACTIVE=false
+            -y|--yes)
+                FORCE=true
                 shift
                 ;;
             --help|-h)
@@ -624,35 +615,34 @@ main() {
         echo
     fi
 
-    print_status "Starting LocalGo removal..."
-    echo
-
-    # Remove service first (stops any running processes)
+    section "1/5" "Removing systemd background services"
     remove_service
 
-    # Remove binaries
+    section "2/5" "Removing LocalGo binaries"
     remove_binaries
 
-    # Remove shell completions
+    section "3/5" "Clearing shell auto-completions"
     remove_completion
 
-    # Remove configuration (if requested)
+    section "4/5" "Removing configuration files"
     remove_configuration
 
-    # Remove data (if requested)
+    section "5/5" "Removing data and security directories"
     remove_data
 
-    # Remove system user (if requested)
+    # System user removal (outside step count, depends on flag)
     remove_system_user
 
-    # Verify removal
+    echo
+    echo "  ◆ Post-Removal Verification"
+    echo "  ────────────────────────────"
     if [[ "$DRY_RUN" != true ]]; then
         verify_removal
     fi
 
     echo
     if [[ "$DRY_RUN" == true ]]; then
-        print_success "Dry run completed - no changes made"
+        print_success "Dry run completed — no changes made"
         print_status "Run without --dry-run to perform actual removal"
     else
         print_success "LocalGo uninstall completed!"
@@ -661,14 +651,14 @@ main() {
             echo
             print_status "Note: Some files were preserved"
             if [[ "$REMOVE_CONFIG" != true ]]; then
-                echo "  - Configuration files (use --remove-config to remove)"
+                echo "    - Configuration files (use --remove-config to remove)"
             fi
             if [[ "$REMOVE_DATA" != true ]]; then
-                echo "  - Data directories and downloads (use --remove-data to remove)"
+                echo "    - Data directories and downloads (use --remove-data to remove)"
             fi
             echo
             print_status "To completely remove LocalGo, run:"
-            echo "  $0 --remove-config --remove-data --remove-user"
+            echo "    $0 --remove-config --remove-data --remove-user"
         fi
     fi
 }
