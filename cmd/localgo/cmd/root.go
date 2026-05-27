@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var versionFlag bool
+
 var (
 	cfgFile    string
 	Verbose    bool
@@ -24,6 +26,11 @@ var rootCmd = &cobra.Command{
 	Use:   "localgo",
 	Short: "LocalGo - LocalSend v2.1 Protocol Implementation",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if versionFlag {
+			help.ShowVersion(Version, GitCommit, BuildDate)
+			os.Exit(0)
+		}
+
 		logger := logging.Init(Verbose, JSONOutput)
 
 		ViperCfg = config.InitViper()
@@ -54,6 +61,7 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().BoolVar(&versionFlag, "version", false, "Show version information")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/localgo/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&Verbose, "verbose", false, "Enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Enable JSON log output")
