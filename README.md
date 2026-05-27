@@ -4,7 +4,7 @@
 [![Protocol](https://img.shields.io/badge/LocalSend-v2.1-4CAF50?style=for-the-badge&logo=protocol.ai&logoColor=white)](https://github.com/localsend/protocol)
 [![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bethropolis/localgo?style=for-the-badge&logo=github&color=181717&logoColor=white)](https://github.com/bethropolis/localgo/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/bethropolis/localgo/release.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build)](https://github.com/bethropolis/localgo/actions/workflows/release.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/bethropolis/localgo/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build)](https://github.com/bethropolis/localgo/actions/workflows/ci.yml)
 [![GHCR](https://img.shields.io/badge/container-ghcr.io-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/bethropolis/localgo/pkgs/container/localgo)
 [![Platforms](https://img.shields.io/badge/Platforms-Linux%20%7C%20macOS%20%7C%20Windows-6e40c9?style=for-the-badge&logoColor=white)](https://github.com/bethropolis/localgo)
 
