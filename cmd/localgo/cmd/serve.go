@@ -87,12 +87,18 @@ var serveCmd = &cobra.Command{
 			protocol = "HTTP"
 		}
 
+		displayAlias := Cfg.Alias
+		if Cfg.Private {
+			displayAlias = "Anonymous"
+		}
+
 		zap.S().Infof("Starting LocalGo server")
-		zap.S().Infof("Alias: %s", Cfg.Alias)
+		zap.S().Infof("Alias: %s", displayAlias)
 		zap.S().Infof("Protocol: %s", protocol)
+
 		if !servequiet {
 			cli.PrintHeader("Starting LocalGo server")
-			cli.PrintInfo("Alias: %s", Cfg.Alias)
+			cli.PrintInfo("Alias: %s", displayAlias)
 			cli.PrintInfo("Protocol: %s", protocol)
 			cli.PrintInfo("Port: %d", Cfg.Port)
 			cli.PrintInfo("Download Directory: %s", Cfg.DownloadDir)
@@ -131,8 +137,12 @@ var serveCmd = &cobra.Command{
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !servequiet {
-				zap.S().Infof("Device discovered: %s (%s)", device.Alias, device.IP)
-				cli.PrintSuccess("Device discovered: %s (%s)", device.Alias, device.IP)
+				alias := device.Alias
+				if Cfg.Private {
+					alias = cli.AnonymizedAlias(device)
+				}
+				zap.S().Infof("Device discovered: %s (%s)", alias, device.IP)
+				cli.PrintSuccess("Device discovered: %s (%s)", alias, device.IP)
 			}
 		})
 

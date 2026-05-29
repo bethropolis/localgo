@@ -57,9 +57,9 @@ func TestSendFiles_UploadRejection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSendErrors)
+	err := SendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSendErrors)
 	if err == nil {
-		t.Fatalf("expected sendToDevice to fail on rejection, but it succeeded")
+		t.Fatalf("expected SendToDevice to fail on rejection, but it succeeded")
 	}
 
 	if !strings.Contains(err.Error(), "403 Forbidden") {
@@ -122,7 +122,7 @@ func TestSendFiles_PartialUploadError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath1, filePath2}, testLoggerSendErrors)
+	err := SendToDevice(ctx, cfg, device, []string{filePath1, filePath2}, testLoggerSendErrors)
 	if err == nil {
 		t.Fatalf("expected upload to fail, but it succeeded")
 	}

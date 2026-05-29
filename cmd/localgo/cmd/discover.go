@@ -61,8 +61,12 @@ var discoverCmd = &cobra.Command{
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !discoverquiet {
-				zap.S().Infof("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
-				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", device.Alias, device.IP, device.Protocol, device.Port)
+				alias := device.Alias
+				if Cfg.Private {
+					alias = cli.AnonymizedAlias(device)
+				}
+				zap.S().Infof("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
+				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
 			}
 		})
 

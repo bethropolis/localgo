@@ -213,7 +213,15 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 
 	var trackProgress func(int64)
 	if !h.config.Quiet && session.Progress != nil {
-		trackProgress = session.Progress.AddBar(fileInfo.Dto.FileName, fileInfo.Dto.Size)
+		displayName := fileInfo.Dto.FileName
+		if fileInfo.Dto.Preview != nil && *fileInfo.Dto.Preview != "" {
+			preview := *fileInfo.Dto.Preview
+			if len(preview) > 20 {
+				preview = preview[:20] + "…"
+			}
+			displayName = preview
+		}
+		trackProgress = session.Progress.AddBar(displayName, fileInfo.Dto.Size)
 	}
 
 	// --- Progress Callback ---

@@ -50,6 +50,10 @@ var devicesCmd = &cobra.Command{
 			return displayDevices(peers, true, false, "cache")
 		}
 
+		if Cfg != nil && Cfg.Private {
+			peers = anonymizeDeviceSlice(peers)
+		}
+
 		for i := 0; i < len(peers); i++ {
 			for j := i + 1; j < len(peers); j++ {
 				if peers[i].LastSeen.Before(peers[j].LastSeen) {

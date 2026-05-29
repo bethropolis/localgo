@@ -109,8 +109,8 @@ func TestSendFiles_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := sendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSend)
+	err := SendToDevice(ctx, cfg, device, []string{filePath}, testLoggerSend)
 	if err != nil {
-		t.Fatalf("sendToDevice failed: %v", err)
+		t.Fatalf("SendToDevice failed: %v", err)
 	}
 }

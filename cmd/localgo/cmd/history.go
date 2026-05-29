@@ -97,6 +97,10 @@ var historyCmd = &cobra.Command{
 		fmt.Println(mutedStyle.Render(strings.Repeat("-", 80)))
 
 		for _, entry := range displayEntries {
+			senderAlias := entry.SenderAlias
+			if Cfg.Private {
+				senderAlias = cli.AnonymizeString(entry.SenderAlias)
+			}
 			tStr := entry.Timestamp.Local().Format("01-02 15:04")
 
 			statusColored := entry.Status
@@ -111,7 +115,7 @@ var historyCmd = &cobra.Command{
 
 			fmt.Printf("%s  %s  %s  %s  %s\n",
 				padRight(mutedStyle.Render(tStr), colWidths[0]),
-				padRight(rowStyle.Render(cli.TruncateString(entry.SenderAlias, 14)), colWidths[1]),
+				padRight(rowStyle.Render(cli.TruncateString(senderAlias, 14)), colWidths[1]),
 				padRight(rowStyle.Render(cli.TruncateString(entry.FileName, 23)), colWidths[2]),
 				padRight(rowStyle.Render(cli.FormatBytes(entry.FileSize)), colWidths[3]),
 				padRight(statusColored, colWidths[4]),

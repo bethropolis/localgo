@@ -12,7 +12,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var versionFlag bool
+var (
+	versionFlag bool
+	privateMode  bool
+)
 
 var (
 	cfgFile    string
@@ -50,6 +53,10 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("security context is missing after loading config")
 		}
 
+		if privateMode {
+			Cfg.Private = true
+		}
+
 		return nil
 	},
 }
@@ -62,6 +69,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&versionFlag, "version", false, "Show version information")
+	rootCmd.PersistentFlags().BoolVarP(&privateMode, "private", "p", false, "Hide device identity (alias, model) during discovery and transfer")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/localgo/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&Verbose, "verbose", false, "Enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Enable JSON log output")

@@ -20,6 +20,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/metadata"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/charmbracelet/huh"
@@ -127,7 +128,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 			return err
 		}
-		return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
 	registerDto := model.RegisterDto{
@@ -180,7 +181,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		return err
 	}
 
-	return sendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+	return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 }
 
 // verifyDeviceFingerprint checks if a cached fingerprint differs from the target's
@@ -217,7 +218,53 @@ func verifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model
 	return nil
 }
 
-func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
+// anonymizeFileName maps a MIME type to a generic filename for private mode.
+func anonymizeFileName(contentType string) string {
+	switch {
+	case strings.HasPrefix(contentType, "image/jpeg"):
+		return "image.jpg"
+	case strings.HasPrefix(contentType, "image/png"):
+		return "image.png"
+	case strings.HasPrefix(contentType, "image/webp"):
+		return "image.webp"
+	case strings.HasPrefix(contentType, "image/"):
+		return "image.bin"
+	case strings.HasPrefix(contentType, "video/mp4"):
+		return "video.mp4"
+	case strings.HasPrefix(contentType, "video/webm"):
+		return "video.webm"
+	case strings.HasPrefix(contentType, "video/x-matroska"):
+		return "video.mkv"
+	case strings.HasPrefix(contentType, "video/quicktime"):
+		return "video.mov"
+	case strings.HasPrefix(contentType, "video/"):
+		return "video.bin"
+	case strings.HasPrefix(contentType, "audio/"):
+		return "audio.mp3"
+	case strings.HasPrefix(contentType, "text/plain"):
+		return "document.txt"
+	case strings.HasPrefix(contentType, "text/html"):
+		return "document.html"
+	case strings.HasPrefix(contentType, "text/"):
+		return "document.txt"
+	case contentType == "application/pdf":
+		return "document.pdf"
+	case strings.HasPrefix(contentType, "application/zip"):
+		return "archive.zip"
+	case strings.HasPrefix(contentType, "application/gzip"):
+		return "archive.tar.gz"
+	case strings.HasPrefix(contentType, "application/x-tar"):
+		return "archive.tar"
+	case strings.HasPrefix(contentType, "application/x-"):
+		return "archive.bin"
+	case strings.HasPrefix(contentType, "application/"):
+		return "document.bin"
+	default:
+		return "file.bin"
+	}
+}
+
+func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -239,6 +286,15 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to process file paths: %w", err)
 	}
 
+	// Strip EXIF/metadata from image files in private mode
+	if cfg.Private {
+		for filePath := range fileMap {
+			if err := metadata.Strip(filePath); err != nil {
+				logger.Warnf("Failed to strip metadata from %s: %v", filePath, err)
+			}
+		}
+	}
+
 	filesDtoMap := make(map[string]model.FileDto)
 	filePathMap := make(map[string]string)
 
@@ -258,6 +314,10 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		file.Close()
 		contentType := http.DetectContentType(buffer[:n])
 
+		if cfg.Private {
+			remoteName = anonymizeFileName(contentType)
+		}
+
 		// If this is a temporary clipboard file, sanitize display name to text_transfer.txt
 		if strings.HasPrefix(filepath.Base(filePath), "localgo-clip-") {
 			remoteName = "text_transfer.txt"
@@ -266,26 +326,38 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 		modTime := fileInfo.ModTime().Format(time.RFC3339)
 
+		var metadataPtr *model.FileMetadata
+		if !cfg.Private {
+			metadataPtr = &model.FileMetadata{Modified: &modTime}
+		}
+
 		fileDto := model.FileDto{
 			ID:       uuid.NewString(),
 			FileName: remoteName,
 			Size:     fileInfo.Size(),
 			FileType: contentType,
-			Metadata: &model.FileMetadata{
-				Modified: &modTime,
-			},
+			Metadata: metadataPtr,
 		}
 
 		filesDtoMap[fileDto.ID] = fileDto
 		filePathMap[fileDto.ID] = filePath
 	}
 
+	infoAlias := cfg.Alias
+	infoDeviceModel := cfg.DeviceModel
+	infoDeviceType := cfg.DeviceType
+	if cfg.Private {
+		infoAlias = "Anonymous"
+		infoDeviceModel = nil
+		infoDeviceType = model.DeviceTypeOther
+	}
+
 	prepareDto := model.PrepareUploadRequestDto{
 		Info: model.InfoDto{
-			Alias:       cfg.Alias,
+			Alias:       infoAlias,
 			Version:     config.ProtocolVersion,
-			DeviceModel: cfg.DeviceModel,
-			DeviceType:  cfg.DeviceType,
+			DeviceModel: infoDeviceModel,
+			DeviceType:  infoDeviceType,
 			Fingerprint: cfg.SecurityContext.CertificateHash,
 			Download:    true,
 		},
@@ -360,6 +432,7 @@ func sendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	}
 
 	wg.Wait()
+	mp.ForceComplete()
 	mp.Wait()
 	close(errCh)
 

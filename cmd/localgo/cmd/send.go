@@ -152,7 +152,7 @@ var sendCmd = &cobra.Command{
 				return fmt.Errorf("no devices found on the network via multicast or subnet scan")
 			}
 
-			selected := cli.PickDevice(devices)
+			selected := cli.PickDevice(devices, Cfg.Private)
 			if selected == nil {
 				return fmt.Errorf("no device selected")
 			}
@@ -178,7 +178,11 @@ var sendCmd = &cobra.Command{
 			}
 		}
 		cli.PrintInfo("To: %s", target)
-		cli.PrintInfo("From: %s", Cfg.Alias)
+		fromAlias := Cfg.Alias
+		if Cfg.Private {
+			fromAlias = "Anonymous"
+		}
+		cli.PrintInfo("From: %s", fromAlias)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
 		defer cancel()

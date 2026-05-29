@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -211,6 +212,24 @@ func (ow *OutputWriter) writeJSON(data interface{}) error {
 
 // Helper functions
 
+// AnonymizedAlias returns a stable "Device #XXXXXXXX" identifier from a device's fingerprint.
+func AnonymizedAlias(device *model.Device) string {
+	if device == nil || device.Fingerprint == "" {
+		return "Device #00000000"
+	}
+	h := sha256.Sum256([]byte(device.Fingerprint))
+	return fmt.Sprintf("Device #%08x", h[:4])
+}
+
+// AnonymizeString returns a stable "Device #XXXXXXXX" identifier from any string.
+func AnonymizeString(s string) string {
+	if s == "" {
+		return "Device #00000000"
+	}
+	h := sha256.Sum256([]byte(s))
+	return fmt.Sprintf("Device #%08x", h[:4])
+}
+
 // TruncateString truncates a string to maxLen characters
 func TruncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -335,7 +354,8 @@ func IsContainer() bool {
 }
 
 // PickDevice presents an interactive TUI to select a device. Returns the selected device or nil if canceled.
-func PickDevice(devices []*model.Device) *model.Device {
+// When private is true, device aliases are anonymized in the selection list.
+func PickDevice(devices []*model.Device, private bool) *model.Device {
 	if IsContainer() {
 		return nil
 	}
@@ -349,9 +369,13 @@ func PickDevice(devices []*model.Device) *model.Device {
 	var selected *model.Device
 	options := make([]huh.Option[*model.Device], len(devices))
 	for i, d := range devices {
+		displayName := d.Alias
+		if private {
+			displayName = AnonymizedAlias(d)
+		}
 		protocol := strings.ToUpper(string(d.Protocol))
 		options[i] = huh.NewOption(
-			fmt.Sprintf("%s  %s:%d  [%s]", d.Alias, d.IP, d.Port, protocol),
+			fmt.Sprintf("%s  %s:%d  [%s]", displayName, d.IP, d.Port, protocol),
 			d,
 		)
 	}

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
@@ -11,6 +12,8 @@ import (
 type MultiProgress struct {
 	pool     *mpb.Progress
 	barCount int64
+	bars     []*mpb.Bar
+	mu       sync.Mutex
 }
 
 func NewMultiProgress(totalFiles int64) *MultiProgress {
@@ -36,9 +39,22 @@ func (mp *MultiProgress) AddBar(name string, size int64) func(int64) {
 			decor.Percentage(decor.WC{W: 5}),
 		),
 	)
+	bar.EnableTriggerComplete()
+
+	mp.mu.Lock()
+	mp.bars = append(mp.bars, bar)
+	mp.mu.Unlock()
 
 	return func(current int64) {
 		bar.SetCurrent(current)
+	}
+}
+
+func (mp *MultiProgress) ForceComplete() {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	for _, bar := range mp.bars {
+		bar.SetTotal(0, true)
 	}
 }
 
