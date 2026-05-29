@@ -46,6 +46,10 @@ func (s *ReceiveService) cleanupLoop() {
 		s.sessionMutex.Lock()
 		for id, session := range s.sessions {
 			if time.Since(session.CreatedAt) > 10*time.Minute {
+				if session.Progress != nil {
+					session.Progress.ForceComplete()
+					go session.Progress.Wait()
+				}
 				delete(s.sessions, id)
 			}
 		}
@@ -126,6 +130,7 @@ func (s *ReceiveService) CloseSession(sessionID string) {
 	defer s.sessionMutex.Unlock()
 	if session, ok := s.sessions[sessionID]; ok {
 		if session.Progress != nil {
+			session.Progress.ForceComplete()
 			session.Progress.Wait()
 		}
 		delete(s.sessions, sessionID)
@@ -149,6 +154,7 @@ func (s *ReceiveService) RemoveFileFromSession(sessionID, fileID string) {
 
 	// Gracefully stop the progress bar rendering goroutine when the session ends
 	if sessionEmpty && session.Progress != nil {
+		session.Progress.ForceComplete()
 		go session.Progress.Wait()
 	}
 }

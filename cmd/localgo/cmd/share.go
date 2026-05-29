@@ -90,9 +90,14 @@ var shareCmd = &cobra.Command{
 			protocol = "HTTP"
 		}
 
+		displayAlias := Cfg.Alias
+		if Cfg.Private {
+			displayAlias = "Anonymous"
+		}
+
 		if !sharequiet {
 			cli.PrintHeader("Starting LocalGo Web Share")
-			cli.PrintInfo("Alias: %s", Cfg.Alias)
+			cli.PrintInfo("Alias: %s", displayAlias)
 			cli.PrintInfo("Protocol: %s", protocol)
 			cli.PrintInfo("Port: %d", Cfg.Port)
 		}

@@ -48,11 +48,20 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	downloadCapable := h.sendService.GetSession() != nil // True if we have an active send session
 
+	alias := h.config.Alias
+	deviceModel := h.config.DeviceModel
+	deviceType := h.config.DeviceType
+	if h.config.Private {
+		alias = "Anonymous"
+		deviceModel = nil
+		deviceType = model.DeviceTypeOther
+	}
+
 	dto := model.InfoDto{
-		Alias:       h.config.Alias,
+		Alias:       alias,
 		Version:     config.ProtocolVersion,
-		DeviceModel: h.config.DeviceModel,
-		DeviceType:  h.config.DeviceType,
+		DeviceModel: deviceModel,
+		DeviceType:  deviceType,
 		Fingerprint: h.config.SecurityContext.CertificateHash,
 		Download:    downloadCapable,
 	}
@@ -101,11 +110,20 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 
 	downloadCapable := h.sendService.GetSession() != nil
 
+	respAlias := h.config.Alias
+	respDeviceModel := h.config.DeviceModel
+	respDeviceType := h.config.DeviceType
+	if h.config.Private {
+		respAlias = "Anonymous"
+		respDeviceModel = nil
+		respDeviceType = model.DeviceTypeOther
+	}
+
 	responseDto := model.InfoDto{
-		Alias:       h.config.Alias,
+		Alias:       respAlias,
 		Version:     config.ProtocolVersion,
-		DeviceModel: h.config.DeviceModel,
-		DeviceType:  h.config.DeviceType,
+		DeviceModel: respDeviceModel,
+		DeviceType:  respDeviceType,
 		Fingerprint: h.config.SecurityContext.CertificateHash,
 		Download:    downloadCapable,
 	}

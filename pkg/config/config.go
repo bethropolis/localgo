@@ -43,6 +43,7 @@ type Config struct {
 	OpenDir           bool                          `json:"-"` // open download directory after transfer
 	Concurrency       int                           `json:"-"` // max parallel uploads (0 = use default)
 	MulticastInterface string                        `json:"-"` // multicast network interface name
+	Private           bool                          `json:"-"` // anonymize device identities
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -239,11 +240,19 @@ func (c *Config) ToRegisterDto() model.RegisterDto {
 		protocol = model.ProtocolTypeHTTPS
 		fingerprint = c.SecurityContext.CertificateHash
 	}
+	alias := c.Alias
+	deviceModel := c.DeviceModel
+	deviceType := c.DeviceType
+	if c.Private {
+		alias = "Anonymous"
+		deviceModel = nil
+		deviceType = model.DeviceTypeOther
+	}
 	return model.RegisterDto{
-		Alias:       c.Alias,
-		Version:     ProtocolVersion, // Use constant from this package
-		DeviceModel: c.DeviceModel,
-		DeviceType:  c.DeviceType,
+		Alias:       alias,
+		Version:     ProtocolVersion,
+		DeviceModel: deviceModel,
+		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Port:        c.Port,
 		Protocol:    protocol,
@@ -257,11 +266,19 @@ func (c *Config) ToInfoDto() model.InfoDto {
 	if c.HttpsEnabled {
 		fingerprint = c.SecurityContext.CertificateHash
 	}
+	alias := c.Alias
+	deviceModel := c.DeviceModel
+	deviceType := c.DeviceType
+	if c.Private {
+		alias = "Anonymous"
+		deviceModel = nil
+		deviceType = model.DeviceTypeOther
+	}
 	return model.InfoDto{
-		Alias:       c.Alias,
+		Alias:       alias,
 		Version:     ProtocolVersion,
-		DeviceModel: c.DeviceModel,
-		DeviceType:  c.DeviceType,
+		DeviceModel: deviceModel,
+		DeviceType:  deviceType,
 		Fingerprint: fingerprint,
 		Download:    true,
 	}

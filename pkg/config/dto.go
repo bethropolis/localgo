@@ -20,11 +20,19 @@ func (c *Config) GetFingerprint() string {
 
 // ToMulticastDto creates a MulticastDto from the current configuration.
 func (c *Config) ToMulticastDto(download bool) model.MulticastDto {
+	alias := c.Alias
+	deviceModel := c.DeviceModel
+	deviceType := c.DeviceType
+	if c.Private {
+		alias = "Anonymous"
+		deviceModel = nil
+		deviceType = model.DeviceTypeOther
+	}
 	return model.MulticastDto{
-		Alias:       c.Alias,
+		Alias:       alias,
 		Version:     ProtocolVersion,
-		DeviceModel: c.DeviceModel,
-		DeviceType:  c.DeviceType,
+		DeviceModel: deviceModel,
+		DeviceType:  deviceType,
 		Fingerprint: c.GetFingerprint(),
 		Port:        c.Port,
 		Protocol:    c.Protocol(),
