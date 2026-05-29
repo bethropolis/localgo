@@ -231,8 +231,10 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo scan --port 8080 --timeout 30",
 				"localgo scan --json",
 				"localgo scan --quiet",
+				"localgo scan --range 192.168.1.0/24",
 			},
 			Flags: []FlagHelp{
+				{Name: "--range", Type: "string", Default: "", Description: "CIDR range to scan (e.g. 192.168.1.0/24)"},
 				{Name: "--timeout", Type: "int", Default: "15", Description: "Scan timeout in seconds"},
 				{Name: "--port", Type: "int", Default: "from config", Description: "Port to scan"},
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
@@ -245,12 +247,15 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Usage:       "localgo send [OPTIONS]",
 			Examples: []string{
 				"localgo send --file document.pdf --to MyPhone",
+				"localgo send --ip 192.168.1.42 --file document.pdf",
+				"localgo send --ip 192.168.1.42:53317 --file document.pdf",
 				"localgo send --clipboard --to MyPhone",
 				"localgo send -c --to MyPhone",
 				"localgo send (starts interactive clipboard or file picker if empty)",
 			},
 			Flags: []FlagHelp{
 				{Name: "--file", Type: "string", Default: "", Description: "File or directory to send (optional, can be specified multiple times)"},
+				{Name: "--ip", Type: "string", Default: "", Description: "Target device IP (with optional :port, skips discovery)"},
 				{Name: "--to", Type: "string", Default: "", Description: "Target device alias (omit to pick interactively)"},
 				{Name: "--clipboard, -c", Type: "bool", Default: "false", Description: "Send current system clipboard text directly"},
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},

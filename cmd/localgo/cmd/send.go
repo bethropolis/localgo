@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 var (
 	sendfiles       []string
+	sendip          string
 	sendto          string
 	sendport        int
 	sendtimeout     int
@@ -97,6 +99,69 @@ var sendCmd = &cobra.Command{
 			if _, err := os.Stat(file); os.IsNotExist(err) && !sendclipboard {
 				return fmt.Errorf("file not found: %s", file)
 			}
+		}
+
+		// Direct send via --ip: skip discovery entirely
+		if sendip != "" {
+			host, portStr, err := net.SplitHostPort(sendip)
+			if err != nil {
+				// No port specified; treat whole string as host
+				host = sendip
+				portStr = ""
+			}
+			parsedIP := net.ParseIP(host)
+			if parsedIP == nil {
+				return fmt.Errorf("invalid IP address: %s", host)
+			}
+
+			port := sendport
+			if portStr != "" {
+				p, err := strconv.Atoi(portStr)
+				if err != nil {
+					return fmt.Errorf("invalid port in --ip: %w", err)
+				}
+				port = p
+			}
+			if port == 0 {
+				port = Cfg.Port
+			}
+
+			device := &model.Device{
+				Alias: host,
+				IP:    parsedIP.String(),
+				Port:  port,
+			}
+
+			if sendalias != "" {
+				Cfg.Alias = sendalias
+			}
+			if sendconcurrency > 0 {
+				Cfg.Concurrency = sendconcurrency
+			}
+
+			cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
+			for _, file := range files {
+				fileInfo, err := os.Stat(file)
+				if err == nil {
+					cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
+				}
+			}
+			cli.PrintInfo("To: %s:%d", host, port)
+			fromAlias := Cfg.Alias
+			if Cfg.Private {
+				fromAlias = "Anonymous"
+			}
+			cli.PrintInfo("From: %s", fromAlias)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
+			defer cancel()
+
+			if err := send.SendToDevice(ctx, Cfg, device, files, zap.S()); err != nil {
+				return fmt.Errorf("failed to send files: %w", err)
+			}
+
+			cli.PrintSuccess("Files sent successfully!")
+			return nil
 		}
 
 		target := sendto
@@ -200,6 +265,7 @@ var sendCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(sendCmd)
 	sendCmd.Flags().StringSliceVar(&sendfiles, "file", []string{}, "File or directory to send")
+	sendCmd.Flags().StringVar(&sendip, "ip", "", "Target device IP (with optional :port, skips discovery)")
 	sendCmd.Flags().StringVar(&sendto, "to", "", "Target device alias (omit to pick interactively)")
 	sendCmd.Flags().IntVar(&sendport, "port", 0, "Target device port")
 	sendCmd.Flags().IntVar(&sendtimeout, "timeout", 30, "Send timeout in seconds")
