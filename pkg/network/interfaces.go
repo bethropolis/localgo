@@ -115,6 +115,35 @@ func GetPreferredOutboundIP() (net.IP, error) {
 	return localAddr.IP, nil
 }
 
+// ParseCIDRRange parses a CIDR notation (e.g. "192.168.1.0/24") and returns
+// all usable host IPs in that range (network and broadcast addresses excluded).
+func ParseCIDRRange(cidr string) ([]net.IP, error) {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CIDR %q: %w", cidr, err)
+	}
+
+	ip4 := ipnet.IP.To4()
+	if ip4 == nil {
+		return nil, fmt.Errorf("CIDR %q is not an IPv4 range", cidr)
+	}
+
+	ones, bits := ipnet.Mask.Size()
+	hostBits := bits - ones
+	if hostBits < 2 || hostBits > 30 {
+		return nil, fmt.Errorf("CIDR %q prefix length must be /8–/30", cidr)
+	}
+
+	base := uint32(ip4[0])<<24 | uint32(ip4[1])<<16 | uint32(ip4[2])<<8 | uint32(ip4[3])
+	totalHosts := (1 << hostBits) - 2
+	var ips []net.IP
+	for i := 1; i <= totalHosts; i++ {
+		addr := base + uint32(i)
+		ips = append(ips, net.IPv4(byte(addr>>24), byte(addr>>16), byte(addr>>8), byte(addr)))
+	}
+	return ips, nil
+}
+
 // GetSubnetIPs returns all IP addresses in the same /24 subnet as the given IP
 func GetSubnetIPs(ip net.IP) []net.IP {
 	ip4 := ip.To4()

@@ -17,6 +17,7 @@ import (
 )
 
 var (
+	scanrange      string
 	scantimeout    int
 	scanport       int
 	scanjsonOutput bool
@@ -39,22 +40,36 @@ var scanCmd = &cobra.Command{
 			scanPort = scanport
 		}
 
-		// Get local IPs
-		localIPs, err := network.GetLocalIPAddresses()
-		if err != nil {
-			return fmt.Errorf("failed to get local network IPs: %w", err)
-		}
-
 		var ips []net.IP
-		for _, ip := range localIPs {
-			subnetIPs := network.GetSubnetIPs(ip)
-			ips = append(ips, subnetIPs...)
-		}
 
-		if !scanquiet {
-			cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout))
-			cli.PrintInfo("Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
-			cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
+		if scanrange != "" {
+			parsedIPs, err := network.ParseCIDRRange(scanrange)
+			if err != nil {
+				return fmt.Errorf("invalid --range CIDR: %w", err)
+			}
+			ips = parsedIPs
+			if !scanquiet {
+				cli.PrintHeader(fmt.Sprintf("Scanning CIDR range %s on port %d (timeout: %ds)...", scanrange, scanPort, scanTimeout))
+				cli.PrintInfo("Scanning %d IP addresses...", len(ips))
+				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
+			}
+		} else {
+			// Get local IPs
+			localIPs, err := network.GetLocalIPAddresses()
+			if err != nil {
+				return fmt.Errorf("failed to get local network IPs: %w", err)
+			}
+
+			for _, ip := range localIPs {
+				subnetIPs := network.GetSubnetIPs(ip)
+				ips = append(ips, subnetIPs...)
+			}
+
+			if !scanquiet {
+				cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout))
+				cli.PrintInfo("Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
+				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
+			}
 		}
 
 		// Initialize HTTP discovery
@@ -94,6 +109,7 @@ var scanCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(scanCmd)
+	scanCmd.Flags().StringVar(&scanrange, "range", "", "CIDR range to scan (e.g. 192.168.1.0/24)")
 	scanCmd.Flags().IntVar(&scantimeout, "timeout", 15, "Scan timeout in seconds")
 	scanCmd.Flags().IntVar(&scanport, "port", 0, "Port to scan")
 	scanCmd.Flags().BoolVar(&scanjsonOutput, "json", false, "Output in JSON format")
