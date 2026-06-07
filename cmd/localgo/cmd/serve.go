@@ -112,7 +112,24 @@ var serveCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		// Initialize discovery service
+		// Start server first to determine the actual port
+		srv := server.NewServer(Cfg, zap.S())
+
+		serverErrChan := make(chan error, 1)
+		serverReadyChan := make(chan struct{}, 1)
+		go func() {
+			serverErrChan <- srv.Start(ctx, serverReadyChan)
+		}()
+
+		// Wait for server to be ready (server.Start waits for port bind)
+		select {
+		case err := <-serverErrChan:
+			return fmt.Errorf("server failed: %w", err)
+		case <-serverReadyChan:
+		}
+
+		// Initialize discovery service AFTER server is ready (Cfg.Port may have
+		// changed if the configured port was busy)
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
@@ -121,9 +138,8 @@ var serveCmd = &cobra.Command{
 		if serveinterval > 0 {
 			discoverySvcConfig.AnnounceInterval = time.Duration(serveinterval) * time.Second
 		}
-		multicastDto := Cfg.ToMulticastDto(false)
 
-		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, Cfg.ToMulticastDto(false), zap.S())
 
 		// Create HTTPDiscoverer for backchannel (HTTP response to multicast)
 		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
@@ -146,23 +162,7 @@ var serveCmd = &cobra.Command{
 			}
 		})
 
-		// Start server first
-		srv := server.NewServer(Cfg, zap.S())
-
-		serverErrChan := make(chan error, 1)
-		serverReadyChan := make(chan struct{}, 1)
-		go func() {
-			serverErrChan <- srv.Start(ctx, serverReadyChan)
-		}()
-
-		// Wait for server to be ready (server.Start waits for port bind)
-		select {
-		case err := <-serverErrChan:
-			return fmt.Errorf("server failed: %w", err)
-		case <-serverReadyChan:
-		}
-
-		// Start discovery AFTER server is ready
+		// Start discovery
 		err := discoverySvc.Start(ctx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled)
 		if err != nil {
 			return fmt.Errorf("discovery service failed: %w", err)
