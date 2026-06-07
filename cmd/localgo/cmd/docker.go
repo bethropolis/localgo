@@ -56,7 +56,7 @@ execs serve directly without any permission changes.`,
 func execServe(args []string) error {
 	serveArgv := []string{"localgo", "serve"}
 	if len(args) > 0 {
-		serveArgv = append([]string{"localgo"}, args...)
+		serveArgv = args
 	}
 
 	bin, err := os.Executable()
