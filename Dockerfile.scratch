@@ -20,7 +20,8 @@ EXPOSE 53317/udp
 
 # Point config and downloads to mounted volumes
 ENV LOCALSEND_DOWNLOAD_DIR="/app/downloads" \
-    LOCALSEND_SECURITY_DIR="/app/config"
+    LOCALSEND_SECURITY_DIR="/app/config" \
+    LOCALSEND_AUTO_ACCEPT="true"
 
 # OCI labels
 LABEL org.opencontainers.image.title="LocalGo"
