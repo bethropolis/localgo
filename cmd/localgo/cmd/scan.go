@@ -29,12 +29,6 @@ var scanCmd = &cobra.Command{
 	Short: "Scan the network for LocalGo devices using HTTP",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		// Increase default timeout for better reliability
-		scanTimeout := scantimeout
-		if scanTimeout < 15 {
-			scanTimeout = 15
-		}
-
 		scanPort := Cfg.Port
 		if scanport > 0 {
 			scanPort = scanport
@@ -49,7 +43,7 @@ var scanCmd = &cobra.Command{
 			}
 			ips = parsedIPs
 			if !scanquiet {
-				cli.PrintHeader(fmt.Sprintf("Scanning CIDR range %s on port %d (timeout: %ds)...", scanrange, scanPort, scanTimeout))
+				cli.PrintHeader(fmt.Sprintf("Scanning CIDR range %s on port %d (timeout: %ds)...", scanrange, scanPort, scantimeout))
 				cli.PrintInfo("Scanning %d IP addresses...", len(ips))
 				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
 			}
@@ -66,7 +60,7 @@ var scanCmd = &cobra.Command{
 			}
 
 			if !scanquiet {
-				cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout))
+				cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scantimeout))
 				cli.PrintInfo("Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
 				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
 			}
@@ -76,7 +70,7 @@ var scanCmd = &cobra.Command{
 		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
 
 		// Perform scan
-		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scanTimeout)*time.Second)
+		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scantimeout)*time.Second)
 		defer cancel()
 
 		var foundDevices []*model.Device

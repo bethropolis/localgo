@@ -25,15 +25,9 @@ var discoverCmd = &cobra.Command{
 	Short: "Discover LocalGo devices on the network using multicast",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		// Increase default timeout for better reliability
-		discoverTimeout := discovertimeout
-		if discoverTimeout < 10 {
-			discoverTimeout = 10
-		}
-
 		if !discoverquiet {
 			cli.PrintHeader("Discovering devices")
-			cli.PrintInfo("Timeout: %ds", discoverTimeout)
+			cli.PrintInfo("Timeout: %ds", discovertimeout)
 			cli.PrintInfo("Multicast group: %s", Cfg.MulticastGroup)
 			cli.PrintInfo("Port: %d", Cfg.Port)
 			cli.PrintInfo("Protocol: %s", func() string {
@@ -71,7 +65,7 @@ var discoverCmd = &cobra.Command{
 		})
 
 		// Perform discovery
-		discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discoverTimeout)*time.Second)
+		discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discovertimeout)*time.Second)
 		defer cancel()
 
 		var foundDevices []*model.Device
@@ -81,11 +75,11 @@ var discoverCmd = &cobra.Command{
 			_ = spinner.New().
 				Title(fmt.Sprintf("Searching for devices on multicast group %s...", Cfg.MulticastGroup)).
 				Action(func() {
-					foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
 				}).
 				Run()
 		} else {
-			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled, false)
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
 		}
 
 		if discErr != nil && !discoverquiet {
@@ -104,7 +98,7 @@ var discoverCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(discoverCmd)
-	discoverCmd.Flags().IntVar(&discovertimeout, "timeout", 5, "Discovery timeout in seconds")
+	discoverCmd.Flags().IntVar(&discovertimeout, "timeout", 10, "Discovery timeout in seconds")
 	discoverCmd.Flags().BoolVar(&discoverjsonOutput, "json", false, "Output in JSON format")
 	discoverCmd.Flags().BoolVar(&discoverquiet, "quiet", false, "Quiet mode")
 

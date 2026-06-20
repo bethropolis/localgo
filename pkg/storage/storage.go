@@ -201,7 +201,10 @@ func ResolveDuplicateFilename(dir, baseName string) string {
 
 	// Fallback to avoid silent overwrite if (1) through (999) are all taken
 	randomBytes := make([]byte, 3)
-	rand.Read(randomBytes)
+	if _, err := rand.Read(randomBytes); err != nil {
+		newName := fmt.Sprintf("%s_%d%s", nameWithoutExt, time.Now().UnixNano(), ext)
+		return filepath.Join(dir, newName)
+	}
 	newName := fmt.Sprintf("%s_%s%s", nameWithoutExt, hex.EncodeToString(randomBytes), ext)
 	return filepath.Join(dir, newName)
 }
