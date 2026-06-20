@@ -217,7 +217,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo discover --quiet",
 			},
 			Flags: []FlagHelp{
-				{Name: "--timeout", Type: "int", Default: "5", Description: "Discovery timeout in seconds"},
+				{Name: "--timeout", Type: "int", Default: "10", Description: "Discovery timeout in seconds"},
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
 				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - only show results"},
 			},
