@@ -28,32 +28,48 @@ type ActiveFile struct {
 type ReceiveService struct {
 	sessions     map[string]*ActiveReceiveSession
 	sessionMutex sync.RWMutex
+	stopCh       chan struct{}
+	closeOnce    sync.Once
 }
 
 // NewReceiveService creates a new ReceiveService.
 func NewReceiveService() *ReceiveService {
 	s := &ReceiveService{
 		sessions: make(map[string]*ActiveReceiveSession),
+		stopCh:   make(chan struct{}),
 	}
 	go s.cleanupLoop()
 	return s
 }
 
+// Close stops the cleanup loop and releases resources.
+func (s *ReceiveService) Close() {
+	s.closeOnce.Do(func() {
+		close(s.stopCh)
+	})
+}
+
 // cleanupLoop periodically checks and expires stale sessions
 func (s *ReceiveService) cleanupLoop() {
 	ticker := time.NewTicker(1 * time.Minute)
-	for range ticker.C {
-		s.sessionMutex.Lock()
-		for id, session := range s.sessions {
-			if time.Since(session.CreatedAt) > 10*time.Minute {
-				if session.Progress != nil {
-					session.Progress.ForceComplete()
-					go session.Progress.Wait()
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-ticker.C:
+			s.sessionMutex.Lock()
+			for id, session := range s.sessions {
+				if time.Since(session.CreatedAt) > 10*time.Minute {
+					if session.Progress != nil {
+						session.Progress.ForceComplete()
+						go session.Progress.Wait()
+					}
+					delete(s.sessions, id)
 				}
-				delete(s.sessions, id)
 			}
+			s.sessionMutex.Unlock()
 		}
-		s.sessionMutex.Unlock()
 	}
 }
 

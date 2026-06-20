@@ -3,16 +3,18 @@ package model
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 )
 
 // Device represents a peer device.
 type Device struct {
-	IP       string       `json:"ip"`
-	Version  string       `json:"version"` // LocalSend protocol version
-	Port     int          `json:"port"`
-	Alias    string       `json:"alias"`
-	Protocol ProtocolType `json:"protocol"`
+	mu         sync.RWMutex
+	IP         string       `json:"ip"`
+	Version    string       `json:"version"` // LocalSend protocol version
+	Port       int          `json:"port"`
+	Alias      string       `json:"alias"`
+	Protocol   ProtocolType `json:"protocol"`
 
 	Fingerprint string     `json:"fingerprint"`
 	DeviceModel *string    `json:"deviceModel"` // nullable
@@ -51,12 +53,37 @@ func NewDevice(info RegisterDto, ip net.IP, detectedPort int, detectedHttps bool
 
 // UpdateLastSeen updates the last seen timestamp for a device
 func (d *Device) UpdateLastSeen() {
+	d.mu.Lock()
 	d.LastSeen = time.Now()
 	d.Available = true
+	d.mu.Unlock()
+}
+
+// GetLastSeen returns the last seen timestamp (thread-safe).
+func (d *Device) GetLastSeen() time.Time {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.LastSeen
+}
+
+// GetAvailable returns whether the device is available (thread-safe).
+func (d *Device) GetAvailable() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.Available
+}
+
+// SetLastSeen sets the last seen timestamp (thread-safe).
+func (d *Device) SetLastSeen(t time.Time) {
+	d.mu.Lock()
+	d.LastSeen = t
+	d.mu.Unlock()
 }
 
 // IsStale checks if a device hasn't been seen recently
 func (d *Device) IsStale(staleThreshold time.Duration) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return time.Since(d.LastSeen) > staleThreshold
 }
 
