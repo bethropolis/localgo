@@ -54,6 +54,16 @@ var scanCmd = &cobra.Command{
 				return fmt.Errorf("failed to get local network IPs: %w", err)
 			}
 
+			// Prioritize the subnet connected to the default gateway
+			if gwIP, err := network.PrimaryLANIP(); err == nil {
+				for i, ip := range localIPs {
+					if ip.Equal(gwIP) && i > 0 {
+						localIPs[0], localIPs[i] = localIPs[i], localIPs[0]
+						break
+					}
+				}
+			}
+
 			for _, ip := range localIPs {
 				subnetIPs := network.GetSubnetIPs(ip)
 				ips = append(ips, subnetIPs...)

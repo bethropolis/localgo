@@ -17,6 +17,8 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
+	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/filepicker"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
@@ -34,6 +36,42 @@ var (
 	sendmulticastiface string
 	sendclipboard   bool
 )
+
+// filePickerModel wraps bubbles/filepicker.Model as a tea.Model for TUI file selection.
+type filePickerModel struct {
+	fp   filepicker.Model
+	file string
+	quit bool
+}
+
+func (m filePickerModel) Init() tea.Cmd {
+	return m.fp.Init()
+}
+
+func (m filePickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			m.quit = true
+			return m, tea.Quit
+		}
+	}
+	var cmd tea.Cmd
+	m.fp, cmd = m.fp.Update(msg)
+	if m.fp.Path != "" {
+		m.file = m.fp.Path
+		return m, tea.Quit
+	}
+	return m, cmd
+}
+
+func (m filePickerModel) View() string {
+	if m.quit {
+		return ""
+	}
+	return m.fp.View()
+}
 
 var sendCmd = &cobra.Command{
 	Use:   "send",
@@ -92,7 +130,24 @@ var sendCmd = &cobra.Command{
 		}
 
 		if len(files) == 0 {
-			return fmt.Errorf("no file specified: use positional args, --file flag, or --clipboard")
+			// Launch interactive TUI file picker
+			fp := filepicker.New()
+			fp.DirAllowed = true
+			fp.FileAllowed = true
+			fp.ShowHidden = false
+
+			m := filePickerModel{fp: fp}
+			p := tea.NewProgram(m)
+			result, err := p.Run()
+			if err == nil {
+				if picked, ok := result.(filePickerModel); ok && picked.file != "" {
+					files = []string{picked.file}
+				}
+			}
+		}
+
+		if len(files) == 0 {
+			return fmt.Errorf("no file specified: use --file flag, --clipboard, or select from the file browser")
 		}
 
 		for _, file := range files {
@@ -192,6 +247,16 @@ var sendCmd = &cobra.Command{
 			if len(devices) == 0 {
 				localIPs, ipErr := network.GetLocalIPAddresses()
 				if ipErr == nil && len(localIPs) > 0 {
+					// Prioritize the subnet connected to the default gateway
+					if gwIP, err := network.PrimaryLANIP(); err == nil {
+						for i, ip := range localIPs {
+							if ip.Equal(gwIP) && i > 0 {
+								localIPs[0], localIPs[i] = localIPs[i], localIPs[0]
+								break
+							}
+						}
+					}
+
 					_ = spinner.New().
 						Title("No devices via multicast. Scanning local subnets...").
 						Action(func() {
