@@ -4,45 +4,33 @@ import (
 	"context"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/model"
 )
 
-func DiscoverDevices(ctx context.Context, cfg *ServiceConfig, alias string, port int, fingerprint string, deviceModel *string, httpsEnabled bool) ([]*model.Device, error) {
-	if cfg == nil {
-		cfg = DefaultServiceConfig()
+func DiscoverDevices(ctx context.Context, serviceCfg *ServiceConfig, appCfg *config.Config, httpsEnabled bool) ([]*model.Device, error) {
+	if serviceCfg == nil {
+		serviceCfg = DefaultServiceConfig()
 	}
 
-	protocol := model.ProtocolTypeHTTP
-	if httpsEnabled {
-		protocol = model.ProtocolTypeHTTPS
-	}
+	multicastDto := appCfg.ToMulticastDto(false)
 
-	multicastDto := model.MulticastDto{
-		Alias:       alias,
-		Version:     "2.1",
-		DeviceModel: deviceModel,
-		DeviceType:  model.DeviceTypeDesktop,
-		Fingerprint: fingerprint,
-		Port:        port,
-		Protocol:    protocol,
-		Download:    false,
-		Announce:    true,
-	}
-
-	multicast := NewMulticastDiscovery(cfg.MulticastConfig, multicastDto, nil)
+	multicast := NewMulticastDiscovery(serviceCfg.MulticastConfig, multicastDto, nil)
 
 	peerCache := NewPeerCache(nil)
 	multicast.SetPeerCache(peerCache)
 
-	svc := NewService(cfg, multicast, nil)
+	svc := NewService(serviceCfg, multicast, nil)
 	svc.SetPeerCache(peerCache)
 
-	if err := svc.Start(ctx, alias, port, fingerprint, model.DeviceTypeDesktop, deviceModel, httpsEnabled); err != nil {
+
+
+	if err := svc.Start(ctx, multicastDto); err != nil {
 		return nil, err
 	}
 
 	scanCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	return svc.Discover(scanCtx, alias, port, fingerprint, model.DeviceTypeDesktop, deviceModel, httpsEnabled, false)
+	return svc.Discover(scanCtx, multicastDto)
 }

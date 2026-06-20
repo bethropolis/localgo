@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,7 +37,7 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 	// --- PIN Check ---
 	if h.config.PIN != "" {
 		pin := r.URL.Query().Get("pin")
-		if pin != h.config.PIN {
+		if subtle.ConstantTimeCompare([]byte(pin), []byte(h.config.PIN)) != 1 {
 			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
 			return
 		}

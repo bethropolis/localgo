@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/model"
 	"go.uber.org/zap"
 )
@@ -22,6 +21,8 @@ type Service struct {
 	handlersMutex sync.RWMutex
 	announceTimer *time.Timer
 	peerCache     *PeerCache
+	stopCh        chan struct{}
+	stopOnce      sync.Once
 	logger        *zap.SugaredLogger
 }
 
@@ -56,6 +57,7 @@ func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *za
 		config:    config,
 		devices:   make(map[string]*model.Device),
 		multicast: multicast,
+		stopCh:    make(chan struct{}),
 		logger:    logger,
 	}
 
@@ -78,24 +80,8 @@ func (s *Service) SetPeerCache(cache *PeerCache) {
 }
 
 // Start initializes and starts the discovery service for listening and periodic announcements
-func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool) error {
-	protocol := model.ProtocolTypeHTTP
-	if httpsEnabled {
-		protocol = model.ProtocolTypeHTTPS
-	}
-	multicastDto := model.MulticastDto{
-		Alias:       alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: deviceModel,
-		DeviceType:  deviceType,
-		Fingerprint: fingerprint,
-		Port:        port,
-		Protocol:    protocol,
-		Download:    true,
-		Announce:    true,
-	}
-
-	s.multicast.SetDto(multicastDto)
+func (s *Service) Start(ctx context.Context, dto model.MulticastDto) error {
+	s.multicast.SetDto(dto)
 
 	if err := s.multicast.StartListening(ctx); err != nil {
 		return fmt.Errorf("failed to start multicast discovery: %w", err)
@@ -126,6 +112,9 @@ func (s *Service) Start(ctx context.Context, alias string, port int, fingerprint
 // Stop stops the discovery service
 func (s *Service) Stop() {
 	s.logger.Debugf("Stopping discovery service...")
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+	})
 	if s.multicast != nil {
 		s.multicast.Stop()
 	}
@@ -137,26 +126,10 @@ func (s *Service) Stop() {
 }
 
 // Discover performs a discovery scan and returns found devices.
-func (s *Service) Discover(ctx context.Context, alias string, port int, fingerprint string, deviceType model.DeviceType, deviceModel *string, httpsEnabled bool, isDownloadServer bool) ([]*model.Device, error) {
+func (s *Service) Discover(ctx context.Context, dto model.MulticastDto) ([]*model.Device, error) {
 	s.logger.Debugf("Performing one-off discovery scan...")
 
-	protocol := model.ProtocolTypeHTTP
-	if httpsEnabled {
-		protocol = model.ProtocolTypeHTTPS
-	}
-	multicastDto := model.MulticastDto{
-		Alias:       alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: deviceModel,
-		DeviceType:  deviceType,
-		Fingerprint: fingerprint,
-		Port:        port,
-		Protocol:    protocol,
-		Download:    isDownloadServer,
-		Announce:    true,
-	}
-
-	s.multicast.SetDto(multicastDto)
+	s.multicast.SetDto(dto)
 
 	// MUST be listening to receive multicast responses
 	if err := s.multicast.StartListening(ctx); err != nil {
@@ -254,6 +227,10 @@ func (s *Service) startAnnouncementLoop(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
+				s.announceTimer.Stop()
+				return
+			case <-s.stopCh:
+				s.announceTimer.Stop()
 				return
 			case <-s.announceTimer.C:
 				if err := s.multicast.SendDiscoveryAnnouncement(); err != nil {

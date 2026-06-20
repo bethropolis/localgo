@@ -109,7 +109,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	multicastCtx, cancelMulticast := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancelMulticast()
 
-	err := discoverySvc.Start(multicastCtx, cfg.Alias, cfg.Port, cfg.SecurityContext.CertificateHash, cfg.DeviceType, cfg.DeviceModel, cfg.HttpsEnabled)
+	err := discoverySvc.Start(multicastCtx, cfg.ToMulticastDto(false))
 	if err != nil {
 		logger.Warnf("Multicast start failed: %v", err)
 	}
@@ -131,16 +131,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
 	}
 
-	registerDto := model.RegisterDto{
-		Alias:       cfg.Alias,
-		Version:     config.ProtocolVersion,
-		DeviceModel: cfg.DeviceModel,
-		DeviceType:  cfg.DeviceType,
-		Fingerprint: cfg.SecurityContext.CertificateHash,
-		Port:        cfg.Port,
-		Protocol:    model.ProtocolTypeHTTP,
-	}
-
+	registerDto := cfg.ToRegisterDto()
 	httpFallback := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
 
 	localIPs, err := network.GetLocalIPAddresses()
@@ -470,7 +461,7 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 	var body io.ReadCloser = file
 	if trackProgress != nil {
 		bar := &progressBar{current: 0, track: trackProgress}
-		body = &progressTracker{Reader: file, bar: bar}
+		body = &progressTracker{Reader: file, Closer: file, bar: bar}
 	}
 
 	// Wrap with idle timeout: cancel request if no data flows for 15s
@@ -543,6 +534,7 @@ type progressBar struct {
 
 type progressTracker struct {
 	io.Reader
+	io.Closer
 	bar *progressBar
 }
 
@@ -553,11 +545,4 @@ func (pt *progressTracker) Read(p []byte) (int, error) {
 		pt.bar.track(pt.bar.current)
 	}
 	return n, err
-}
-
-func (pt *progressTracker) Close() error {
-	if f, ok := pt.Reader.(*os.File); ok {
-		return f.Close()
-	}
-	return nil
 }
