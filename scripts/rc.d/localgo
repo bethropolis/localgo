@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# PROVIDE: localgo
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="localgo"
+rcvar="localgo_enable"
+
+load_rc_config $name
+
+: ${localgo_enable:="NO"}
+: ${localgo_user:="nobody"}
+
+command="/usr/local/bin/localgo"
+command_args="serve --quiet"
+pidfile="/var/run/localgo.pid"
+
+run_rc_command "$1"
