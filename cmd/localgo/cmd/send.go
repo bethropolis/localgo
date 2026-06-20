@@ -178,8 +178,8 @@ var sendCmd = &cobra.Command{
 					devices, discErr = discovery.DiscoverDevices(
 						context.Background(),
 						sendConfig,
-						Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
-						Cfg.DeviceModel, Cfg.HttpsEnabled,
+						Cfg,
+						Cfg.HttpsEnabled,
 					)
 				}).
 				Run()
