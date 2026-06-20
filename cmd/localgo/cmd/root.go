@@ -15,6 +15,7 @@ import (
 var (
 	versionFlag bool
 	privateMode  bool
+	noColor     bool
 )
 
 var (
@@ -34,7 +35,11 @@ var rootCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
-		logger := logging.Init(Verbose, JSONOutput)
+		if noColor || os.Getenv("NO_COLOR") != "" {
+			noColor = true
+		}
+
+		logger := logging.Init(Verbose, JSONOutput, noColor)
 
 		ViperCfg = config.InitViper()
 		if cfgFile != "" {
@@ -73,6 +78,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/localgo/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&Verbose, "verbose", false, "Enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Enable JSON log output")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable colored output")
 
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		help.ShowMainUsage()
