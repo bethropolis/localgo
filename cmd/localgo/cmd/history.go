@@ -98,7 +98,7 @@ var historyCmd = &cobra.Command{
 
 		for _, entry := range displayEntries {
 			senderAlias := entry.SenderAlias
-			if Cfg.Private {
+			if Cfg.Private && senderAlias != "Anonymous" {
 				senderAlias = cli.AnonymizeString(entry.SenderAlias)
 			}
 			tStr := entry.Timestamp.Local().Format("01-02 15:04")

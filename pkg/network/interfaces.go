@@ -35,8 +35,8 @@ func GetLocalIPAddresses() ([]net.IP, error) {
 	}
 
 	for _, i := range ifaces {
-		// Skip down, loopback, and non-multicast interfaces
-		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 || (i.Flags&net.FlagMulticast) == 0 {
+		// Skip down and loopback interfaces
+		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
 			continue
 		}
 

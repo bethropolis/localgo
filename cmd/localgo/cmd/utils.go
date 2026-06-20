@@ -22,9 +22,17 @@ func padRight(str string, length int) string {
 func anonymizeDeviceSlice(devices []*model.Device) []*model.Device {
 	out := make([]*model.Device, len(devices))
 	for i, d := range devices {
-		copy := *d
-		copy.Alias = cli.AnonymizedAlias(d)
-		out[i] = &copy
+		out[i] = &model.Device{
+			IP:          d.IP,
+			Version:     d.Version,
+			Port:        d.Port,
+			Alias:       cli.AnonymizedAlias(d),
+			Protocol:    d.Protocol,
+			Fingerprint: d.Fingerprint,
+			DeviceModel: d.DeviceModel,
+			DeviceType:  d.DeviceType,
+			Download:    d.Download,
+		}
 	}
 	return out
 }

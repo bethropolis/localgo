@@ -49,7 +49,16 @@ func TestService_Start(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx, "test-alias", 12345, "test-fingerprint", model.DeviceTypeDesktop, nil, false)
+	dto := model.MulticastDto{
+		Alias:       "test-alias",
+		Version:     "2.1",
+		Fingerprint: "test-fingerprint",
+		Port:        12345,
+		DeviceType:  model.DeviceTypeDesktop,
+		Protocol:    model.ProtocolTypeHTTP,
+		Announce:    true,
+	}
+	err := service.Start(ctx, dto)
 
 	assert.NoError(t, err)
 	assert.True(t, multicast.startListeningCalled)

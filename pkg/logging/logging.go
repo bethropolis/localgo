@@ -117,7 +117,7 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 	if verbose {
 		opts = append(opts, zap.AddStacktrace(zapcore.ErrorLevel))
 	} else {
-		opts = []zap.Option{zap.AddCallerSkip(0)} // Minimal options for non-verbose
+		opts = []zap.Option{} // Minimal options for non-verbose
 	}
 
 	logger := zap.New(core, opts...)

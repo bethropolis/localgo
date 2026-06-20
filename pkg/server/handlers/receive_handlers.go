@@ -287,34 +287,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Fall-back: save the full stream as a file.
-		var combinedReader io.Reader
-		if int64(len(textBytes)) > maxTextSize {
-			// Re-combine the already-read prefix with the remaining socket stream.
-			combinedReader = io.MultiReader(bytes.NewReader(textBytes), bodyReader)
-		} else {
-			combinedReader = bytes.NewReader(textBytes)
-		}
-		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
-		cleanPath = filepath.Clean(destinationPath)
-		if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
-			cleanPath != filepath.Clean(h.config.DownloadDir) {
-			httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
-			return
-		}
-		savErr := storage.SaveStreamToFileWithMetadata(
-			combinedReader, destinationPath, fileInfo.Dto.Size, modified, accessed, fileInfo.Dto.SHA256, onProgress, h.logger,
-		)
-		if savErr != nil {
-			h.logger.Errorf("Error saving text file %s: %v", fileInfo.Dto.FileName, savErr)
-			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusFailed)
-			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save file")
-			return
-		}
-		h.logger.Infof("Saved text as file: %s", destinationPath)
-		h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
-		h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusReceived)
-		h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
-		httputil.RespondJSON(w, http.StatusOK, struct{}{})
+		h.saveTextAsFile(session, reqSessionId, reqFileId, rawFileName, bodyReader, textBytes, modified, accessed, onProgress)
 		return
 	}
 
@@ -460,6 +433,35 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 			h.logger.Debugf("Exec hook completed, output: %s", string(output))
 		}
 	}()
+}
+
+// saveTextAsFile saves text content as a file when clipboard is unavailable or text is too large.
+func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, reqSessionId, reqFileId, rawFileName string, bodyReader io.Reader, textBytes []byte, modified, accessed *string, onProgress func(int64)) {
+	var combinedReader io.Reader
+	if int64(len(textBytes)) > maxTextSize {
+		combinedReader = io.MultiReader(bytes.NewReader(textBytes), bodyReader)
+	} else {
+		combinedReader = bytes.NewReader(textBytes)
+	}
+	destinationPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+	cleanPath := filepath.Clean(destinationPath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
+		cleanPath != filepath.Clean(h.config.DownloadDir) {
+		h.logger.Errorf("Path traversal attempt detected in text fallback: %s", rawFileName)
+		return
+	}
+	savErr := storage.SaveStreamToFileWithMetadata(
+		combinedReader, destinationPath, int64(len(textBytes)), modified, accessed, nil, onProgress, h.logger,
+	)
+	if savErr != nil {
+		h.logger.Errorf("Error saving text file %s: %v", rawFileName, savErr)
+		h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), "text/plain", history.StatusFailed)
+		return
+	}
+	h.logger.Infof("Saved text as file: %s", destinationPath)
+	h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
+	h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), "text/plain", history.StatusReceived)
+	h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
 }
 
 // CancelHandler handles POST /v2/cancel requests.
