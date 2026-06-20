@@ -45,6 +45,7 @@ func ShowMainUsage() {
 		{"devices", "List recently discovered devices"},
 		{"history", "Show file transfer history log"},
 		{"info", "Show device information"},
+		{"completion", "Generate shell completion scripts"},
 		{"help", "Show help information"},
 		{"version", "Show version information"},
 	}
@@ -57,7 +58,9 @@ func ShowMainUsage() {
 	fmt.Printf("    %s  Show help\n", cli.InfoStyle.Render("-h, --help"))
 	fmt.Printf("    %s  Show version\n", cli.InfoStyle.Render("-v, --version"))
 	fmt.Printf("    %s      Enable debug logging\n", cli.InfoStyle.Render("--verbose"))
-	fmt.Printf("    %s         Enable JSON log output\n\n", cli.InfoStyle.Render("--json"))
+	fmt.Printf("    %s         Enable JSON log output\n", cli.InfoStyle.Render("--json"))
+	fmt.Printf("    %s          Hide device identity during discovery/transfer\n", cli.InfoStyle.Render("--private, -p"))
+	fmt.Printf("    %s        Config file path\n\n", cli.InfoStyle.Render("--config"))
 
 	fmt.Printf("%s\n", cli.WarningStyle.Render("EXAMPLES:"))
 	examples := []string{
@@ -175,10 +178,12 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--interval", Type: "int", Default: "30", Description: "Discovery announcement interval in seconds"},
 				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
 				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
+				{Name: "--open", Type: "bool", Default: "false", Description: "Open download directory after transfer completes"},
 				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - minimal output"},
 				{Name: "--verbose", Type: "bool", Default: "false", Description: "Verbose mode - detailed output"},
 				{Name: "--history", Type: "string", Default: "~/.local/share/localgo/history.jsonl", Description: "Path to transfer history JSONL file"},
 				{Name: "--exec", Type: "string", Default: "", Description: "Shell command to execute after each received file (use %f, %n, %s, %a, %i)"},
+				{Name: "--iface", Type: "string", Default: "", Description: "Multicast network interface name"},
 			},
 		},
 		"share": {
@@ -201,9 +206,12 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},
 				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
 				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
+				{Name: "--zip", Type: "bool", Default: "false", Description: "Zip directories before sharing"},
+				{Name: "--concurrency", Type: "int", Default: "0", Description: "Max parallel uploads (0 = use default)"},
 				{Name: "--history", Type: "string", Default: "", Description: "Path to transfer history JSONL file"},
 				{Name: "--exec", Type: "string", Default: "", Description: "Shell command to execute after each received file"},
 				{Name: "--quiet", Type: "bool", Default: "false", Description: "Quiet mode - minimal output"},
+				{Name: "--iface", Type: "string", Default: "", Description: "Multicast network interface name"},
 			},
 		},
 		"discover": {
@@ -261,6 +269,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},
 				{Name: "--timeout", Type: "int", Default: "30", Description: "Send timeout in seconds"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Sender alias"},
+				{Name: "--concurrency", Type: "int", Default: "0", Description: "Max parallel uploads (0 = use default)"},
+				{Name: "--iface", Type: "string", Default: "", Description: "Multicast network interface name"},
 			},
 		},
 		"history": {
@@ -302,6 +312,17 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Flags: []FlagHelp{
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
 			},
+		},
+		"completion": {
+			Name:        "completion",
+			Description: "Generate shell completion scripts",
+			Usage:       "localgo completion [bash|zsh|fish|powershell]",
+			Examples: []string{
+				"localgo completion bash > /etc/bash_completion.d/localgo",
+				"localgo completion zsh > /usr/local/share/zsh/site-functions/_localgo",
+				"localgo completion fish > ~/.config/fish/completions/localgo.fish",
+			},
+			Flags: []FlagHelp{},
 		},
 	}
 
