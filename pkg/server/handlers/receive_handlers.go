@@ -492,9 +492,12 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 				} else if runtime.GOOS == "darwin" {
 					cmd = "open"
 					args = []string{h.config.DownloadDir}
-				} else {
+				} else if _, err := exec.LookPath("xdg-open"); err == nil {
 					cmd = "xdg-open"
 					args = []string{h.config.DownloadDir}
+				} else {
+					h.logger.Debugf("xdg-open not found in PATH, skip opening download dir")
+					return
 				}
 				exec.Command(cmd, args...).Run()
 			}()
