@@ -224,7 +224,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		}
 	}
 
-	// 2. Fallback to UDP
+	// 2. Fallback to UDP — send via multicast so every listener sees the response
 	responseDto := md.dto
 	responseDto.Announce = false
 
@@ -233,7 +233,12 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		return fmt.Errorf("failed to marshal response: %w", err)
 	}
 
-	conn, err := net.DialUDP("udp4", nil, targetAddr)
+	respAddr, err := net.ResolveUDPAddr("udp4", md.config.MulticastAddr)
+	if err != nil {
+		return fmt.Errorf("failed to resolve multicast address: %w", err)
+	}
+
+	conn, err := net.DialUDP("udp4", nil, respAddr)
 	if err != nil {
 		return fmt.Errorf("failed to create UDP connection: %w", err)
 	}
@@ -244,7 +249,7 @@ func (md *MulticastDiscovery) SendDiscoveryResponse(targetAddr *net.UDPAddr, tar
 		return fmt.Errorf("failed to send discovery response: %w", err)
 	}
 
-	md.logger.Debugf("Sent discovery response via UDP to %s", targetAddr)
+	md.logger.Debugf("Sent discovery response via multicast to %s", md.config.MulticastAddr)
 	return nil
 }
 
