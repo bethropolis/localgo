@@ -88,13 +88,16 @@ func (d *DeviceInfo) ToMulticastDto(announce bool) MulticastDto {
 }
 
 // InfoDto represents the response for /info and /register endpoints.
+// Also used as the info block in prepare-upload requests (port + protocol required).
 type InfoDto struct {
-	Alias       string     `json:"alias"`
-	Version     string     `json:"version"`
-	DeviceModel *string    `json:"deviceModel"` // nullable
-	DeviceType  DeviceType `json:"deviceType"`
-	Fingerprint string     `json:"fingerprint"`
-	Download    bool       `json:"download"`
+	Alias       string       `json:"alias"`
+	Version     string       `json:"version"`
+	DeviceModel *string      `json:"deviceModel"` // nullable
+	DeviceType  DeviceType   `json:"deviceType"`
+	Fingerprint string       `json:"fingerprint"`
+	Port        int          `json:"port,omitempty"`
+	Protocol    ProtocolType `json:"protocol,omitempty"`
+	Download    bool         `json:"download"`
 }
 
 // RegisterDto represents the request body for /register endpoint (sent by the discoverer).
