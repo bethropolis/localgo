@@ -343,13 +343,18 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		infoDeviceType = model.DeviceTypeOther
 	}
 
+	fingerprint := cfg.RandomFingerprint
+	if cfg.HttpsEnabled {
+		fingerprint = cfg.SecurityContext.CertificateHash
+	}
+
 	prepareDto := model.PrepareUploadRequestDto{
 		Info: model.InfoDto{
 			Alias:       infoAlias,
 			Version:     config.ProtocolVersion,
 			DeviceModel: infoDeviceModel,
 			DeviceType:  infoDeviceType,
-			Fingerprint: cfg.SecurityContext.CertificateHash,
+			Fingerprint: fingerprint,
 			Download:    true,
 		},
 		Files: filesDtoMap,
