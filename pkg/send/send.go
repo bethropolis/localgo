@@ -278,7 +278,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 					cert := state.PeerCertificates[0]
 					hash := sha256.Sum256(cert.Raw)
 					actual := hex.EncodeToString(hash[:])
-					if actual != expectedFingerprint {
+					if !strings.EqualFold(actual, expectedFingerprint) {
 						return fmt.Errorf("TLS certificate fingerprint mismatch: expected %s, got %s", expectedFingerprint, actual)
 					}
 					return nil
