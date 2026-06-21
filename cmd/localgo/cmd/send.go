@@ -19,7 +19,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/send"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/filepicker"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -78,33 +77,6 @@ var sendCmd = &cobra.Command{
 	Short: "Send a file to another LocalGo device",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
-
-		// Interactive fallback: if no files specified, check clipboard for text content
-		if len(files) == 0 && !sendclipboard {
-			if clipboard.Available() {
-				text, err := clipboard.Read()
-				if err == nil && strings.TrimSpace(text) != "" {
-					preview := strings.ReplaceAll(text, "\n", " ")
-					if len(preview) > 50 {
-						preview = preview[:50] + "…"
-					}
-
-					var useClip bool = true
-					form := huh.NewForm(
-						huh.NewGroup(
-							huh.NewConfirm().
-								Title("No files specified. Send clipboard content instead?").
-								Description(fmt.Sprintf("Current clipboard: %q", preview)).
-								Value(&useClip),
-						),
-					).WithTheme(huh.ThemeCharm())
-
-					if err := form.Run(); err == nil && useClip {
-						sendclipboard = true
-					}
-				}
-			}
-		}
 
 		if sendclipboard {
 			text, err := clipboard.Read()
