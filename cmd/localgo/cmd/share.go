@@ -28,6 +28,7 @@ var (
 	sharefiles       []string
 	shareport        int
 	shareuseHTTP     bool
+	shareuseHTTPS    bool
 	sharepin         string
 	sharealias       string
 	shareautoAccept  bool
@@ -54,8 +55,10 @@ var shareCmd = &cobra.Command{
 		if shareport > 0 {
 			Cfg.Port = shareport
 		}
-		if shareuseHTTP {
-			Cfg.HttpsEnabled = false
+		// Browser download API must use HTTP (browsers reject self-signed certs)
+		Cfg.HttpsEnabled = false
+		if shareuseHTTPS {
+			Cfg.HttpsEnabled = true
 		}
 		if sharepin != "" {
 			Cfg.PIN = sharepin
@@ -257,7 +260,8 @@ func init() {
 	rootCmd.AddCommand(shareCmd)
 	shareCmd.Flags().StringSliceVar(&sharefiles, "file", []string{}, "File or directory to share")
 	shareCmd.Flags().IntVar(&shareport, "port", 0, "Port to run the server on")
-	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Use HTTP instead of HTTPS")
+	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Deprecated (HTTP is now default for share)")
+	shareCmd.Flags().BoolVar(&shareuseHTTPS, "https", false, "Use HTTPS (browsers will reject self-signed certs)")
 	shareCmd.Flags().StringVar(&sharepin, "pin", "", "PIN for authentication")
 	shareCmd.Flags().StringVar(&sharealias, "alias", "", "Device alias")
 	shareCmd.Flags().BoolVar(&shareautoAccept, "auto-accept", false, "Auto-accept incoming files")
