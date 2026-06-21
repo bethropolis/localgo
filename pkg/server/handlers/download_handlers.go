@@ -43,7 +43,12 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 		}
 	}
 
-	session := h.sendService.GetSession()
+	var session *services.ActiveSendSession
+	if sessionID := r.URL.Query().Get("sessionId"); sessionID != "" {
+		session = h.sendService.GetSessionByID(sessionID)
+	} else {
+		session = h.sendService.GetSession()
+	}
 	if session == nil {
 		httputil.RespondError(w, http.StatusNotFound, "No active sharing session")
 		return
