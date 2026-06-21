@@ -44,7 +44,7 @@ func TestReceiveService_CreateSession(t *testing.T) {
 	}
 }
 
-func TestReceiveService_CreateSession_MultipleSessions(t *testing.T) {
+func TestReceiveService_CreateSession_BlocksConcurrent(t *testing.T) {
 	svc := NewReceiveService()
 
 	sender := model.DeviceInfo{
@@ -57,11 +57,20 @@ func TestReceiveService_CreateSession_MultipleSessions(t *testing.T) {
 		"file1": {ID: "file1", FileName: "test.txt", Size: 1024},
 	}
 
-	createdSession1, _ := svc.CreateSession(sender, files)
-	createdSession2, _ := svc.CreateSession(sender, files)
+	first, err := svc.CreateSession(sender, files)
+	if err != nil {
+		t.Fatalf("First CreateSession should succeed: %v", err)
+	}
+	if first == nil {
+		t.Fatal("Expected non-nil session")
+	}
 
-	if createdSession1.SessionID == createdSession2.SessionID {
-		t.Error("Expected different session IDs for concurrent sessions")
+	second, err := svc.CreateSession(sender, files)
+	if err == nil {
+		t.Error("Expected error for second concurrent session, got nil")
+	}
+	if second != nil {
+		t.Error("Expected nil session for blocked concurrent session")
 	}
 }
 

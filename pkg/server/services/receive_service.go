@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -74,9 +75,14 @@ func (s *ReceiveService) cleanupLoop() {
 }
 
 // CreateSession creates a new receive session.
+// Returns an error if another session is already active (409 Blocked by another session).
 func (s *ReceiveService) CreateSession(sender model.DeviceInfo, files map[string]model.FileDto) (*ActiveReceiveSession, error) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
+
+	if len(s.sessions) > 0 {
+		return nil, fmt.Errorf("another session is already active")
+	}
 
 	sessionId := uuid.NewString()
 	sessionFiles := make(map[string]ActiveFile)

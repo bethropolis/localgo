@@ -69,9 +69,6 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// --- Basic Session Check ---
-	// Concurrent sessions are now supported, so we no longer block if a session exists.
-
 	// --- Decode Request ---
 	// Limit request body to prevent memory exhaustion from massive JSON (1 MB limit)
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024))
