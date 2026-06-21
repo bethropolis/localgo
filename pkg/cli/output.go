@@ -362,9 +362,6 @@ func PickDevice(devices []*model.Device, private bool) *model.Device {
 	if len(devices) == 0 {
 		return nil
 	}
-	if len(devices) == 1 {
-		return devices[0]
-	}
 
 	var selected *model.Device
 	options := make([]huh.Option[*model.Device], len(devices))

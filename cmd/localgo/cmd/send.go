@@ -73,8 +73,9 @@ func (m filePickerModel) View() string {
 }
 
 var sendCmd = &cobra.Command{
-	Use:   "send",
-	Short: "Send a file to another LocalGo device",
+	Use:          "send",
+	Short:        "Send a file to another LocalGo device",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
 
