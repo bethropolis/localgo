@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -101,6 +102,17 @@ var scanCmd = &cobra.Command{
 			zap.S().Warnf("Scan completed with warnings: %v", scanErr)
 			cli.PrintWarning("Scan completed with warnings: %v", scanErr)
 		}
+
+		// Filter out the local machine from results
+		localIPs, _ := network.GetLocalIPAddresses()
+		foundDevices = slices.DeleteFunc(foundDevices, func(d *model.Device) bool {
+			for _, local := range localIPs {
+				if d.IP == local.String() {
+					return true
+				}
+			}
+			return false
+		})
 
 		if !scanquiet && len(foundDevices) == 0 {
 			zap.S().Warnf("No devices found during scan")
