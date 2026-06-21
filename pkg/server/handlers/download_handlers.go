@@ -68,7 +68,7 @@ func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request
 	// --- PIN Check ---
 	if h.config.PIN != "" {
 		pin := r.URL.Query().Get("pin")
-		if pin != h.config.PIN {
+		if subtle.ConstantTimeCompare([]byte(pin), []byte(h.config.PIN)) != 1 {
 			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
 			return
 		}
