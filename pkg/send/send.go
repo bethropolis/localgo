@@ -3,7 +3,9 @@ package send
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -265,8 +267,23 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 	if device.Protocol == model.ProtocolTypeHTTPS {
 		scheme = "https"
+		expectedFingerprint := device.Fingerprint
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				VerifyConnection: func(state tls.ConnectionState) error {
+					if len(state.PeerCertificates) == 0 {
+						return fmt.Errorf("no peer certificates presented")
+					}
+					cert := state.PeerCertificates[0]
+					hash := sha256.Sum256(cert.Raw)
+					actual := hex.EncodeToString(hash[:])
+					if actual != expectedFingerprint {
+						return fmt.Errorf("TLS certificate fingerprint mismatch")
+					}
+					return nil
+				},
+			},
 		}
 		client.Transport = tr
 		defer tr.CloseIdleConnections()
