@@ -59,7 +59,7 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	if h.config.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 
 	dto := model.InfoDto{
@@ -126,7 +126,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 	if h.config.Private {
 		respAlias = "Anonymous"
 		respDeviceModel = nil
-		respDeviceType = model.DeviceTypeOther
+		respDeviceType = model.DeviceTypeHeadless
 	}
 
 	responseDto := model.InfoDto{

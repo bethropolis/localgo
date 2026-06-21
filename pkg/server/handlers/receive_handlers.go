@@ -276,7 +276,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 			h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 			h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, "<clipboard>", int64(len(textBytes)), fileInfo.Dto.FileType, history.StatusClipboard)
 			h.runExecHook("<clipboard>", rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
-			httputil.RespondJSON(w, http.StatusOK, struct{}{})
+			w.WriteHeader(http.StatusOK)
 			return
 		} else {
 			// Clipboard unavailable — fall back to file.
@@ -305,7 +305,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, fileInfo.Dto.Size, fileInfo.Dto.FileType, history.StatusReceived)
 	h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, fileInfo.Dto.Size)
 
-	httputil.RespondJSON(w, http.StatusOK, struct{}{})
+	w.WriteHeader(http.StatusOK)
 }
 
 // PrepareUploadHandlerV1 handles POST /v1/prepare-upload requests (older protocol).
@@ -505,5 +505,5 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		// successful transfer, so this is the normal post-upload flow — return 200.
 		h.logger.Infof("/cancel received for already-closed session %s — treating as success.", reqSessionId)
 	}
-	httputil.RespondJSON(w, http.StatusOK, struct{}{})
+	w.WriteHeader(http.StatusOK)
 }

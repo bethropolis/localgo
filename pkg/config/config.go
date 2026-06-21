@@ -255,7 +255,7 @@ func (c *Config) ToRegisterDto() model.RegisterDto {
 	if c.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 	return model.RegisterDto{
 		Alias:       alias,
@@ -281,7 +281,7 @@ func (c *Config) ToInfoDto() model.InfoDto {
 	if c.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 	return model.InfoDto{
 		Alias:       alias,

@@ -340,7 +340,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	if cfg.Private {
 		infoAlias = "Anonymous"
 		infoDeviceModel = nil
-		infoDeviceType = model.DeviceTypeOther
+		infoDeviceType = model.DeviceTypeHeadless
 	}
 
 	fingerprint := cfg.RandomFingerprint
