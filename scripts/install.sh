@@ -587,25 +587,25 @@ main() {
     fi
 
     # Run installation steps sequentially with progress counters
-    section "1/7" "Verifying system prerequisites"
+    section "1" "Verifying system prerequisites"
     check_prerequisites
 
-    section "2/7" "Compiling LocalGo static binary"
+    section "2" "Compiling LocalGo static binary"
     build_binary
 
-    section "3/7" "Creating configuration directories"
+    section "3" "Creating configuration directories"
     create_directories
 
-    section "4/7" "Installing executable binary"
+    section "4" "Installing executable binary"
     install_binary
 
-    section "5/7" "Deploying configuration environment"
+    section "5" "Deploying configuration environment"
     install_configuration
 
-    section "6/7" "Configuring systemd background services"
+    section "6" "Configuring systemd background services"
     install_service
 
-    section "7/7" "Generating shell auto-completions"
+    section "7" "Generating shell auto-completions"
     install_completion
 
     echo
