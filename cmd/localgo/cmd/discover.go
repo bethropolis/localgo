@@ -3,12 +3,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
+	"slices"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
-	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -85,6 +88,46 @@ var discoverCmd = &cobra.Command{
 		if discErr != nil && !discoverquiet {
 			zap.S().Warnf("Discovery completed with warnings: %v", discErr)
 			cli.PrintWarning("Discovery completed with warnings: %v", discErr)
+		}
+
+		// Fallback: if multicast finds nothing, try HTTP subnet scan
+		if len(foundDevices) == 0 {
+			if !discoverquiet {
+				cli.PrintInfo("Multicast returned no devices. Falling back to HTTP subnet scan...")
+			}
+			localIPs, ipErr := network.GetLocalIPAddresses()
+			if ipErr == nil && len(localIPs) > 0 {
+				var scanIps []net.IP
+				for _, ip := range localIPs {
+					scanIps = append(scanIps, network.GetSubnetIPs(ip)...)
+				}
+				registerDto := Cfg.ToRegisterDto()
+				httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, zap.S())
+
+				scanCtx, scanCancel := context.WithTimeout(context.Background(), time.Duration(discovertimeout)*time.Second)
+				defer scanCancel()
+
+				var scanDevices []*model.Device
+				_ = spinner.New().
+					Title(fmt.Sprintf("Scanning %d IP addresses on port %d...", len(scanIps), Cfg.Port)).
+					Action(func() {
+						scanDevices, _ = httpDiscoverer.ScanNetwork(scanCtx, scanIps, Cfg.Port)
+					}).
+					Run()
+
+				foundDevices = scanDevices
+			}
+
+			// Filter out the local machine from results
+			localIPs, _ = network.GetLocalIPAddresses()
+			foundDevices = slices.DeleteFunc(foundDevices, func(d *model.Device) bool {
+				for _, local := range localIPs {
+					if d.IP == local.String() {
+						return true
+					}
+				}
+				return false
+			})
 		}
 
 		if !discoverquiet && len(foundDevices) == 0 {
