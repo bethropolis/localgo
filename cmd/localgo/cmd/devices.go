@@ -114,7 +114,7 @@ var devicesCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(devicesCmd)
 	devicesCmd.Flags().BoolVar(&devicesjsonOutput, "json", false, "Output in JSON format")
-	devicesCmd.Flags().BoolVarP(&devicesProbe, "probe", "p", false, "Probe cached devices to verify if they are currently online")
+	devicesCmd.Flags().BoolVar(&devicesProbe, "probe", false, "Probe cached devices to verify if they are currently online")
 
 	devicesCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("devices"); h != nil {
