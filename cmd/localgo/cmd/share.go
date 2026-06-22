@@ -48,7 +48,18 @@ var shareCmd = &cobra.Command{
 		files := sharefiles
 
 		if len(files) == 0 {
-			return fmt.Errorf("file parameter is required (use --file)")
+			selected, err := cli.LaunchFilePicker()
+			if err != nil {
+				return fmt.Errorf("file picker failed: %w", err)
+			}
+			if selected == "" {
+				return fmt.Errorf("no file selected")
+			}
+			files = []string{selected}
+			// Auto-enable zipping if the user selected a directory without --zip
+			if info, statErr := os.Stat(selected); statErr == nil && info.IsDir() && !sharezip {
+				sharezip = true
+			}
 		}
 
 		// Apply overrides
