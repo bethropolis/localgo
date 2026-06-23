@@ -37,6 +37,11 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ### Installation
 
+#### Online (macOS, Linux)
+```bash
+curl -fsSL https://bethropolis.github.io/localgo/install.sh | bash
+```
+
 ####  User installation (recommended)
 ```bash
 # clone repo

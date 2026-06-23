@@ -244,12 +244,13 @@ func FormatBytes(bytes int64) string {
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)
 	}
+	suffixes := []string{"KB", "MB", "GB", "TB", "PB", "EB"}
 	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
+	for n := bytes / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), suffixes[exp])
 }
 
 // FormatDuration formats duration in human readable format
