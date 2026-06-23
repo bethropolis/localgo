@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gen2brain/beeep"
 )
 
 // OutputFormat represents the output format type
@@ -208,150 +206,6 @@ func (ow *OutputWriter) writeJSON(data interface{}) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(data)
-}
-
-// Helper functions
-
-// AnonymizedAlias returns a stable "Device #XXXXXXXX" identifier from a device's fingerprint.
-func AnonymizedAlias(device *model.Device) string {
-	if device == nil || device.Fingerprint == "" {
-		return "Device #00000000"
-	}
-	h := sha256.Sum256([]byte(device.Fingerprint))
-	return fmt.Sprintf("Device #%08x", h[:4])
-}
-
-// AnonymizeString returns a stable "Device #XXXXXXXX" identifier from any string.
-func AnonymizeString(s string) string {
-	if s == "" {
-		return "Device #00000000"
-	}
-	h := sha256.Sum256([]byte(s))
-	return fmt.Sprintf("Device #%08x", h[:4])
-}
-
-// TruncateString truncates a string to maxLen characters
-func TruncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
-// FormatBytes formats bytes in human readable format
-func FormatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	suffixes := []string{"KB", "MB", "GB", "TB", "PB", "EB"}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit && exp < len(suffixes)-1; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), suffixes[exp])
-}
-
-// FormatDuration formats duration in human readable format
-func FormatDuration(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	if d < time.Minute {
-		return fmt.Sprintf("%.1fs", d.Seconds())
-	}
-	if d < time.Hour {
-		return fmt.Sprintf("%.1fm", d.Minutes())
-	}
-	return fmt.Sprintf("%.1fh", d.Hours())
-}
-
-// Notify sends a native desktop notification. Icon is empty (system default).
-// No-op in container environments.
-func Notify(title, body string) {
-	if IsContainer() {
-		return
-	}
-	beeep.Notify(title, body, "")
-}
-
-// ProgressBar represents a simple progress bar
-type ProgressBar struct {
-	total   int64
-	current int64
-	width   int
-	prefix  string
-}
-
-// NewProgressBar creates a new progress bar
-func NewProgressBar(total int64, prefix string) *ProgressBar {
-	return &ProgressBar{
-		total:  total,
-		width:  50,
-		prefix: prefix,
-	}
-}
-
-// Update updates the progress bar
-func (pb *ProgressBar) Update(current int64) {
-	pb.current = current
-	pb.render()
-}
-
-// Finish completes the progress bar
-func (pb *ProgressBar) Finish() {
-	pb.current = pb.total
-	pb.render()
-	fmt.Println()
-}
-
-// render renders the progress bar
-func (pb *ProgressBar) render() {
-	percent := float64(pb.current) / float64(pb.total)
-	filled := int(percent * float64(pb.width))
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", pb.width-filled)
-
-	fmt.Printf("\r%s [%s] %.1f%% (%s/%s)",
-		pb.prefix,
-		bar,
-		percent*100,
-		FormatBytes(pb.current),
-		FormatBytes(pb.total))
-}
-
-// Standalone Print helpers
-
-func PrintSuccess(format string, a ...any) {
-	fmt.Println(SuccessStyle.Render(IconCheck + " " + fmt.Sprintf(format, a...)))
-}
-
-func PrintError(format string, a ...any) {
-	fmt.Println(ErrorStyle.Render(IconCross + " " + fmt.Sprintf(format, a...)))
-}
-
-func PrintWarning(format string, a ...any) {
-	fmt.Println(WarningStyle.Render(IconWarning + " " + fmt.Sprintf(format, a...)))
-}
-
-func PrintInfo(format string, a ...any) {
-	fmt.Println(InfoStyle.Render(IconInfo + " " + fmt.Sprintf(format, a...)))
-}
-
-func PrintHeader(text string) {
-	fmt.Println(HeaderStyle.Render(text))
-}
-
-// IsContainer returns true if LocalGo is running inside a Docker/Podman container.
-func IsContainer() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
-	if os.Getenv("container") != "" {
-		return true
-	}
-	return false
 }
 
 // PickDevice presents an interactive TUI to select a device. Returns the selected device or nil if canceled.

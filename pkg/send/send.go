@@ -7,9 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -25,45 +23,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/metadata"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
-	"github.com/charmbracelet/huh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
-
-// getFilesWithRelativePaths recursively flattens directories while preserving relative structure
-func getFilesWithRelativePaths(paths []string) (map[string]string, error) {
-	result := make(map[string]string)
-	for _, p := range paths {
-		p = filepath.Clean(p)
-		info, err := os.Stat(p)
-		if err != nil {
-			return nil, err
-		}
-		if info.IsDir() {
-			baseDir := filepath.Dir(p)
-			err = filepath.Walk(p, func(path string, fInfo os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-				if !fInfo.IsDir() {
-					rel, err := filepath.Rel(baseDir, path)
-					if err == nil {
-						result[path] = filepath.ToSlash(rel)
-					} else {
-						result[path] = filepath.Base(path)
-					}
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			result[p] = filepath.Base(p)
-		}
-	}
-	return result, nil
-}
 
 // SendFiles sends files or directories to a recipient.
 func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger) error {
@@ -175,86 +137,6 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
-}
-
-// verifyDeviceFingerprint checks if a cached fingerprint differs from the target's
-// and prompts the user to trust the updated fingerprint before proceeding.
-func verifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model.Device) error {
-	if targetDevice == nil || targetDevice.Fingerprint == "" {
-		return nil
-	}
-
-	cachedPeers := peerCache.GetPeers()
-	for _, cached := range cachedPeers {
-		if cached.Alias == targetDevice.Alias && cached.Fingerprint != targetDevice.Fingerprint {
-			cli.PrintWarning("The security fingerprint for '%s' has changed!", targetDevice.Alias)
-
-			var trust bool
-			form := huh.NewForm(
-				huh.NewGroup(
-					huh.NewConfirm().
-						Title("Trust this new device fingerprint and update cache?").
-						Value(&trust).
-						Affirmative("Trust & Save").
-						Negative("Abort"),
-				),
-			).WithTheme(huh.ThemeCharm())
-
-			if err := form.Run(); err != nil || !trust {
-				return fmt.Errorf("security verification failed: untrusted certificate hash change")
-			}
-
-			peerCache.Save(targetDevice)
-			break
-		}
-	}
-	return nil
-}
-
-// anonymizeFileName maps a MIME type to a generic filename for private mode.
-func anonymizeFileName(contentType string) string {
-	switch {
-	case strings.HasPrefix(contentType, "image/jpeg"):
-		return "image.jpg"
-	case strings.HasPrefix(contentType, "image/png"):
-		return "image.png"
-	case strings.HasPrefix(contentType, "image/webp"):
-		return "image.webp"
-	case strings.HasPrefix(contentType, "image/"):
-		return "image.bin"
-	case strings.HasPrefix(contentType, "video/mp4"):
-		return "video.mp4"
-	case strings.HasPrefix(contentType, "video/webm"):
-		return "video.webm"
-	case strings.HasPrefix(contentType, "video/x-matroska"):
-		return "video.mkv"
-	case strings.HasPrefix(contentType, "video/quicktime"):
-		return "video.mov"
-	case strings.HasPrefix(contentType, "video/"):
-		return "video.bin"
-	case strings.HasPrefix(contentType, "audio/"):
-		return "audio.mp3"
-	case strings.HasPrefix(contentType, "text/plain"):
-		return "document.txt"
-	case strings.HasPrefix(contentType, "text/html"):
-		return "document.html"
-	case strings.HasPrefix(contentType, "text/"):
-		return "document.txt"
-	case contentType == "application/pdf":
-		return "document.pdf"
-	case strings.HasPrefix(contentType, "application/zip"):
-		return "archive.zip"
-	case strings.HasPrefix(contentType, "application/gzip"):
-		return "archive.tar.gz"
-	case strings.HasPrefix(contentType, "application/x-tar"):
-		return "archive.tar"
-	case strings.HasPrefix(contentType, "application/x-"):
-		return "archive.bin"
-	case strings.HasPrefix(contentType, "application/"):
-		return "document.bin"
-	default:
-		return "file.bin"
-	}
 }
 
 func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
@@ -464,109 +346,4 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	return nil
 }
 
-func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
-	if logger == nil {
-		logger = zap.NewNop().Sugar()
-	}
 
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)
-
-	stat, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get file stats: %w", err)
-	}
-
-	var body io.ReadCloser = file
-	if trackProgress != nil {
-		bar := &progressBar{current: 0, track: trackProgress}
-		body = &progressTracker{Reader: file, Closer: file, bar: bar}
-	}
-
-	// Wrap with idle timeout: cancel request if no data flows for 15s
-	uploadCtx, cancel := context.WithCancel(ctx)
-	body = NewIdleTimeoutReader(body, 15*time.Second, cancel)
-
-	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, url, body)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.ContentLength = stat.Size()
-
-	resp, err := client.Do(req)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return fmt.Errorf("upload stalled: no data transmitted for 15s")
-		}
-		return fmt.Errorf("failed to send upload request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload request failed with status: %s", resp.Status)
-	}
-
-	return nil
-}
-
-// IdleTimeoutReader wraps an io.ReadCloser and cancels the context if no data
-// is read within the configured idle duration.
-type IdleTimeoutReader struct {
-	r           io.ReadCloser
-	idleTimeout time.Duration
-	timer       *time.Timer
-	cancel      func()
-}
-
-func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration, cancel func()) *IdleTimeoutReader {
-	tr := &IdleTimeoutReader{
-		r:           r,
-		idleTimeout: timeout,
-		cancel:      cancel,
-	}
-	tr.timer = time.AfterFunc(timeout, func() {
-		tr.cancel()
-	})
-	return tr
-}
-
-func (tr *IdleTimeoutReader) Read(p []byte) (int, error) {
-	tr.timer.Reset(tr.idleTimeout)
-	n, err := tr.r.Read(p)
-	if err != nil {
-		tr.timer.Stop()
-	}
-	return n, err
-}
-
-func (tr *IdleTimeoutReader) Close() error {
-	tr.timer.Stop()
-	return tr.r.Close()
-}
-
-type progressBar struct {
-	current int64
-	track   func(int64)
-}
-
-type progressTracker struct {
-	io.Reader
-	io.Closer
-	bar *progressBar
-}
-
-func (pt *progressTracker) Read(p []byte) (int, error) {
-	n, err := pt.Reader.Read(p)
-	if n > 0 && pt.bar != nil {
-		pt.bar.current += int64(n)
-		pt.bar.track(pt.bar.current)
-	}
-	return n, err
-}
