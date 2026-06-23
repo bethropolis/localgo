@@ -66,11 +66,20 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize in
 		return err
 	}
 
-	outFile, err := os.Create(filePath)
+	// Write to a temporary file first, then atomically rename on success
+	tempPath := filePath + ".tmp"
+	outFile, err := os.Create(tempPath)
 	if err != nil {
-		return fmt.Errorf("failed to create file %s: %w", filePath, err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer outFile.Close()
+
+	cleanup := true
+	defer func() {
+		outFile.Close()
+		if cleanup {
+			_ = os.Remove(tempPath)
+		}
+	}()
 
 	progressWriter := &ProgressWriter{
 		Writer:     outFile,
@@ -95,29 +104,17 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize in
 
 	_, err = io.CopyBuffer(progressWriter, hashingReader, *bufPtr)
 	if err != nil {
-		outFile.Close()
-		if removeErr := os.Remove(filePath); removeErr != nil {
-			if logger != nil {
-				logger.Warnw("Failed to remove partially written file", "path", filePath, "error", removeErr)
-			}
-		}
-		return fmt.Errorf("failed to copy stream to file %s: %w", filePath, err)
+		return fmt.Errorf("failed to copy stream: %w", err)
 	}
 
-	if closeErr := outFile.Close(); closeErr != nil {
-		if removeErr := os.Remove(filePath); removeErr != nil && logger != nil {
-			logger.Warnw("Failed to remove incomplete file after close error", "path", filePath, "error", removeErr)
-		}
-		return fmt.Errorf("failed to close and flush file %s: %w", filePath, closeErr)
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	// Verify SHA-256 checksum if the sender provided one
 	if hasher != nil {
 		calculatedHash := hex.EncodeToString(hasher.Sum(nil))
 		if calculatedHash != *expectedSha256 {
-			if removeErr := os.Remove(filePath); removeErr != nil && logger != nil {
-				logger.Warnw("Failed to remove corrupted file", "path", filePath, "error", removeErr)
-			}
 			return fmt.Errorf("integrity violation: SHA-256 mismatch (got %s, expected %s)", calculatedHash, *expectedSha256)
 		}
 		if logger != nil {
@@ -125,6 +122,7 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize in
 		}
 	}
 
+	// Apply timestamps to the temp file before promotion
 	if modified != nil || accessed != nil {
 		mtime := time.Now()
 		atime := time.Now()
@@ -151,12 +149,18 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize in
 			}
 		}
 
-		if err := os.Chtimes(filePath, atime, mtime); err != nil {
+		if err := os.Chtimes(tempPath, atime, mtime); err != nil {
 			if logger != nil {
 				logger.Warnw("Failed to apply timestamps", "path", filePath, "error", err)
 			}
 		}
 	}
+
+	// Atomically promote temp file to final path
+	if err := os.Rename(tempPath, filePath); err != nil {
+		return fmt.Errorf("failed to finalize transfer: %w", err)
+	}
+	cleanup = false
 
 	if logger != nil {
 		logger.Infow("Successfully saved stream", "path", filePath)
@@ -201,7 +205,10 @@ func ResolveDuplicateFilename(dir, baseName string) string {
 
 	// Fallback to avoid silent overwrite if (1) through (999) are all taken
 	randomBytes := make([]byte, 3)
-	rand.Read(randomBytes)
+	if _, err := rand.Read(randomBytes); err != nil {
+		newName := fmt.Sprintf("%s_%d%s", nameWithoutExt, time.Now().UnixNano(), ext)
+		return filepath.Join(dir, newName)
+	}
 	newName := fmt.Sprintf("%s_%s%s", nameWithoutExt, hex.EncodeToString(randomBytes), ext)
 	return filepath.Join(dir, newName)
 }

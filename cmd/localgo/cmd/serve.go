@@ -163,7 +163,7 @@ var serveCmd = &cobra.Command{
 		})
 
 		// Start discovery
-		err := discoverySvc.Start(ctx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled)
+		err := discoverySvc.Start(ctx, Cfg.ToMulticastDto(false))
 		if err != nil {
 			return fmt.Errorf("discovery service failed: %w", err)
 		}

@@ -2,6 +2,115 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.6.0 - 2026-06-24
+
+### Highlights
+- **Protocol audit**: full spec compliance pass — `ProtocolVersion` 2.1→2.0, session blocking (409), `POST /register`, constant-time PIN, correct fingerprint selection, DTO field cleanup, `Port`/`Protocol` in InfoDto, and more
+- **Modularisation**: 6 files exceeding 300 LOC split into 19 single-responsibility units for maintainability
+- **FreeBSD support**: rc.d init script and clipboard integration (`clipboard_unix.go` with `linux||freebsd` build tag)
+- **`--no-color` flag** and automatic `NO_COLOR` env var detection in logging
+- **Direct send & CIDR scan**: `localgo send --ip <address>` and `localgo scan --range <CIDR>` flags
+- **TUI file picker**: `localgo share` now opens an interactive file picker via `huh.FilePicker`
+- **Gateway-based subnet prioritization**: smarter LAN discovery and scanning
+- **GitHub Pages docs site** and online one-liner installer (`get-localgo.sh`)
+- **Scratch Docker image hardened**: CMD args fixed, env vars set for writable peer cache
+
+### Added
+- `--no-color`/`--no-colour` global flag, `NO_COLOR` env support (`pkg/logging`)
+- FreeBSD rc.d init script for `localgo serve` as a service
+- FreeBSD clipboard support via `clipboard_unix.go` (`linux || freebsd`)
+- `send --ip <address>` flag for direct IP-based send (skips discovery)
+- `scan --range <CIDR>` flag for CIDR-based subnet scanning
+- `ParseCIDRRange()` exported from `pkg/network/interfaces.go`
+- `SendToDevice()` exported from `pkg/send/send.go` for programmatic use
+- Gateway-based LAN subnet prioritization for scan and send
+- Interactive TUI file picker in `share` command (extracted shared picker to `pkg/cli`)
+- GitHub Pages docs site (`gh-pages` branch) and online installer
+- `XDG_CACHE_HOME` env var for writable peer cache in scratch Docker
+- `LOCALSEND_AUTO_ACCEPT=true` env var for scratch Docker image
+- Homebrew cask support via goreleaser `homebrew_casks`
+
+### Fixed (Protocol Audit)
+- `ProtocolVersion` correctly set to `"2.0"` (was `"2.1"`) to match the LocalSend spec
+- Session blocking: return 409 Conflict for concurrent sessions on same device
+- Validate `?sessionId` in `PrepareDownloadHandler`
+- Use `POST /register` instead of deprecated `GET /info` for HTTP subnet scan
+- Constant-time PIN comparison in `DownloadHandler`
+- Correct fingerprint selection in HTTP mode (random string, not certificate hash)
+- Add `Port`/`Protocol` to prepare-upload `InfoDto` per spec section 4.1
+- Use valid `deviceType "headless"` in private mode
+- Remove spec-noncompliant extra fields from DTO structs
+- Return no body on upload/cancel responses
+- Force HTTP for `share` command (browser download API compatibility)
+- Verify TLS certificate fingerprint during file transfer (MitM prevention)
+
+### Fixed (Other)
+- Case-insensitive TLS fingerprint comparison
+- Remove duplicate `-p` shorthand in `devices` command
+- Clipboard prompt removed from `send`; filepicker is the default TUI fallback
+- HTTP subnet scan fallback when multicast returns 0 devices
+- Filter local machine out of HTTP scan results
+- Send multicast response via multicast address instead of unicast
+- Check `xdg-open` availability before opening download directory
+- Scratch Docker: CMD args pass-through (no double `"localgo"`), `LOCALSEND_DOWNLOAD_DIR` and `LOCALSEND_SECURITY_DIR` env vars
+- `DiscoverDevices` private mode bypass in `cmd/send.go`
+- Device mutex for `LastSeen`/`Available`, `ReceiveService` ticker goroutine leak
+- Config set parsing, scan/discover timeouts, share port order, CIDR range, RNG fallback
+- PIN constant-time compare, server timeouts, private mode DTO bypass, JPEG bounds strip
+- Progress bar scrollback erasure fix, bounds-safe `FormatBytes` (no panic on >EB sizes)
+- Storage: atomic file writes via `.tmp` rename pattern; Windows: lazy DLL loading (`NewLazyDLL`)
+
+### Refactored
+- 6 files exceeding 300 LOC split into 19 smaller single-responsibility units
+- Shared TUI file picker extracted to `pkg/cli`
+- Code quality: `SortFunc`, mutex-safe anonymize, `saveTextAsFile`, interface extraction, tests
+
+### Commits (v0.5.10..v0.6.0)
+- `814b5fd` refactor: split 6 large files into 19 single-responsibility units
+- `0348ddb` chore: stable release prep — bugs, atomic writes, safety
+- `b43e423` feat: add GitHub Pages docs site and online installer
+- `16da01b` fix: stability fixes and enhancements
+- `51de7a2` fix: remove duplicate -p shorthand in devices command
+- `53ffe3d` feat(share): add TUI file picker, extract shared picker to pkg/cli
+- `3d9c9bb` fix: bug fix
+- `c0edea8` fix: case-insensitive TLS fingerprint comparison
+- `0f2c8ce` chore: final state after protocol audit fixes
+- `68d35a9` fix: improve TLS error diag, always prompt device picker, silence usage on errors
+- `d1af3c1` fix(protocol): force HTTP for share command (browser download API)
+- `221bfda` fix(security): verify TLS certificate fingerprint during file transfer
+- `52f39a8` fix(protocol): add port/protocol to prepare-upload info block
+- `4825c46` refactor(dto): remove spec-noncompliant extra fields from DTO structs
+- `0c4ea80` fix(protocol): use valid deviceType 'headless' in private mode, return no body on upload/cancel
+- `fd65357` fix(protocol): validate ?sessionId in PrepareDownloadHandler
+- `261b904` fix(protocol): implement session blocking, return 409 for concurrent sessions
+- `beb3629` fix(discovery): use POST /register instead of deprecated GET /info for HTTP subnet scan
+- `a08245a` fix(security): use constant-time PIN comparison in DownloadHandler
+- `01be941` fix(protocol): select correct fingerprint in HTTP mode (random string, not cert hash)
+- `c5b3a8d` fix(protocol): change ProtocolVersion from '2.1' to '2.0' to match spec
+- `2f47675` fix(send): remove interactive clipboard prompt, filepicker is the default TUI fallback
+- `cf37d46` fix(discover): fall back to HTTP subnet scan when multicast returns nothing
+- `de481d0` fix(scan): filter local machine out of HTTP scan results
+- `8d35b6c` fix(discovery): send multicast response via multicast addr instead of unicast back
+- `32a628d` feat(network): add gateway-based LAN subnet prioritization for scan and send
+- `47f61e2` fix: check xdg-open availability before opening download directory
+- `3599891` feat(freebsd): add rc.d init script for localgo service
+- `5f13a84` feat(freebsd): enable clipboard support via clipboard_unix.go (linux||freebsd)
+- `7aaf291` feat(cli): add --no-color flag, respect NO_COLOR env in logging Init
+- `97a0c4a` docs(help): add completion cmd, missing flags for serve/share/send, --private/--config options
+- `138952b` fix(help): correct discover --timeout default from 5 to 10
+- `8bfafe2` fix(security): bypass DiscoverDevices private mode in cmd/send.go
+- `413bcd1` refactor(code quality): SortFunc, mutex-safe anonymize, saveTextAsFile, interfaces, tests
+- `ad832f9` fix(concurrency): Device mutex for LastSeen/Available, ReceiveService ticker goroutine leak
+- `64be12d` fix(logic): config set parsing, scan/discover timeouts, share port order, CIDR range, RNG fallback
+- `9144f42` fix(security): PIN constant-time compare, server timeouts, private mode DTO bypass, strip JPEG bounds
+- `2a8a00b` fix(scratch): add XDG_CACHE_HOME so peer cache is writable
+- `f6ed6a5` fix(scratch): add LOCALSEND_AUTO_ACCEPT=true env var
+- `b013c88` fix: create discovery DTOs after server binds port
+- `37be6e8` fix(scratch): set LOCALSEND_DOWNLOAD_DIR and LOCALSEND_SECURITY_DIR env vars
+- `c01ef58` fix: docker-start passes CMD args correctly (no double localgo)
+- `be29c69` feat: add send --ip, scan --range flags, ParseCIDRRange, export SendToDevice
+- `6f8a9cc` feat: add private mode, progress bar fixes, metadata stripping, and core improvements
+
 ## v0.4.0 - 2026-05-11
 
 ### Highlights

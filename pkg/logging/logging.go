@@ -49,7 +49,8 @@ func timeEncoder(t zapcore.TimeEncoder) zapcore.TimeEncoder {
 //
 //   - verbose: enable debug-level output
 //   - jsonFmt: output newline-delimited JSON instead of human-readable text
-func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
+//   - noColor: disable ANSI color escape sequences in log output
+func Init(verbose, jsonFmt, noColor bool) *zap.SugaredLogger {
 	level := zapcore.InfoLevel
 	if verbose {
 		level = zapcore.DebugLevel
@@ -92,6 +93,10 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 	var core zapcore.Core
 	if verbose {
 		// Also log to stdout
+		levelEnc := zapcore.LevelEncoder(colourLevelEncoder)
+		if noColor {
+			levelEnc = zapcore.CapitalLevelEncoder
+		}
 		stdoutEncCfg := zapcore.EncoderConfig{
 			TimeKey:          "T",
 			LevelKey:         "L",
@@ -100,7 +105,7 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 			MessageKey:       "M",
 			StacktraceKey:    "S",
 			LineEnding:       zapcore.DefaultLineEnding,
-			EncodeLevel:      colourLevelEncoder,
+			EncodeLevel:      levelEnc,
 			EncodeTime:       zapcore.TimeEncoderOfLayout("15:04:05"),
 			EncodeDuration:   zapcore.StringDurationEncoder,
 			EncodeCaller:     zapcore.ShortCallerEncoder,
@@ -117,7 +122,7 @@ func Init(verbose, jsonFmt bool) *zap.SugaredLogger {
 	if verbose {
 		opts = append(opts, zap.AddStacktrace(zapcore.ErrorLevel))
 	} else {
-		opts = []zap.Option{zap.AddCallerSkip(0)} // Minimal options for non-verbose
+		opts = []zap.Option{} // Minimal options for non-verbose
 	}
 
 	logger := zap.New(core, opts...)

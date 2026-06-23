@@ -96,8 +96,8 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	s.httpServer = &http.Server{
 		Addr:              addr,
 		Handler:           s.muxRouter,
-		ReadTimeout:       0,
-		WriteTimeout:      0,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      300 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -178,6 +178,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	s.logger.Info("Server stopped.")
 	s.httpServer = nil
+	if s.receiveService != nil {
+		s.receiveService.Close()
+	}
 	if s.historyLog != nil {
 		if err := s.historyLog.Close(); err != nil {
 			s.logger.Warnf("Failed to close history log: %v", err)

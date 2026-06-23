@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -63,11 +64,23 @@ var configSetCmd = &cobra.Command{
 		existingVal := v.Get(key)
 		switch existingVal.(type) {
 		case int, int64:
-			v.Set(key, v.GetInt(key))
+			val, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid integer value %q: %w", args[1], err)
+			}
+			v.Set(key, val)
 		case bool:
-			v.Set(key, v.GetBool(key))
+			val, err := strconv.ParseBool(args[1])
+			if err != nil {
+				return fmt.Errorf("invalid boolean value %q: %w", args[1], err)
+			}
+			v.Set(key, val)
 		case float64:
-			v.Set(key, v.GetFloat64(key))
+			val, err := strconv.ParseFloat(args[1], 64)
+			if err != nil {
+				return fmt.Errorf("invalid float value %q: %w", args[1], err)
+			}
+			v.Set(key, val)
 		default:
 			v.Set(key, args[1])
 		}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,13 +55,9 @@ var devicesCmd = &cobra.Command{
 			peers = anonymizeDeviceSlice(peers)
 		}
 
-		for i := 0; i < len(peers); i++ {
-			for j := i + 1; j < len(peers); j++ {
-				if peers[i].LastSeen.Before(peers[j].LastSeen) {
-					peers[i], peers[j] = peers[j], peers[i]
-				}
-			}
-		}
+		slices.SortFunc(peers, func(a, b *model.Device) int {
+			return b.GetLastSeen().Compare(a.GetLastSeen())
+		})
 
 		titleStyle := cli.HeaderStyle.Padding(0, 1).MarginBottom(1)
 		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
@@ -83,8 +80,8 @@ var devicesCmd = &cobra.Command{
 		now := time.Now()
 		for _, d := range peers {
 			lastSeenStr := "Unknown"
-			if !d.LastSeen.IsZero() {
-				diff := now.Sub(d.LastSeen)
+			if !d.GetLastSeen().IsZero() {
+				diff := now.Sub(d.GetLastSeen())
 				if diff < 1*time.Minute {
 					lastSeenStr = cli.SuccessStyle.Render("Online")
 				} else if diff < 1*time.Hour {
@@ -117,7 +114,7 @@ var devicesCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(devicesCmd)
 	devicesCmd.Flags().BoolVar(&devicesjsonOutput, "json", false, "Output in JSON format")
-	devicesCmd.Flags().BoolVarP(&devicesProbe, "probe", "p", false, "Probe cached devices to verify if they are currently online")
+	devicesCmd.Flags().BoolVar(&devicesProbe, "probe", false, "Probe cached devices to verify if they are currently online")
 
 	devicesCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("devices"); h != nil {

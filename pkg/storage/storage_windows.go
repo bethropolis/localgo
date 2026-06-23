@@ -7,10 +7,12 @@ import (
 	"unsafe"
 )
 
-func getAvailableBytes(path string) (uint64, error) {
-	h := syscall.MustLoadDLL("kernel32.dll")
-	c := h.MustFindProc("GetDiskFreeSpaceExW")
+var (
+	modkernel32          = syscall.NewLazyDLL("kernel32.dll")
+	procGetDiskFreeSpace = modkernel32.NewProc("GetDiskFreeSpaceExW")
+)
 
+func getAvailableBytes(path string) (uint64, error) {
 	var freeBytes int64
 
 	pathPtr, err := syscall.UTF16PtrFromString(path)
@@ -18,7 +20,7 @@ func getAvailableBytes(path string) (uint64, error) {
 		return 0, err
 	}
 
-	r, _, err := c.Call(
+	r, _, err := procGetDiskFreeSpace.Call(
 		uintptr(unsafe.Pointer(pathPtr)),
 		uintptr(unsafe.Pointer(&freeBytes)),
 		0,

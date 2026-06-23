@@ -48,13 +48,18 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	downloadCapable := h.sendService.GetSession() != nil // True if we have an active send session
 
+	fingerprint := h.config.RandomFingerprint
+	if h.config.HttpsEnabled {
+		fingerprint = h.config.SecurityContext.CertificateHash
+	}
+
 	alias := h.config.Alias
 	deviceModel := h.config.DeviceModel
 	deviceType := h.config.DeviceType
 	if h.config.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 
 	dto := model.InfoDto{
@@ -62,7 +67,7 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 		Version:     config.ProtocolVersion,
 		DeviceModel: deviceModel,
 		DeviceType:  deviceType,
-		Fingerprint: h.config.SecurityContext.CertificateHash,
+		Fingerprint: fingerprint,
 		Download:    downloadCapable,
 	}
 
@@ -110,13 +115,18 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 
 	downloadCapable := h.sendService.GetSession() != nil
 
+	fingerprint := h.config.RandomFingerprint
+	if h.config.HttpsEnabled {
+		fingerprint = h.config.SecurityContext.CertificateHash
+	}
+
 	respAlias := h.config.Alias
 	respDeviceModel := h.config.DeviceModel
 	respDeviceType := h.config.DeviceType
 	if h.config.Private {
 		respAlias = "Anonymous"
 		respDeviceModel = nil
-		respDeviceType = model.DeviceTypeOther
+		respDeviceType = model.DeviceTypeHeadless
 	}
 
 	responseDto := model.InfoDto{
@@ -124,7 +134,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 		Version:     config.ProtocolVersion,
 		DeviceModel: respDeviceModel,
 		DeviceType:  respDeviceType,
-		Fingerprint: h.config.SecurityContext.CertificateHash,
+		Fingerprint: fingerprint,
 		Download:    downloadCapable,
 	}
 

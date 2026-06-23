@@ -12,9 +12,6 @@ const (
 	DeviceTypeWeb      DeviceType = "web"
 	DeviceTypeHeadless DeviceType = "headless"
 	DeviceTypeServer   DeviceType = "server"
-	DeviceTypeLaptop   DeviceType = "laptop"
-	DeviceTypeTablet   DeviceType = "tablet"
-	DeviceTypeOther    DeviceType = "other"
 )
 
 // ProtocolType defines the protocol type.
@@ -91,13 +88,16 @@ func (d *DeviceInfo) ToMulticastDto(announce bool) MulticastDto {
 }
 
 // InfoDto represents the response for /info and /register endpoints.
+// Also used as the info block in prepare-upload requests (port + protocol required).
 type InfoDto struct {
-	Alias       string     `json:"alias"`
-	Version     string     `json:"version"`
-	DeviceModel *string    `json:"deviceModel"` // nullable
-	DeviceType  DeviceType `json:"deviceType"`
-	Fingerprint string     `json:"fingerprint"`
-	Download    bool       `json:"download"`
+	Alias       string       `json:"alias"`
+	Version     string       `json:"version"`
+	DeviceModel *string      `json:"deviceModel"` // nullable
+	DeviceType  DeviceType   `json:"deviceType"`
+	Fingerprint string       `json:"fingerprint"`
+	Port        int          `json:"port,omitempty"`
+	Protocol    ProtocolType `json:"protocol,omitempty"`
+	Download    bool         `json:"download"`
 }
 
 // RegisterDto represents the request body for /register endpoint (sent by the discoverer).
@@ -127,13 +127,8 @@ type MulticastDto struct {
 
 // PrepareUploadRequestDto is sent to prepare file uploads
 type PrepareUploadRequestDto struct {
-	Info        InfoDto            `json:"info"`
-	Files       map[string]FileDto `json:"files"`
-	SendZipped  bool               `json:"sendZipped"`
-	ForceBulk   bool               `json:"forceBulk"`
-	TargetPath  string             `json:"targetPath"`
-	KeepFolders bool               `json:"keepFolders"`
-	Token       string             `json:"token,omitempty"`
+	Info  InfoDto            `json:"info"`
+	Files map[string]FileDto `json:"files"`
 }
 
 // FileDto contains information about a file being uploaded
@@ -145,7 +140,6 @@ type FileDto struct {
 	SHA256   *string       `json:"sha256,omitempty"`   // Use pointer for nullable
 	Preview  *string       `json:"preview,omitempty"`  // Use pointer for nullable
 	Metadata *FileMetadata `json:"metadata,omitempty"` // Use pointer for nullable
-	Legacy   bool          `json:"legacy,omitempty"`   // Added from Dart code
 }
 
 // FileMetadata holds optional file metadata (added in v2.1)
@@ -158,7 +152,6 @@ type FileMetadata struct {
 type PrepareUploadResponseDto struct {
 	SessionID string            `json:"sessionId"`
 	Files     map[string]string `json:"files"`
-	Token     string            `json:"token,omitempty"`
 }
 
 // ReceiveRequestResponseDto is returned for download preparations

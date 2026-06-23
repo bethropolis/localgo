@@ -1,23 +1,24 @@
 package config
 
 import (
-	"github.com/spf13/viper"
 	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
+
+	mathrand "math/rand/v2"
 
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
 const (
 	DefaultPort           = 53317
 	DefaultMulticastGroup = "224.0.0.167"
-	ProtocolVersion       = "2.1"
+	ProtocolVersion       = "2.0"
 	DefaultSecurityDir    = ".localgo_security"
 	DefaultSecurityFile   = "context.json"
 )
@@ -217,12 +218,12 @@ func generateRandomID(length int) string {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, length)
 	if _, err := rand.Read(result); err != nil {
-		timeBasedID := strconv.FormatInt(time.Now().UnixNano(), 10)
-		if len(timeBasedID) >= length {
-			return timeBasedID[:length]
-		}
-		for i := 0; i < length; i++ {
-			result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+		// If crypto/rand fails, use math/rand/v2 seeded from crypto/rand
+		var seed [32]byte
+		rand.Read(seed[:]) // best-effort seed
+		r := newRandFromSeed(seed)
+		for i := range result {
+			result[i] = chars[r.IntN(len(chars))]
 		}
 		return string(result)
 	}
@@ -230,6 +231,14 @@ func generateRandomID(length int) string {
 		result[i] = chars[int(result[i])%len(chars)]
 	}
 	return string(result)
+}
+
+func newRandFromSeed(seed [32]byte) *mathrand.Rand {
+	var rngSeed uint64
+	for i := 0; i < 8 && i < len(seed); i++ {
+		rngSeed |= uint64(seed[i]) << (i * 8)
+	}
+	return mathrand.New(mathrand.NewPCG(rngSeed, uint64(seed[0])))
 }
 
 // ToRegisterDto converts Config to model.RegisterDto for discovery requests
@@ -246,7 +255,7 @@ func (c *Config) ToRegisterDto() model.RegisterDto {
 	if c.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 	return model.RegisterDto{
 		Alias:       alias,
@@ -272,7 +281,7 @@ func (c *Config) ToInfoDto() model.InfoDto {
 	if c.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 	return model.InfoDto{
 		Alias:       alias,

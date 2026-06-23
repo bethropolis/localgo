@@ -26,7 +26,7 @@ func (c *Config) ToMulticastDto(download bool) model.MulticastDto {
 	if c.Private {
 		alias = "Anonymous"
 		deviceModel = nil
-		deviceType = model.DeviceTypeOther
+		deviceType = model.DeviceTypeHeadless
 	}
 	return model.MulticastDto{
 		Alias:       alias,

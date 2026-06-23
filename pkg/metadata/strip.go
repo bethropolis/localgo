@@ -31,6 +31,11 @@ func stripJPEG(path string) error {
 	}
 	defer f.Close()
 
+	fi, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("strip: stat: %w", err)
+	}
+
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, f); err != nil {
 		return fmt.Errorf("strip: read: %w", err)
@@ -48,7 +53,7 @@ func stripJPEG(path string) error {
 	out.Write(data[:2]) // SOI
 
 	pos := 2
-	for pos < len(data) {
+	for pos+1 < len(data) {
 		if data[pos] != 0xFF {
 			break
 		}
@@ -63,6 +68,9 @@ func stripJPEG(path string) error {
 
 		// Markers without length: SOI (0xD8), EOI (0xD9), TEM (0x01)
 		if marker == 0xD9 || marker == 0x00 || marker == 0x01 {
+			if pos+2 > len(data) {
+				break
+			}
 			out.Write(data[pos : pos+2])
 			pos += 2
 			if marker == 0xD9 {
@@ -89,7 +97,7 @@ func stripJPEG(path string) error {
 		pos += segLen
 	}
 
-	return os.WriteFile(path, out.Bytes(), 0644)
+	return os.WriteFile(path, out.Bytes(), fi.Mode())
 }
 
 // stripPNG removes tEXt, zTXt, and iTXt metadata chunks.
@@ -99,6 +107,11 @@ func stripPNG(path string) error {
 		return fmt.Errorf("strip: open: %w", err)
 	}
 	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("strip: stat: %w", err)
+	}
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, f); err != nil {
@@ -141,5 +154,5 @@ func stripPNG(path string) error {
 		pos += 12 + chunkLen
 	}
 
-	return os.WriteFile(path, out.Bytes(), 0644)
+	return os.WriteFile(path, out.Bytes(), fi.Mode())
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -29,12 +30,6 @@ var scanCmd = &cobra.Command{
 	Short: "Scan the network for LocalGo devices using HTTP",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		// Increase default timeout for better reliability
-		scanTimeout := scantimeout
-		if scanTimeout < 15 {
-			scanTimeout = 15
-		}
-
 		scanPort := Cfg.Port
 		if scanport > 0 {
 			scanPort = scanport
@@ -49,7 +44,7 @@ var scanCmd = &cobra.Command{
 			}
 			ips = parsedIPs
 			if !scanquiet {
-				cli.PrintHeader(fmt.Sprintf("Scanning CIDR range %s on port %d (timeout: %ds)...", scanrange, scanPort, scanTimeout))
+				cli.PrintHeader(fmt.Sprintf("Scanning CIDR range %s on port %d (timeout: %ds)...", scanrange, scanPort, scantimeout))
 				cli.PrintInfo("Scanning %d IP addresses...", len(ips))
 				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
 			}
@@ -60,13 +55,23 @@ var scanCmd = &cobra.Command{
 				return fmt.Errorf("failed to get local network IPs: %w", err)
 			}
 
+			// Prioritize the subnet connected to the default gateway
+			if gwIP, err := network.PrimaryLANIP(); err == nil {
+				for i, ip := range localIPs {
+					if ip.Equal(gwIP) && i > 0 {
+						localIPs[0], localIPs[i] = localIPs[i], localIPs[0]
+						break
+					}
+				}
+			}
+
 			for _, ip := range localIPs {
 				subnetIPs := network.GetSubnetIPs(ip)
 				ips = append(ips, subnetIPs...)
 			}
 
 			if !scanquiet {
-				cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scanTimeout))
+				cli.PrintHeader(fmt.Sprintf("Scanning network on port %d (timeout: %ds)...", scanPort, scantimeout))
 				cli.PrintInfo("Scanning %d IP addresses (derived from %d local interfaces)...", len(ips), len(localIPs))
 				cli.PrintInfo("Protocols: HTTPS first, then HTTP fallback")
 			}
@@ -76,7 +81,7 @@ var scanCmd = &cobra.Command{
 		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
 
 		// Perform scan
-		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scanTimeout)*time.Second)
+		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scantimeout)*time.Second)
 		defer cancel()
 
 		var foundDevices []*model.Device
@@ -97,6 +102,17 @@ var scanCmd = &cobra.Command{
 			zap.S().Warnf("Scan completed with warnings: %v", scanErr)
 			cli.PrintWarning("Scan completed with warnings: %v", scanErr)
 		}
+
+		// Filter out the local machine from results
+		localIPs, _ := network.GetLocalIPAddresses()
+		foundDevices = slices.DeleteFunc(foundDevices, func(d *model.Device) bool {
+			for _, local := range localIPs {
+				if d.IP == local.String() {
+					return true
+				}
+			}
+			return false
+		})
 
 		if !scanquiet && len(foundDevices) == 0 {
 			zap.S().Warnf("No devices found during scan")

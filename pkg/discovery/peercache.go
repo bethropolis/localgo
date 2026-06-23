@@ -93,7 +93,7 @@ func (pc *PeerCache) load() {
 
 	for _, d := range list {
 		// Evict peers not seen in the last 30 days
-		if !d.LastSeen.IsZero() && now.Sub(d.LastSeen) > staleThreshold {
+		if !d.GetLastSeen().IsZero() && now.Sub(d.GetLastSeen()) > staleThreshold {
 			evictedCount++
 			continue
 		}
@@ -205,11 +205,12 @@ func ProbeCached(ctx context.Context, cache *PeerCache, onFound func(*model.Devi
 
 			if resp.StatusCode == http.StatusOK {
 				now := time.Now()
-				d.LastSeen = now
-				if logger != nil {
-					logger.Debugf("Cached peer %s (%s:%d) responded", d.Alias, d.IP, d.Port)
-				}
-				onFound(d)
+			d.SetLastSeen(now)
+			cache.Save(d) // persist updated LastSeen to disk
+			if logger != nil {
+				logger.Debugf("Cached peer %s (%s:%d) responded", d.Alias, d.IP, d.Port)
+			}
+			onFound(d)
 			}
 		}(device)
 	}

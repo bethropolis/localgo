@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/jackpal/gateway"
 )
 
 // GetLocalIP returns the primary non-loopback IP address of the machine
@@ -35,8 +37,8 @@ func GetLocalIPAddresses() ([]net.IP, error) {
 	}
 
 	for _, i := range ifaces {
-		// Skip down, loopback, and non-multicast interfaces
-		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 || (i.Flags&net.FlagMulticast) == 0 {
+		// Skip down and loopback interfaces
+		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
 			continue
 		}
 
@@ -165,4 +167,16 @@ func GetSubnetIPs(ip net.IP) []net.IP {
 		ips = append(ips, newIP)
 	}
 	return ips
+}
+
+// DefaultGatewayIP returns the IP address of the default network gateway.
+func DefaultGatewayIP() (net.IP, error) {
+	return gateway.DiscoverGateway()
+}
+
+// PrimaryLANIP returns the local IP address on the interface that owns
+// the default gateway. This is useful for prioritizing the real LAN
+// subnet when scanning, rather than scanning Docker/VPN subnets.
+func PrimaryLANIP() (net.IP, error) {
+	return gateway.DiscoverInterface()
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,13 +37,18 @@ func (h *DownloadHandler) PrepareDownloadHandler(w http.ResponseWriter, r *http.
 	// --- PIN Check ---
 	if h.config.PIN != "" {
 		pin := r.URL.Query().Get("pin")
-		if pin != h.config.PIN {
+		if subtle.ConstantTimeCompare([]byte(pin), []byte(h.config.PIN)) != 1 {
 			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
 			return
 		}
 	}
 
-	session := h.sendService.GetSession()
+	var session *services.ActiveSendSession
+	if sessionID := r.URL.Query().Get("sessionId"); sessionID != "" {
+		session = h.sendService.GetSessionByID(sessionID)
+	} else {
+		session = h.sendService.GetSession()
+	}
 	if session == nil {
 		httputil.RespondError(w, http.StatusNotFound, "No active sharing session")
 		return
@@ -67,7 +73,7 @@ func (h *DownloadHandler) DownloadHandler(w http.ResponseWriter, r *http.Request
 	// --- PIN Check ---
 	if h.config.PIN != "" {
 		pin := r.URL.Query().Get("pin")
-		if pin != h.config.PIN {
+		if subtle.ConstantTimeCompare([]byte(pin), []byte(h.config.PIN)) != 1 {
 			httputil.RespondError(w, http.StatusUnauthorized, "Invalid PIN")
 			return
 		}

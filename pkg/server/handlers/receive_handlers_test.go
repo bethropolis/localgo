@@ -113,11 +113,11 @@ func TestPrepareUploadHandlerV2_PINValidation(t *testing.T) {
 	}
 }
 
-func TestPrepareUploadHandlerV2_ConcurrentSessions(t *testing.T) {
+func TestPrepareUploadHandlerV2_RejectsConcurrentSessions(t *testing.T) {
 	handler, receiveService, _ := setupReceiveHandler(t, nil)
 
 	// Create an active session
-	session1, _ := receiveService.CreateSession(model.DeviceInfo{IP: "192.168.1.100"}, map[string]model.FileDto{"f": {ID: "f"}})
+	receiveService.CreateSession(model.DeviceInfo{IP: "192.168.1.100"}, map[string]model.FileDto{"f": {ID: "f"}})
 
 	reqDto := model.PrepareUploadRequestDto{
 		Files: map[string]model.FileDto{"file1": {ID: "file1", FileName: "test.txt", Size: 10}},
@@ -129,15 +129,8 @@ func TestPrepareUploadHandlerV2_ConcurrentSessions(t *testing.T) {
 
 	handler.PrepareUploadHandlerV2(rr, req)
 
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code for concurrent session: got %v want %v", status, http.StatusOK)
-	}
-
-	var respDto model.PrepareUploadResponseDto
-	json.NewDecoder(rr.Body).Decode(&respDto)
-
-	if respDto.SessionID == "" || respDto.SessionID == session1.SessionID {
-		t.Errorf("expected new session to be created")
+	if status := rr.Code; status != http.StatusConflict {
+		t.Errorf("handler returned wrong status code for concurrent session: got %v want %v", status, http.StatusConflict)
 	}
 }
 

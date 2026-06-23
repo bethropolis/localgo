@@ -17,7 +17,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/send"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -36,37 +35,11 @@ var (
 )
 
 var sendCmd = &cobra.Command{
-	Use:   "send",
-	Short: "Send a file to another LocalGo device",
+	Use:          "send",
+	Short:        "Send a file to another LocalGo device",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
-
-		// Interactive fallback: if no files specified, check clipboard for text content
-		if len(files) == 0 && !sendclipboard {
-			if clipboard.Available() {
-				text, err := clipboard.Read()
-				if err == nil && strings.TrimSpace(text) != "" {
-					preview := strings.ReplaceAll(text, "\n", " ")
-					if len(preview) > 50 {
-						preview = preview[:50] + "…"
-					}
-
-					var useClip bool = true
-					form := huh.NewForm(
-						huh.NewGroup(
-							huh.NewConfirm().
-								Title("No files specified. Send clipboard content instead?").
-								Description(fmt.Sprintf("Current clipboard: %q", preview)).
-								Value(&useClip),
-						),
-					).WithTheme(huh.ThemeCharm())
-
-					if err := form.Run(); err == nil && useClip {
-						sendclipboard = true
-					}
-				}
-			}
-		}
 
 		if sendclipboard {
 			text, err := clipboard.Read()
@@ -92,7 +65,14 @@ var sendCmd = &cobra.Command{
 		}
 
 		if len(files) == 0 {
-			return fmt.Errorf("no file specified: use positional args, --file flag, or --clipboard")
+			selected, err := cli.LaunchFilePicker()
+			if err == nil && selected != "" {
+				files = []string{selected}
+			}
+		}
+
+		if len(files) == 0 {
+			return fmt.Errorf("no file specified: use --file flag, --clipboard, or select from the file browser")
 		}
 
 		for _, file := range files {
@@ -165,6 +145,8 @@ var sendCmd = &cobra.Command{
 		}
 
 		target := sendto
+		var selectedDevice *model.Device
+
 		if target == "" {
 			sendConfig := discovery.DefaultServiceConfig()
 			sendConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
@@ -178,8 +160,8 @@ var sendCmd = &cobra.Command{
 					devices, discErr = discovery.DiscoverDevices(
 						context.Background(),
 						sendConfig,
-						Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash,
-						Cfg.DeviceModel, Cfg.HttpsEnabled,
+						Cfg,
+						Cfg.HttpsEnabled,
 					)
 				}).
 				Run()
@@ -192,6 +174,16 @@ var sendCmd = &cobra.Command{
 			if len(devices) == 0 {
 				localIPs, ipErr := network.GetLocalIPAddresses()
 				if ipErr == nil && len(localIPs) > 0 {
+					// Prioritize the subnet connected to the default gateway
+					if gwIP, err := network.PrimaryLANIP(); err == nil {
+						for i, ip := range localIPs {
+							if ip.Equal(gwIP) && i > 0 {
+								localIPs[0], localIPs[i] = localIPs[i], localIPs[0]
+								break
+							}
+						}
+					}
+
 					_ = spinner.New().
 						Title("No devices via multicast. Scanning local subnets...").
 						Action(func() {
@@ -223,6 +215,7 @@ var sendCmd = &cobra.Command{
 			}
 			target = selected.Alias
 			sendport = selected.Port
+			selectedDevice = selected
 		}
 
 		if sendalias != "" {
@@ -242,17 +235,24 @@ var sendCmd = &cobra.Command{
 				cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 			}
 		}
-		cli.PrintInfo("To: %s", target)
 		fromAlias := Cfg.Alias
 		if Cfg.Private {
 			fromAlias = "Anonymous"
 		}
-		cli.PrintInfo("From: %s", fromAlias)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
 		defer cancel()
 
-		err := send.SendFiles(ctx, Cfg, files, target, sendport, zap.S())
+		var err error
+		if selectedDevice != nil {
+			cli.PrintInfo("To: %s (%s:%d)", selectedDevice.Alias, selectedDevice.IP, selectedDevice.Port)
+			cli.PrintInfo("From: %s", fromAlias)
+			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, zap.S())
+		} else {
+			cli.PrintInfo("To: %s", target)
+			cli.PrintInfo("From: %s", fromAlias)
+			err = send.SendFiles(ctx, Cfg, files, target, sendport, zap.S())
+		}
 		if err != nil {
 			return fmt.Errorf("failed to send files: %w", err)
 		}

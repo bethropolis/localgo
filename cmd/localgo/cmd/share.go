@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"archive/zip"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +26,7 @@ var (
 	sharefiles       []string
 	shareport        int
 	shareuseHTTP     bool
+	shareuseHTTPS    bool
 	sharepin         string
 	sharealias       string
 	shareautoAccept  bool
@@ -47,15 +46,28 @@ var shareCmd = &cobra.Command{
 		files := sharefiles
 
 		if len(files) == 0 {
-			return fmt.Errorf("file parameter is required (use --file)")
+			selected, err := cli.LaunchFilePicker()
+			if err != nil {
+				return fmt.Errorf("file picker failed: %w", err)
+			}
+			if selected == "" {
+				return fmt.Errorf("no file selected")
+			}
+			files = []string{selected}
+			// Auto-enable zipping if the user selected a directory without --zip
+			if info, statErr := os.Stat(selected); statErr == nil && info.IsDir() && !sharezip {
+				sharezip = true
+			}
 		}
 
 		// Apply overrides
 		if shareport > 0 {
 			Cfg.Port = shareport
 		}
-		if shareuseHTTP {
-			Cfg.HttpsEnabled = false
+		// Browser download API must use HTTP (browsers reject self-signed certs)
+		Cfg.HttpsEnabled = false
+		if shareuseHTTPS {
+			Cfg.HttpsEnabled = true
 		}
 		if sharepin != "" {
 			Cfg.PIN = sharepin
@@ -144,7 +156,7 @@ var shareCmd = &cobra.Command{
 
 			displayName := filepath.Base(file)
 			if sharezip && strings.HasSuffix(file, ".zip") {
-				displayName = filepath.Base(file[:len(file)-4]) + ".zip"
+				displayName = strings.TrimSuffix(filepath.Base(file), ".zip") + ".zip"
 			}
 
 			fileDto := model.FileDto{
@@ -183,7 +195,21 @@ var shareCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		// Initialize discovery service with Download: true
+		// Start server first to determine the actual port
+		serverErrChan := make(chan error, 1)
+		serverReadyChan := make(chan struct{}, 1)
+		go func() {
+			serverErrChan <- srv.Start(ctx, serverReadyChan)
+		}()
+
+		// Wait for server to be ready
+		select {
+		case err := <-serverErrChan:
+			return fmt.Errorf("server failed: %w", err)
+		case <-serverReadyChan:
+		}
+
+		// Initialize discovery service AFTER server is ready (Cfg.Port may have changed if port was busy)
 		discoverySvcConfig := discovery.DefaultServiceConfig()
 		discoverySvcConfig.MulticastConfig.Port = Cfg.Port
 		discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", Cfg.MulticastGroup, Cfg.Port)
@@ -200,22 +226,8 @@ var shareCmd = &cobra.Command{
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
 		discoverySvc.SetPeerCache(peerCache)
 
-		// Start server first
-		serverErrChan := make(chan error, 1)
-		serverReadyChan := make(chan struct{}, 1)
-		go func() {
-			serverErrChan <- srv.Start(ctx, serverReadyChan)
-		}()
-
-		// Wait for server to be ready
-		select {
-		case err := <-serverErrChan:
-			return fmt.Errorf("server failed: %w", err)
-		case <-serverReadyChan:
-		}
-
 		// Start discovery AFTER server is ready
-		err = discoverySvc.Start(ctx, Cfg.Alias, Cfg.Port, Cfg.SecurityContext.CertificateHash, Cfg.DeviceType, Cfg.DeviceModel, Cfg.HttpsEnabled)
+		err = discoverySvc.Start(ctx, Cfg.ToMulticastDto(true))
 		if err != nil {
 			return fmt.Errorf("discovery service failed: %w", err)
 		}
@@ -257,7 +269,8 @@ func init() {
 	rootCmd.AddCommand(shareCmd)
 	shareCmd.Flags().StringSliceVar(&sharefiles, "file", []string{}, "File or directory to share")
 	shareCmd.Flags().IntVar(&shareport, "port", 0, "Port to run the server on")
-	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Use HTTP instead of HTTPS")
+	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Deprecated (HTTP is now default for share)")
+	shareCmd.Flags().BoolVar(&shareuseHTTPS, "https", false, "Use HTTPS (browsers will reject self-signed certs)")
 	shareCmd.Flags().StringVar(&sharepin, "pin", "", "PIN for authentication")
 	shareCmd.Flags().StringVar(&sharealias, "alias", "", "Device alias")
 	shareCmd.Flags().BoolVar(&shareautoAccept, "auto-accept", false, "Auto-accept incoming files")
@@ -276,67 +289,4 @@ func init() {
 	})
 }
 
-func zipDirToTemp(dir string) (string, error) {
-	baseName := filepath.Base(dir)
-	if baseName == "." || baseName == "/" {
-		baseName = "archive"
-	}
-	zipPath, err := os.CreateTemp("", "localgo-"+baseName+"-*.zip")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp zip: %w", err)
-	}
-	zipPath.Close()
-	zipPathName := zipPath.Name()
 
-	fZ, err := os.OpenFile(zipPathName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
-	if err != nil {
-		os.Remove(zipPathName)
-		return "", fmt.Errorf("failed to reopen temp zip: %w", err)
-	}
-	zipWriter := zip.NewWriter(fZ)
-
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			rel = info.Name()
-		}
-		rel = filepath.ToSlash(rel)
-
-		header, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
-		header.Name = rel
-		header.Method = zip.Deflate
-
-		w, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return err
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w, f)
-		f.Close()
-		return err
-	})
-	if err != nil {
-		zipWriter.Close()
-		os.Remove(zipPathName)
-		return "", err
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		os.Remove(zipPathName)
-		return "", err
-	}
-
-	return zipPathName, nil
-}

@@ -71,55 +71,10 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 	}
 }
 
-func (hd *HTTPDiscovery) fetchDeviceInfo(ctx context.Context, ip net.IP, port int, scheme string) (*model.Device, error) {
-	url := fmt.Sprintf("%s://%s/api/localsend/v2/info", scheme, net.JoinHostPort(ip.String(), strconv.Itoa(port)))
-
-	hd.logger.Debugf("HTTPDiscovery: Fetching device info from URL: %s", url)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := hd.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var infoDto model.InfoDto
-	if err := json.Unmarshal(body, &infoDto); err != nil {
-		return nil, fmt.Errorf("failed to parse response body: %w", err)
-	}
-
-	return &model.Device{
-		IP:          ip.String(),
-		Version:     infoDto.Version,
-		Protocol:    model.ProtocolType(scheme),
-		Port:        port,
-		Alias:       infoDto.Alias,
-		Fingerprint: infoDto.Fingerprint,
-		DeviceModel: infoDto.DeviceModel,
-		DeviceType:  infoDto.DeviceType,
-		Download:    infoDto.Download,
-		LastSeen:    time.Now(),
-		Available:   true,
-	}, nil
-}
-
 func (hd *HTTPDiscovery) FetchDeviceInfo(ctx context.Context, ip net.IP, port int) (*model.Device, error) {
-	device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
+	device, err := hd.RegisterWithDevice(ctx, ip, port, "https")
 	if err != nil {
-		device, err = hd.fetchDeviceInfo(ctx, ip, port, "http")
+		device, err = hd.RegisterWithDevice(ctx, ip, port, "http")
 	}
 	return device, err
 }
@@ -195,9 +150,9 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			device, err := hd.fetchDeviceInfo(ctx, ip, port, "https")
+			device, err := hd.RegisterWithDevice(ctx, ip, port, "https")
 			if err != nil {
-				device, err = hd.fetchDeviceInfo(ctx, ip, port, "http")
+				device, err = hd.RegisterWithDevice(ctx, ip, port, "http")
 				if err != nil {
 					return
 				}

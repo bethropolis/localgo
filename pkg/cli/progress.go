@@ -10,18 +10,16 @@ import (
 )
 
 type MultiProgress struct {
-	pool     *mpb.Progress
-	barCount int64
-	bars     []*mpb.Bar
-	mu       sync.Mutex
+	pool *mpb.Progress
+	bars []*mpb.Bar
+	mu   sync.Mutex
 }
 
-func NewMultiProgress(totalFiles int64) *MultiProgress {
+func NewMultiProgress(_ int64) *MultiProgress {
 	return &MultiProgress{
 		pool: mpb.New(
 			mpb.WithOutput(os.Stderr),
 		),
-		barCount: totalFiles,
 	}
 }
 
@@ -60,8 +58,13 @@ func (mp *MultiProgress) ForceComplete() {
 
 func (mp *MultiProgress) Wait() {
 	mp.pool.Wait()
-	// Clear progress bar lines from scrollback
-	for i := int64(0); i < mp.barCount; i++ {
+
+	mp.mu.Lock()
+	barsRendered := len(mp.bars)
+	mp.mu.Unlock()
+
+	// Clear only the lines with actual rendered progress bars
+	for i := 0; i < barsRendered; i++ {
 		fmt.Fprintf(os.Stderr, "\033[F\033[K")
 	}
 	fmt.Fprintf(os.Stderr, "%s Files transferred successfully\n", IconCheck)

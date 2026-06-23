@@ -1,10 +1,10 @@
-//go:build linux
+//go:build linux || freebsd
 
 package clipboard
 
 import "os/exec"
 
-// detect probes for available clipboard tools on Linux.
+// detect probes for available clipboard tools on Linux and FreeBSD.
 // Prefers Wayland (wl-copy) when WAYLAND_DISPLAY is set, then X11 tools.
 func detect() *clipProvider {
 	// Wayland
