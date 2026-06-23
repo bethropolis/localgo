@@ -145,6 +145,8 @@ var sendCmd = &cobra.Command{
 		}
 
 		target := sendto
+		var selectedDevice *model.Device
+
 		if target == "" {
 			sendConfig := discovery.DefaultServiceConfig()
 			sendConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
@@ -213,6 +215,7 @@ var sendCmd = &cobra.Command{
 			}
 			target = selected.Alias
 			sendport = selected.Port
+			selectedDevice = selected
 		}
 
 		if sendalias != "" {
@@ -232,17 +235,24 @@ var sendCmd = &cobra.Command{
 				cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 			}
 		}
-		cli.PrintInfo("To: %s", target)
 		fromAlias := Cfg.Alias
 		if Cfg.Private {
 			fromAlias = "Anonymous"
 		}
-		cli.PrintInfo("From: %s", fromAlias)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
 		defer cancel()
 
-		err := send.SendFiles(ctx, Cfg, files, target, sendport, zap.S())
+		var err error
+		if selectedDevice != nil {
+			cli.PrintInfo("To: %s (%s:%d)", selectedDevice.Alias, selectedDevice.IP, selectedDevice.Port)
+			cli.PrintInfo("From: %s", fromAlias)
+			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, zap.S())
+		} else {
+			cli.PrintInfo("To: %s", target)
+			cli.PrintInfo("From: %s", fromAlias)
+			err = send.SendFiles(ctx, Cfg, files, target, sendport, zap.S())
+		}
 		if err != nil {
 			return fmt.Errorf("failed to send files: %w", err)
 		}

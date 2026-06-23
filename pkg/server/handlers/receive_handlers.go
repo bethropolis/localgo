@@ -82,7 +82,8 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	defer r.Body.Close()
 
 	if len(requestDto.Files) == 0 {
-		httputil.RespondError(w, http.StatusBadRequest, "Request must contain at least one file")
+		h.logger.Info("Received empty file list on prepare-upload, returning 204 Finished")
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 

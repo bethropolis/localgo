@@ -327,12 +327,15 @@ func zipDirToTemp(dir string) (string, error) {
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(path)
-		if err != nil {
+		err = func() error {
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, err = io.Copy(w, f)
 			return err
-		}
-		_, err = io.Copy(w, f)
-		f.Close()
+		}()
 		return err
 	})
 	if err != nil {

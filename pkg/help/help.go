@@ -2,8 +2,10 @@ package help
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // CommandHelp represents help information for a command
@@ -50,17 +52,44 @@ func ShowMainUsage() {
 		{"version", "Show version information"},
 	}
 
+	maxCmdWidth := 0
 	for _, cmd := range commands {
-		fmt.Printf("    %-12s %s\n", cli.SuccessStyle.Render(cmd.name), cmd.desc)
+		if w := lipgloss.Width(cmd.name); w > maxCmdWidth {
+			maxCmdWidth = w
+		}
+	}
+	cmdPad := maxCmdWidth + 2
+
+	for _, cmd := range commands {
+		styledName := cli.SuccessStyle.Render(cmd.name)
+		padding := cmdPad - lipgloss.Width(cmd.name)
+		fmt.Printf("    %s%s%s\n", styledName, strings.Repeat(" ", padding), cmd.desc)
 	}
 
 	fmt.Printf("\n%s\n", cli.WarningStyle.Render("OPTIONS:"))
-	fmt.Printf("    %s  Show help\n", cli.InfoStyle.Render("-h, --help"))
-	fmt.Printf("    %s  Show version\n", cli.InfoStyle.Render("-v, --version"))
-	fmt.Printf("    %s      Enable debug logging\n", cli.InfoStyle.Render("--verbose"))
-	fmt.Printf("    %s         Enable JSON log output\n", cli.InfoStyle.Render("--json"))
-	fmt.Printf("    %s          Hide device identity during discovery/transfer\n", cli.InfoStyle.Render("--private, -p"))
-	fmt.Printf("    %s        Config file path\n\n", cli.InfoStyle.Render("--config"))
+	options := []struct{ flag, desc string }{
+		{"-h, --help", "Show help"},
+		{"-v, --version", "Show version"},
+		{"--verbose", "Enable debug logging"},
+		{"--json", "Enable JSON log output"},
+		{"--private, -p", "Hide device identity during discovery/transfer"},
+		{"--config", "Config file path"},
+	}
+
+	maxOptWidth := 0
+	for _, opt := range options {
+		if w := lipgloss.Width(opt.flag); w > maxOptWidth {
+			maxOptWidth = w
+		}
+	}
+	optPad := maxOptWidth + 2
+
+	for _, opt := range options {
+		styledFlag := cli.InfoStyle.Render(opt.flag)
+		padding := optPad - lipgloss.Width(opt.flag)
+		fmt.Printf("    %s%s%s\n", styledFlag, strings.Repeat(" ", padding), opt.desc)
+	}
+	fmt.Println()
 
 	fmt.Printf("%s\n", cli.WarningStyle.Render("EXAMPLES:"))
 	examples := []string{
