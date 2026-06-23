@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
