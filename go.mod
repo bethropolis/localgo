@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/vbauerster/mpb/v7 v7.5.3
 	go.uber.org/zap v1.27.1
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.45.0
 )
 
 require (
@@ -72,8 +72,8 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
