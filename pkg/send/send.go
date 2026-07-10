@@ -147,25 +147,38 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	client := &http.Client{}
 	scheme := "http"
 
+	if device.Protocol == "" {
+		addr := net.JoinHostPort(device.IP, strconv.Itoa(device.Port))
+		dialer := &net.Dialer{Timeout: 2 * time.Second}
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true})
+		if err == nil {
+			conn.Close()
+			device.Protocol = model.ProtocolTypeHTTPS
+		}
+	}
+
 	if device.Protocol == model.ProtocolTypeHTTPS {
 		scheme = "https"
-		expectedFingerprint := device.Fingerprint
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		if device.Fingerprint != "" {
+			expectedFingerprint := device.Fingerprint
+			tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+				if len(state.PeerCertificates) == 0 {
+					return fmt.Errorf("no peer certificates presented")
+				}
+				cert := state.PeerCertificates[0]
+				hash := sha256.Sum256(cert.Raw)
+				actual := hex.EncodeToString(hash[:])
+				if !strings.EqualFold(actual, expectedFingerprint) {
+					return fmt.Errorf("TLS certificate fingerprint mismatch: expected %s, got %s", expectedFingerprint, actual)
+				}
+				return nil
+			}
+		}
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				VerifyConnection: func(state tls.ConnectionState) error {
-					if len(state.PeerCertificates) == 0 {
-						return fmt.Errorf("no peer certificates presented")
-					}
-					cert := state.PeerCertificates[0]
-					hash := sha256.Sum256(cert.Raw)
-					actual := hex.EncodeToString(hash[:])
-					if !strings.EqualFold(actual, expectedFingerprint) {
-						return fmt.Errorf("TLS certificate fingerprint mismatch: expected %s, got %s", expectedFingerprint, actual)
-					}
-					return nil
-				},
-			},
+			TLSClientConfig: tlsConfig,
 		}
 		client.Transport = tr
 		defer tr.CloseIdleConnections()
