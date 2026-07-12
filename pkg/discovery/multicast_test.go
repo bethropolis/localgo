@@ -138,7 +138,7 @@ func TestMulticastDiscovery_IgnoreSelf(t *testing.T) {
 	}
 	defer md.Stop()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	md.SendDiscoveryAnnouncement()
 
