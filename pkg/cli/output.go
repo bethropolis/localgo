@@ -241,7 +241,9 @@ func PickDevice(devices []*model.Device, private bool) *model.Device {
 				WithHeight(10),
 		),
 	)
-	form.Run()
+	if err := form.Run(); err != nil {
+		return nil
+	}
 	return selected
 }
 
