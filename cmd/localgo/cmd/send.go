@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,6 +33,7 @@ var (
 	sendconcurrency int
 	sendmulticastiface string
 	sendclipboard   bool
+	sendstdin       bool
 )
 
 var sendCmd = &cobra.Command{
@@ -40,6 +42,33 @@ var sendCmd = &cobra.Command{
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
+
+		if sendclipboard && sendstdin {
+			return fmt.Errorf("cannot use both --clipboard and --stdin")
+		}
+
+		if sendstdin {
+			textBytes, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return fmt.Errorf("failed to read from standard input: %w", err)
+			}
+			if len(textBytes) == 0 {
+				return fmt.Errorf("standard input is empty")
+			}
+
+			tempFile, err := os.CreateTemp("", "localgo-clip-stdin-*.txt")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary file for stdin: %w", err)
+			}
+			defer os.Remove(tempFile.Name())
+
+			if _, err := tempFile.Write(textBytes); err != nil {
+				tempFile.Close()
+				return fmt.Errorf("failed to write standard input content: %w", err)
+			}
+			tempFile.Close()
+			files = []string{tempFile.Name()}
+		}
 
 		if sendclipboard {
 			text, err := clipboard.Read()
@@ -273,6 +302,23 @@ func init() {
 	sendCmd.Flags().IntVar(&sendconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
 	sendCmd.Flags().StringVar(&sendmulticastiface, "iface", "", "Multicast network interface name")
 	sendCmd.Flags().BoolVarP(&sendclipboard, "clipboard", "c", false, "Send current system clipboard text directly")
+	sendCmd.Flags().BoolVar(&sendstdin, "stdin", false, "Send text read from standard input (stdin)")
+
+	sendCmd.RegisterFlagCompletionFunc("to", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cache := discovery.NewPeerCache(nil)
+		peers := cache.GetPeers()
+		var suggestions []string
+		for _, peer := range peers {
+			alias := peer.Alias
+			if Cfg != nil && Cfg.Private {
+				alias = cli.AnonymizedAlias(peer)
+			}
+			if strings.HasPrefix(strings.ToLower(alias), strings.ToLower(toComplete)) {
+				suggestions = append(suggestions, alias)
+			}
+		}
+		return suggestions, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	sendCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("send"); h != nil {

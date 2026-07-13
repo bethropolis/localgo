@@ -157,6 +157,27 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		}
 	}
 
+	// When auto-detected HTTPS with no known fingerprint (e.g. send --ip),
+	// fetch it via /info so VerifyConnection can pin the TLS certificate.
+	if device.Protocol == model.ProtocolTypeHTTPS && device.Fingerprint == "" {
+		infoAddr := net.JoinHostPort(device.IP, strconv.Itoa(device.Port))
+		infoURL := fmt.Sprintf("https://%s/api/localsend/v2/info", infoAddr)
+		infoClient := &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		}
+		defer infoClient.CloseIdleConnections()
+		if resp, err := infoClient.Get(infoURL); err == nil {
+			var info model.InfoDto
+			if json.NewDecoder(resp.Body).Decode(&info) == nil {
+				device.Fingerprint = info.Fingerprint
+			}
+			resp.Body.Close()
+		}
+	}
+
 	if device.Protocol == model.ProtocolTypeHTTPS {
 		scheme = "https"
 		tlsConfig := &tls.Config{

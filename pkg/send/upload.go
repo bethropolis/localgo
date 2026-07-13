@@ -41,6 +41,7 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 
 	// Wrap with idle timeout: cancel request if no data flows for 15s
 	uploadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	body = NewIdleTimeoutReader(body, 15*time.Second, cancel)
 
 	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, url, body)

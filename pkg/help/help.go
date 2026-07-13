@@ -97,6 +97,7 @@ func ShowMainUsage() {
 		"localgo discover --timeout 10",
 		"localgo send --file document.pdf --to MyPhone",
 		"localgo send --clipboard --to MyPhone",
+		"localgo send --stdin < document.txt --to MyPhone",
 		"localgo share --file document.pdf",
 		"localgo history --limit 20",
 		"localgo help send",

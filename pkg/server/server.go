@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -48,8 +49,35 @@ func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
 	}
 }
 
+// securityMiddleware adds security headers and validates CORS origins.
+func securityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+
+		// Block cross-origin requests from external websites.
+		// Native LocalSend clients never send an Origin header.
+		if origin := r.Header.Get("Origin"); origin != "" {
+			host := r.Host
+			if !strings.HasPrefix(origin, "http://"+host) && !strings.HasPrefix(origin, "https://"+host) &&
+				!strings.HasPrefix(origin, "http://localhost") && !strings.HasPrefix(origin, "https://localhost") &&
+				!strings.HasPrefix(origin, "http://127.0.0.1") && !strings.HasPrefix(origin, "https://127.0.0.1") &&
+				!strings.HasPrefix(origin, "http://[::1]") && !strings.HasPrefix(origin, "https://[::1]") {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // configureRoutes sets up the API routes.
 func (s *Server) configureRoutes() {
+	s.muxRouter.Use(securityMiddleware)
 	apiRouter := s.muxRouter.PathPrefix("/api/localsend").Subrouter()
 
 	// Discovery Handlers (Phase 1)

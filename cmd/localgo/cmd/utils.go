@@ -32,6 +32,8 @@ func anonymizeDeviceSlice(devices []*model.Device) []*model.Device {
 			DeviceModel: d.DeviceModel,
 			DeviceType:  d.DeviceType,
 			Download:    d.Download,
+			LastSeen:    d.LastSeen,
+			Available:   d.Available,
 		}
 	}
 	return out

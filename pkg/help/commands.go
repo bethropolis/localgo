@@ -106,6 +106,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo send --ip 192.168.1.42:53317 --file document.pdf",
 				"localgo send --clipboard --to MyPhone",
 				"localgo send -c --to MyPhone",
+				"localgo send --stdin --to MyPhone < list.txt",
+				"echo 'message' | localgo send --stdin --to MyPhone",
 				"localgo send (starts interactive clipboard or file picker if empty)",
 			},
 			Flags: []FlagHelp{
@@ -113,6 +115,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--ip", Type: "string", Default: "", Description: "Target device IP (with optional :port, skips discovery)"},
 				{Name: "--to", Type: "string", Default: "", Description: "Target device alias (omit to pick interactively)"},
 				{Name: "--clipboard, -c", Type: "bool", Default: "false", Description: "Send current system clipboard text directly"},
+				{Name: "--stdin", Type: "bool", Default: "false", Description: "Send text read from standard input (stdin)"},
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},
 				{Name: "--timeout", Type: "int", Default: "30", Description: "Send timeout in seconds"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Sender alias"},
