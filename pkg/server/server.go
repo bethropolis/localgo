@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -30,6 +31,8 @@ type Server struct {
 	registryService *services.RegistryService
 	logger          *zap.SugaredLogger
 	historyLog      *history.Logger // closed in Shutdown()
+	shutdownCtx     context.Context
+	shutdownCancel  context.CancelFunc
 }
 
 // NewServer creates a new Server instance.
@@ -39,6 +42,7 @@ func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()
 	registryService := services.NewRegistryService()
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	return &Server{
 		config:          cfg,
 		muxRouter:       router,
@@ -46,6 +50,8 @@ func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
 		sendService:     sendService,
 		registryService: registryService,
 		logger:          logger,
+		shutdownCtx:     shutdownCtx,
+		shutdownCancel:  shutdownCancel,
 	}
 }
 
@@ -102,7 +108,7 @@ func (s *Server) configureRoutes() {
 		}
 	}
 
-	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.historyLog, s.logger)
+	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.historyLog, s.shutdownCtx, s.logger)
 	apiRouter.HandleFunc("/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1).Methods("POST")
 	apiRouter.HandleFunc("/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2).Methods("POST")
 	apiRouter.HandleFunc("/v2/upload", receiveHandler.UploadHandlerV2).Methods("POST")
@@ -128,6 +134,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 		WriteTimeout:      300 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return s.shutdownCtx },
 	}
 
 	ln, err := net.Listen("tcp", addr)
@@ -199,10 +206,25 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.httpServer == nil {
 		return nil
 	}
+
+	// Cancel the shutdown context so in-flight handlers can abort early
+	if s.shutdownCancel != nil {
+		s.shutdownCancel()
+	}
+
+	// Close all active receive sessions to stop progress bars and clean up
+	if s.receiveService != nil {
+		s.receiveService.CloseAllSessions()
+	}
+
 	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("server shutdown failed: %w", err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Warn("Server shutdown timed out — some in-flight requests interrupted")
+		} else {
+			return fmt.Errorf("server shutdown failed: %w", err)
+		}
 	}
 	s.logger.Info("Server stopped.")
 	s.httpServer = nil

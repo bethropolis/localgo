@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"net"
@@ -30,15 +31,17 @@ type ReceiveHandler struct {
 	logger         *zap.SugaredLogger
 	historyLog     *history.Logger
 	promptMutex    sync.Mutex
+	shutdownCtx    context.Context
 }
 
 // NewReceiveHandler creates a new ReceiveHandler.
-func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, historyLog *history.Logger, logger *zap.SugaredLogger) *ReceiveHandler {
+func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, historyLog *history.Logger, shutdownCtx context.Context, logger *zap.SugaredLogger) *ReceiveHandler {
 	return &ReceiveHandler{
 		config:         cfg,
 		receiveService: receiveService,
 		logger:         logger,
 		historyLog:     historyLog,
+		shutdownCtx:    shutdownCtx,
 	}
 }
 

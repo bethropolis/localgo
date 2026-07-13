@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,12 @@ import (
 )
 
 func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request) {
+	if h.shutdownCtx.Err() != nil {
+		h.logger.Warn("Rejecting /upload — server is shutting down")
+		httputil.RespondError(w, http.StatusServiceUnavailable, "Server shutting down")
+		return
+	}
+
 	h.logger.Info("Received /upload request")
 	if r.Method != http.MethodPost {
 		httputil.RespondError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
@@ -100,6 +107,7 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	bodyReader := io.LimitReader(r.Body, fileInfo.Dto.Size)
+	bodyReader = &shutdownAwareReader{Reader: bodyReader, ctx: h.shutdownCtx}
 	defer r.Body.Close()
 
 	var modified, accessed *string
@@ -201,4 +209,19 @@ func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, 
 	h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 	h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), "text/plain", history.StatusReceived)
 	h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
+}
+
+// shutdownAwareReader aborts Read when the shutdown context is cancelled,
+// allowing in-flight uploads to terminate promptly on Ctrl+C so the server
+// shuts down within the graceful timeout instead of hitting deadline exceeded.
+type shutdownAwareReader struct {
+	io.Reader
+	ctx context.Context
+}
+
+func (r *shutdownAwareReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.Reader.Read(p)
 }
