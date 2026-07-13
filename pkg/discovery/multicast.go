@@ -55,6 +55,8 @@ func (md *MulticastDiscovery) AddDeviceHandler(handler func(*model.Device)) {
 // StartListening starts listening for multicast announcements on all suitable interfaces.
 // If InterfaceName is set in config, only that interface is used.
 func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
+	md.closed.Store(false)
+
 	md.connsMu.Lock()
 	if len(md.conns) > 0 {
 		md.connsMu.Unlock()

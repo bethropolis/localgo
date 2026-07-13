@@ -28,6 +28,7 @@ func DiscoverDevices(ctx context.Context, serviceCfg *ServiceConfig, appCfg *con
 	if err := svc.Start(ctx, multicastDto); err != nil {
 		return nil, err
 	}
+	defer svc.Stop()
 
 	scanCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
