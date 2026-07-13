@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,7 @@ func setupReceiveHandler(t *testing.T, cfg *config.Config) (*handlers.ReceiveHan
 	}
 
 	receiveService := services.NewReceiveService()
-	handler := handlers.NewReceiveHandler(cfg, receiveService, nil, testLogger)
+	handler := handlers.NewReceiveHandler(cfg, receiveService, nil, context.Background(), testLogger)
 	return handler, receiveService, tempDir
 }
 

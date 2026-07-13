@@ -159,6 +159,20 @@ func (s *ReceiveService) CloseSession(sessionID string) {
 	}
 }
 
+// CloseAllSessions force-completes progress bars and removes all active sessions.
+func (s *ReceiveService) CloseAllSessions() {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+
+	for id, session := range s.sessions {
+		if session.Progress != nil {
+			session.Progress.ForceComplete()
+			go session.Progress.Wait()
+		}
+		delete(s.sessions, id)
+	}
+}
+
 // RemoveFileFromSession removes a file from the current session.
 func (s *ReceiveService) RemoveFileFromSession(sessionID, fileID string) {
 	s.sessionMutex.Lock()
