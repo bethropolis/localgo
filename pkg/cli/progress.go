@@ -35,6 +35,11 @@ func (mp *MultiProgress) AddBar(name string, size int64) func(int64) {
 		),
 		mpb.AppendDecorators(
 			decor.Percentage(decor.WC{W: 5}),
+			decor.AverageSpeed(decor.UnitKiB, " % .1f/s", decor.WC{W: 10}),
+			decor.OnComplete(
+				decor.AverageETA(decor.ET_STYLE_MMSS, decor.WC{W: 8}),
+				"done    ",
+			),
 		),
 	)
 	bar.EnableTriggerComplete()
