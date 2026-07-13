@@ -109,6 +109,13 @@ func (ow *OutputWriter) writeDevicesJSON(devices []*model.Device) error {
 }
 
 // writeDevicesTable outputs devices in table format
+func shortFingerprint(fp string) string {
+	if len(fp) > 16 {
+		return fp[:16]
+	}
+	return fp
+}
+
 func (ow *OutputWriter) writeDevicesTable(devices []*model.Device, method string) error {
 	if len(devices) == 0 {
 		fmt.Printf("No devices found via %s\n", method)
@@ -129,7 +136,7 @@ func (ow *OutputWriter) writeDevicesTable(devices []*model.Device, method string
 			strings.ToUpper(string(device.Protocol)),
 			device.Port,
 			string(device.DeviceType),
-			device.Fingerprint[:16],
+			shortFingerprint(device.Fingerprint),
 		)
 	}
 
@@ -144,7 +151,7 @@ func (ow *OutputWriter) writeDevicesQuiet(devices []*model.Device) error {
 			device.IP,
 			device.Protocol,
 			device.Port,
-			device.Fingerprint[:16]+"...")
+			shortFingerprint(device.Fingerprint)+"...")
 	}
 	return nil
 }
