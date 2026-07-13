@@ -20,8 +20,8 @@ type Device struct {
 	DeviceModel *string    `json:"deviceModel"` // nullable
 	DeviceType  DeviceType `json:"deviceType"`
 	Download    bool       `json:"download"` // Whether the device has download server running
-	LastSeen    time.Time  `json:"-"`        // Not serialized to JSON
-	Available   bool       `json:"-"`        // Not serialized to JSON
+	LastSeen    time.Time  `json:"lastSeen"`
+	Available   bool       `json:"available"`
 }
 
 // NewDevice creates a new Device instance

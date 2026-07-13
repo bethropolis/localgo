@@ -93,11 +93,13 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- Body Size Limit ---
-	maxBodySize := h.config.MaxBodySize
-	if maxBodySize <= 0 {
-		maxBodySize = 100 * 1024 * 1024 * 1024 // 100GB default
+	// Cap body to the declared file size to prevent disk DoS.
+	// A peer can't send more bytes than they declared in prepare-upload.
+	if fileInfo.Dto.Size < 0 {
+		httputil.RespondError(w, http.StatusBadRequest, "Invalid file size")
+		return
 	}
-	bodyReader := http.MaxBytesReader(w, r.Body, maxBodySize)
+	bodyReader := io.LimitReader(r.Body, fileInfo.Dto.Size)
 	defer r.Body.Close()
 
 	var modified, accessed *string

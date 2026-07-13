@@ -99,7 +99,7 @@ func GenerateSecurityContext(alias string, logger *zap.SugaredLogger) (*StoredSe
 
 // SaveSecurityContext saves the context as JSON to the specified path.
 func SaveSecurityContext(ctx *StoredSecurityContext, path string, logger *zap.SugaredLogger) error {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to create security context file '%s': %w", path, err)
 	}
