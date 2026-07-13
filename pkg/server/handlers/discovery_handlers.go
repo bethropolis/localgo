@@ -40,7 +40,7 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	senderFingerprint := r.URL.Query().Get("fingerprint")
-	if senderFingerprint != "" && senderFingerprint == h.config.SecurityContext.CertificateHash {
+	if senderFingerprint != "" && senderFingerprint == h.config.GetFingerprint() {
 		h.logger.Info("Received /info request from self, ignoring.")
 		httputil.RespondError(w, http.StatusPreconditionFailed, "Self-discovered")
 		return
@@ -48,10 +48,7 @@ func (h *DiscoveryHandler) InfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	downloadCapable := h.sendService.GetSession() != nil // True if we have an active send session
 
-	fingerprint := h.config.RandomFingerprint
-	if h.config.HttpsEnabled {
-		fingerprint = h.config.SecurityContext.CertificateHash
-	}
+	fingerprint := h.config.GetFingerprint()
 
 	alias := h.config.Alias
 	deviceModel := h.config.DeviceModel
@@ -97,7 +94,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 	}
 	defer r.Body.Close()
 
-	if requestDto.Fingerprint == h.config.SecurityContext.CertificateHash {
+	if requestDto.Fingerprint == h.config.GetFingerprint() {
 		h.logger.Info("Received /register request from self, ignoring.")
 		httputil.RespondError(w, http.StatusPreconditionFailed, "Self-discovered")
 		return
@@ -115,10 +112,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 
 	downloadCapable := h.sendService.GetSession() != nil
 
-	fingerprint := h.config.RandomFingerprint
-	if h.config.HttpsEnabled {
-		fingerprint = h.config.SecurityContext.CertificateHash
-	}
+	fingerprint := h.config.GetFingerprint()
 
 	respAlias := h.config.Alias
 	respDeviceModel := h.config.DeviceModel

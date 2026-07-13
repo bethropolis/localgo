@@ -124,7 +124,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	s.httpServer = &http.Server{
 		Addr:              addr,
 		Handler:           s.muxRouter,
-		ReadTimeout:       30 * time.Second,
+		ReadTimeout:       0, // body timeout handled by MaxBytesReader / LimitReader
 		WriteTimeout:      300 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
