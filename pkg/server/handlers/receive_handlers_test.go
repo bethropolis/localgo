@@ -411,3 +411,23 @@ func TestPrepareUpload_SanitizesControlChars(t *testing.T) {
 		t.Fatal("expected session ID")
 	}
 }
+
+func TestPrepareUploadHandlerV2_NegativeFileSize_Returns400(t *testing.T) {
+	handler, _, _ := setupReceiveHandler(t, nil)
+
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "neg.txt", Size: -10},
+	}
+	reqDto := model.PrepareUploadRequestDto{Files: files}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	handler.PrepareUploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for negative file size, got %v (body: %s)", status, rr.Body.String())
+	}
+}
