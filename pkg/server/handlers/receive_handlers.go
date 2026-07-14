@@ -91,6 +91,11 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	// --- Check Disk Space ---
 	var totalSize int64
 	for _, f := range requestDto.Files {
+		if f.Size < 0 {
+			h.logger.Warnf("Rejected transfer from %s: file '%s' has negative size (%d)", requestDto.Info.Alias, f.FileName, f.Size)
+			httputil.RespondError(w, http.StatusBadRequest, "Invalid file size")
+			return
+		}
 		totalSize += f.Size
 	}
 
