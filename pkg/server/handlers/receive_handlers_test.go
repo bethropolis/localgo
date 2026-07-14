@@ -314,3 +314,73 @@ func TestUploadHandlerV2_TextPlain_NoClipboard(t *testing.T) {
 		t.Errorf("file content mismatch: got %q, want %q", string(written), body)
 	}
 }
+
+func TestUploadHandlerV2_TextPlain_PathTraversal_Returns400(t *testing.T) {
+	cfg := &config.Config{
+		AutoAccept:  true,
+		NoClipboard: true,
+	}
+	handler, receiveService, _ := setupReceiveHandler(t, cfg)
+
+	files := map[string]model.FileDto{
+		"evil": {ID: "evil", FileName: "../../../etc/passwd", Size: 5, FileType: "text/plain"},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=evil&token="+token,
+		strings.NewReader("hello"),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for path traversal, got %v (body: %s)", status, rr.Body.String())
+	}
+}
+
+func TestUploadHandlerV2_TextPlain_SaveFailure_Returns500(t *testing.T) {
+	cfg := &config.Config{
+		AutoAccept:  true,
+		NoClipboard: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	// Make the download directory read-only so SaveStreamToFileWithMetadata fails.
+	if err := os.Chmod(tempDir, 0500); err != nil {
+		t.Fatalf("failed to chmod temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(tempDir, 0700) })
+
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "write_fail.txt", Size: 5, FileType: "text/plain"},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=f1&token="+token,
+		strings.NewReader("hello"),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusInternalServerError {
+		t.Errorf("expected 500 Internal Server Error for save failure, got %v (body: %s)", status, rr.Body.String())
+	}
+}
