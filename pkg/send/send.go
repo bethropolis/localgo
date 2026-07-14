@@ -210,12 +210,33 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to process file paths: %w", err)
 	}
 
-	// Strip EXIF/metadata from image files in private mode
+	// Strip EXIF/metadata from image files in private mode.
+	// StripTo writes a stripped copy to a temp file; the original is never modified.
+	type strippedFile struct{ tempPath string }
+	var stripped []strippedFile
+	defer func() {
+		for _, s := range stripped {
+			os.Remove(s.tempPath)
+		}
+	}()
+
 	if cfg.Private {
-		for filePath := range fileMap {
-			if err := metadata.Strip(filePath); err != nil {
-				logger.Warnf("Failed to strip metadata from %s: %v", filePath, err)
+		for filePath, remoteName := range fileMap {
+			tmp, err := os.CreateTemp("", "localgo-private-*")
+			if err != nil {
+				return fmt.Errorf("private mode: create temp for %s: %w", filePath, err)
 			}
+			tmpPath := tmp.Name()
+			tmp.Close()
+
+			if err := metadata.StripTo(filePath, tmpPath); err != nil {
+				os.Remove(tmpPath)
+				return fmt.Errorf("private mode: strip metadata for %s: %w", filePath, err)
+			}
+
+			stripped = append(stripped, strippedFile{tempPath: tmpPath})
+			fileMap[tmpPath] = remoteName
+			delete(fileMap, filePath)
 		}
 	}
 
