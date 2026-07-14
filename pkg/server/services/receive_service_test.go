@@ -1,6 +1,7 @@
 package services
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/bethropolis/localgo/pkg/model"
@@ -124,6 +125,114 @@ func TestReceiveService_CloseSession(t *testing.T) {
 	closed := svc.GetSessionByID(session.SessionID)
 	if closed != nil {
 		t.Error("Expected nil session after closing")
+	}
+}
+
+func TestReceiveService_ClaimFile_Success(t *testing.T) {
+	svc := NewReceiveService()
+	sender := model.DeviceInfo{Alias: "Alice", IP: "192.168.1.10"}
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "doc.txt", Size: 100},
+	}
+	session, _ := svc.CreateSession(sender, files)
+
+	dto, gotSender, err := svc.ClaimFile(session.SessionID, "f1", session.Files["f1"].Token, "192.168.1.10")
+	if err != nil {
+		t.Fatalf("ClaimFile failed: %v", err)
+	}
+	if dto.FileName != "doc.txt" {
+		t.Errorf("expected doc.txt, got %s", dto.FileName)
+	}
+	if gotSender.Alias != "Alice" {
+		t.Errorf("expected Alice, got %s", gotSender.Alias)
+	}
+
+	// Second claim should fail
+	_, _, err = svc.ClaimFile(session.SessionID, "f1", session.Files["f1"].Token, "192.168.1.10")
+	if err != ErrAlreadyUploading {
+		t.Errorf("expected ErrAlreadyUploading, got %v", err)
+	}
+}
+
+func TestReceiveService_ClaimFile_Errors(t *testing.T) {
+	svc := NewReceiveService()
+	sender := model.DeviceInfo{Alias: "Alice", IP: "192.168.1.10"}
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "doc.txt", Size: 100},
+	}
+	session, _ := svc.CreateSession(sender, files)
+
+	tests := []struct {
+		name      string
+		sessionID string
+		fileID    string
+		token     string
+		senderIP  string
+		wantErr   error
+	}{
+		{"invalid session", "nonexistent", "f1", "x", "192.168.1.10", ErrSessionNotFound},
+		{"invalid file", session.SessionID, "bad", "x", "192.168.1.10", ErrInvalidFileToken},
+		{"ip mismatch", session.SessionID, "f1", session.Files["f1"].Token, "192.168.1.99", ErrIPMismatch},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := svc.ClaimFile(tt.sessionID, tt.fileID, tt.token, tt.senderIP)
+			if err != tt.wantErr {
+				t.Errorf("got %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestReceiveService_ClaimFile_Concurrent(t *testing.T) {
+	svc := NewReceiveService()
+	sender := model.DeviceInfo{Alias: "Bob", IP: "10.0.0.1"}
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "shared.txt", Size: 50},
+	}
+	session, _ := svc.CreateSession(sender, files)
+
+	var wg sync.WaitGroup
+	results := make(chan error, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, err := svc.ClaimFile(session.SessionID, "f1", session.Files["f1"].Token, "10.0.0.1")
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	successCount := 0
+	for err := range results {
+		if err == nil {
+			successCount++
+		} else if err != ErrAlreadyUploading {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if successCount != 1 {
+		t.Errorf("expected exactly 1 success, got %d", successCount)
+	}
+}
+
+func TestReceiveService_CompleteFile(t *testing.T) {
+	svc := NewReceiveService()
+	sender := model.DeviceInfo{Alias: "Alice", IP: "192.168.1.10"}
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "doc.txt", Size: 100},
+	}
+	session, _ := svc.CreateSession(sender, files)
+
+	svc.CompleteFile(session.SessionID, "f1")
+
+	// File should be gone
+	up := svc.GetSessionByID(session.SessionID)
+	if up != nil {
+		t.Error("expected session to be removed after completing the last file")
 	}
 }
 

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -8,6 +9,23 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/google/uuid"
+)
+
+// FileTransferState tracks the lifecycle of a file within a receive session.
+type FileTransferState int
+
+const (
+	FilePending   FileTransferState = iota // initial state after session creation
+	FileUploading                           // claim acquired, upload in progress
+	FileDone                                // upload completed or failed
+)
+
+var (
+	ErrSessionNotFound  = errors.New("invalid session")
+	ErrIPMismatch       = errors.New("ip mismatch")
+	ErrInvalidFileToken = errors.New("invalid file or token")
+	ErrAlreadyUploading = errors.New("already uploading")
+	ErrAlreadyCompleted = errors.New("already completed")
 )
 
 // ActiveReceiveSession represents an active file receiving session.
@@ -23,6 +41,7 @@ type ActiveReceiveSession struct {
 type ActiveFile struct {
 	Dto   model.FileDto
 	Token string
+	State FileTransferState
 }
 
 // ReceiveService manages file receiving sessions.
@@ -157,6 +176,87 @@ func (s *ReceiveService) CloseSession(sessionID string) {
 		}
 		delete(s.sessions, sessionID)
 	}
+}
+
+// ClaimFile atomically validates session, sender IP, file ID, and token,
+// then marks the file as uploading. Returns the file DTO and sender info.
+// Returns ErrAlreadyUploading / ErrAlreadyCompleted for duplicate requests.
+// Caller must call CompleteFile or FailFile after the upload finishes.
+func (s *ReceiveService) ClaimFile(sessionID, fileID, token, senderIP string) (model.FileDto, model.DeviceInfo, error) {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return model.FileDto{}, model.DeviceInfo{}, ErrSessionNotFound
+	}
+	if senderIP != session.Sender.IP {
+		return model.FileDto{}, model.DeviceInfo{}, ErrIPMismatch
+	}
+	file, ok := session.Files[fileID]
+	if !ok || file.Token != token {
+		return model.FileDto{}, model.DeviceInfo{}, ErrInvalidFileToken
+	}
+	switch file.State {
+	case FileUploading:
+		return model.FileDto{}, model.DeviceInfo{}, ErrAlreadyUploading
+	case FileDone:
+		return model.FileDto{}, model.DeviceInfo{}, ErrAlreadyCompleted
+	}
+	file.State = FileUploading
+	session.Files[fileID] = file
+	return file.Dto, session.Sender, nil
+}
+
+// CompleteFile removes the file from the session after a successful upload.
+// If no files remain, the session is cleaned up and the progress bar completes.
+func (s *ReceiveService) CompleteFile(sessionID, fileID string) {
+	s.sessionMutex.Lock()
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		s.sessionMutex.Unlock()
+		return
+	}
+	delete(session.Files, fileID)
+	sessionEmpty := len(session.Files) == 0
+	if sessionEmpty {
+		delete(s.sessions, sessionID)
+	}
+	s.sessionMutex.Unlock()
+
+	if sessionEmpty && session.Progress != nil {
+		session.Progress.ForceComplete()
+		go session.Progress.Wait()
+	}
+}
+
+// FailFile resets the file state back to pending so the sender can retry.
+func (s *ReceiveService) FailFile(sessionID, fileID string) {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	file, ok := session.Files[fileID]
+	if !ok {
+		return
+	}
+	file.State = FilePending
+	session.Files[fileID] = file
+}
+
+// GetSessionProgress returns the MultiProgress for a session (or nil).
+// The Progress pointer is assigned at session creation and never mutated,
+// so this is safe to read under RLock.
+func (s *ReceiveService) GetSessionProgress(sessionID string) *cli.MultiProgress {
+	s.sessionMutex.RLock()
+	defer s.sessionMutex.RUnlock()
+	if session, ok := s.sessions[sessionID]; ok {
+		return session.Progress
+	}
+	return nil
 }
 
 // CloseAllSessions force-completes progress bars and removes all active sessions.
