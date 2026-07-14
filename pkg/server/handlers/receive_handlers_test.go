@@ -386,7 +386,7 @@ func TestUploadHandlerV2_TextPlain_SaveFailure_Returns500(t *testing.T) {
 }
 
 func TestPrepareUpload_SanitizesControlChars(t *testing.T) {
-	handler, _, _ := setupReceiveHandler(t, nil)
+	handler, receiveService, _ := setupReceiveHandler(t, nil)
 
 	files := map[string]model.FileDto{
 		"f1": {ID: "f1", FileName: string([]byte{0x00, 'b', 0x01, 'a', 0x1F, 'd', '.', 't', 'x', 't'}), Size: 1},
@@ -409,6 +409,41 @@ func TestPrepareUpload_SanitizesControlChars(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&respDto)
 	if respDto.SessionID == "" {
 		t.Fatal("expected session ID")
+	}
+
+	// Verify the stored filename was sanitized
+	session := receiveService.GetSession()
+	if session == nil {
+		t.Fatal("expected session to exist")
+	}
+	af, ok := session.Files["f1"]
+	if !ok {
+		t.Fatal("expected file f1 in session")
+	}
+	want := "bad.txt"
+	if af.Dto.FileName != want {
+		t.Errorf("stored FileName: got %q, want %q", af.Dto.FileName, want)
+	}
+}
+
+func TestPrepareUpload_EmptyNameAfterSanitize_Returns400(t *testing.T) {
+	handler, _, _ := setupReceiveHandler(t, nil)
+
+	// All-control filename becomes empty after sanitize
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: string([]byte{0x00, 0x01, 0x02, 0x1F}), Size: 1},
+	}
+	reqDto := model.PrepareUploadRequestDto{Files: files}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	handler.PrepareUploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for all-control filename, got %v (body: %s)", status, rr.Body.String())
 	}
 }
 

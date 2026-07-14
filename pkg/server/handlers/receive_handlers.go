@@ -79,6 +79,11 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	// and terminal escape injection on display.
 	for id, f := range requestDto.Files {
 		f.FileName = sanitizeName(f.FileName)
+		if f.FileName == "" {
+			h.logger.Warnf("Rejected transfer from %s: file '%s' has empty name after sanitization", requestDto.Info.Alias, id)
+			httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
+			return
+		}
 		requestDto.Files[id] = f
 	}
 
