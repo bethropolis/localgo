@@ -28,7 +28,7 @@ func Strip(path string) error {
 // Both paths may be the same (caller should use Strip for that).
 // Returns nil for non-image files without error.
 func StripTo(srcPath, destPath string) error {
-	srcIsImage, err := isImageFile(srcPath)
+	srcIsImage, err := IsImageFile(srcPath)
 	if err != nil || !srcIsImage {
 		return err
 	}
@@ -57,7 +57,7 @@ func StripTo(srcPath, destPath string) error {
 // stripToTemp strips metadata to a temp file in the same directory.
 // Returns empty string if the file is not a supported image type.
 func stripToTemp(path string) (string, error) {
-	srcIsImage, err := isImageFile(path)
+	srcIsImage, err := IsImageFile(path)
 	if err != nil || !srcIsImage {
 		return "", err
 	}
@@ -78,7 +78,8 @@ func stripToTemp(path string) (string, error) {
 	return tmpPath, nil
 }
 
-func isImageFile(path string) (bool, error) {
+// IsImageFile returns true if the file at path has a JPEG or PNG magic signature.
+func IsImageFile(path string) (bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return false, fmt.Errorf("strip: open: %w", err)

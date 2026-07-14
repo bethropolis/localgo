@@ -222,6 +222,10 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 	if cfg.Private {
 		for filePath, remoteName := range fileMap {
+			isImg, _ := metadata.IsImageFile(filePath)
+			if !isImg {
+				continue
+			}
 			tmp, err := os.CreateTemp("", "localgo-private-*")
 			if err != nil {
 				return fmt.Errorf("private mode: create temp for %s: %w", filePath, err)
