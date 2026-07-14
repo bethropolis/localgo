@@ -168,13 +168,15 @@ func (s *ReceiveService) copySession(orig *ActiveReceiveSession) *ActiveReceiveS
 // CloseSession closes a specific session.
 func (s *ReceiveService) CloseSession(sessionID string) {
 	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
-	if session, ok := s.sessions[sessionID]; ok {
-		if session.Progress != nil {
-			session.Progress.ForceComplete()
-			session.Progress.Wait()
-		}
+	session, ok := s.sessions[sessionID]
+	if ok {
 		delete(s.sessions, sessionID)
+	}
+	s.sessionMutex.Unlock()
+
+	if ok && session.Progress != nil {
+		session.Progress.ForceComplete()
+		session.Progress.Wait()
 	}
 }
 
