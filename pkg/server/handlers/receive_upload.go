@@ -158,7 +158,15 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Fall-back: save the full stream as a file.
-		h.saveTextAsFile(session, reqSessionId, reqFileId, rawFileName, bodyReader, textBytes, modified, accessed, onProgress)
+		if err := h.saveTextAsFile(session, reqSessionId, reqFileId, rawFileName, bodyReader, textBytes, modified, accessed, onProgress); err != nil {
+			if strings.Contains(err.Error(), "invalid filename") {
+				httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
+				return
+			}
+			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save file")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -183,7 +191,8 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 }
 
 // saveTextAsFile saves text content as a file when clipboard is unavailable or text is too large.
-func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, reqSessionId, reqFileId, rawFileName string, bodyReader io.Reader, textBytes []byte, modified, accessed *string, onProgress func(int64)) {
+// Returns nil on success; caller writes HTTP status.
+func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, reqSessionId, reqFileId, rawFileName string, bodyReader io.Reader, textBytes []byte, modified, accessed *string, onProgress func(int64)) error {
 	var combinedReader io.Reader
 	if int64(len(textBytes)) > maxTextSize {
 		combinedReader = io.MultiReader(bytes.NewReader(textBytes), bodyReader)
@@ -195,7 +204,7 @@ func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, 
 	if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
 		cleanPath != filepath.Clean(h.config.DownloadDir) {
 		h.logger.Errorf("Path traversal attempt detected in text fallback: %s", rawFileName)
-		return
+		return fmt.Errorf("invalid filename")
 	}
 	savErr := storage.SaveStreamToFileWithMetadata(
 		combinedReader, destinationPath, int64(len(textBytes)), modified, accessed, nil, onProgress, h.logger,
@@ -203,12 +212,13 @@ func (h *ReceiveHandler) saveTextAsFile(session *services.ActiveReceiveSession, 
 	if savErr != nil {
 		h.logger.Errorf("Error saving text file %s: %v", rawFileName, savErr)
 		h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), "text/plain", history.StatusFailed)
-		return
+		return fmt.Errorf("failed to save file: %w", savErr)
 	}
 	h.logger.Infof("Saved text as file: %s", destinationPath)
 	h.receiveService.RemoveFileFromSession(reqSessionId, reqFileId)
 	h.logTransfer(session.Sender.Alias, session.Sender.IP, rawFileName, destinationPath, int64(len(textBytes)), "text/plain", history.StatusReceived)
 	h.runExecHook(destinationPath, rawFileName, session.Sender.Alias, session.Sender.IP, int64(len(textBytes)))
+	return nil
 }
 
 // shutdownAwareReader aborts Read when the shutdown context is cancelled,
