@@ -384,3 +384,30 @@ func TestUploadHandlerV2_TextPlain_SaveFailure_Returns500(t *testing.T) {
 		t.Errorf("expected 500 Internal Server Error for save failure, got %v (body: %s)", status, rr.Body.String())
 	}
 }
+
+func TestPrepareUpload_SanitizesControlChars(t *testing.T) {
+	handler, _, _ := setupReceiveHandler(t, nil)
+
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: string([]byte{0x00, 'b', 0x01, 'a', 0x1F, 'd', '.', 't', 'x', 't'}), Size: 1},
+	}
+	reqDto := model.PrepareUploadRequestDto{Files: files}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	handler.PrepareUploadHandlerV2(rr, req)
+
+	// Must succeed (sanitized filename is valid)
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	var respDto model.PrepareUploadResponseDto
+	json.NewDecoder(rr.Body).Decode(&respDto)
+	if respDto.SessionID == "" {
+		t.Fatal("expected session ID")
+	}
+}

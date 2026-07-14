@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -73,6 +74,13 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		return
 	}
 	defer r.Body.Close()
+
+	// Sanitize filenames: strip control characters to prevent UI spoofing
+	// and terminal escape injection on display.
+	for id, f := range requestDto.Files {
+		f.FileName = sanitizeName(f.FileName)
+		requestDto.Files[id] = f
+	}
 
 	if len(requestDto.Files) == 0 {
 		h.logger.Info("Received empty file list on prepare-upload, returning 204 Finished")
@@ -195,4 +203,15 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 		h.logger.Infof("/cancel received for already-closed session %s — treating as success.", reqSessionId)
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// sanitizeName strips ASCII control characters (0x00–0x1F) from filenames
+// to prevent UI spoofing and terminal escape injection on display.
+func sanitizeName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r <= 0x1F {
+			return -1
+		}
+		return r
+	}, name)
 }
