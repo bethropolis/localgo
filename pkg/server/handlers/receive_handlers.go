@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
@@ -89,6 +90,35 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 
 	if len(requestDto.Files) == 0 {
 		h.logger.Info("Received empty file list on prepare-upload, returning 204 Finished")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// --- Clipboard Message Detection ---
+	// The official LocalSend embeds clipboard text in the Preview field.
+	// When detected, no file upload is needed — the content is already here.
+	var clipboardMessage string
+	for _, f := range requestDto.Files {
+		if f.Preview != nil && *f.Preview != "" && strings.HasPrefix(f.FileType, "text/plain") {
+			clipboardMessage = *f.Preview
+			break
+		}
+	}
+
+	if clipboardMessage != "" {
+		h.logger.Infof("Clipboard message from %s accepted and copied", requestDto.Info.Alias)
+		if !h.config.AutoAccept {
+			h.promptMutex.Lock()
+			accepted := h.promptForClipboard(requestDto.Info.Alias, r.RemoteAddr, clipboardMessage)
+			h.promptMutex.Unlock()
+			if !accepted {
+				httputil.RespondError(w, http.StatusForbidden, "Rejected")
+				return
+			}
+		}
+		if !h.config.NoClipboard {
+			clipboard.Write(clipboardMessage)
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

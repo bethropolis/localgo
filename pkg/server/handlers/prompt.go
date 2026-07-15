@@ -82,3 +82,40 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 
 	return accept
 }
+
+func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) bool {
+	if cli.IsContainer() {
+		return false
+	}
+	cli.Notify("LocalGo: Clipboard Message",
+		fmt.Sprintf("%s sent clipboard text (%d chars)", alias, len(message)))
+
+	truncated := message
+	if len(truncated) > 500 {
+		truncated = truncated[:500] + "\n… (truncated)"
+	}
+
+	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", alias, remoteAddr, truncated)
+
+	var accept bool = true
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Accept Clipboard?").
+				Description(desc).
+				Value(&accept).
+				Affirmative("Accept & Copy").
+				Negative("Reject"),
+		),
+	).WithTheme(huh.ThemeCharm())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := form.RunWithContext(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n%s Clipboard automatically rejected.\n", cli.WarningStyle.Render(cli.IconWarning))
+		return false
+	}
+	return accept
+}
