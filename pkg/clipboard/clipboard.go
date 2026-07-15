@@ -35,7 +35,7 @@ func Write(text string) error {
 	cmd := exec.Command(provider.cmd, provider.args...) //nolint:gosec
 	cmd.Stdin = strings.NewReader(text)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("clipboard write failed: %w: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("clipboard write failed (%s): %w: %s", provider.cmd, err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
@@ -44,12 +44,17 @@ func Write(text string) error {
 // Returns an error when no suitable clipboard tool is available.
 func Read() (string, error) {
 	if provider == nil || provider.readCmd == "" {
-		return "", fmt.Errorf("clipboard read unavailable: no supported tool found")
+		return "", fmt.Errorf("clipboard read unavailable: no supported tool found (install xclip, xsel, wl-paste, pbpaste, or Get-Clipboard)")
 	}
 	cmd := exec.Command(provider.readCmd, provider.readArgs...) //nolint:gosec
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("clipboard read failed: %w", err)
+		// Some tools (xclip, wl-paste) exit with 1 when the clipboard is empty
+		// and produce no output. Treat this as empty, not an error.
+		if len(out) == 0 {
+			return "", nil
+		}
+		return "", fmt.Errorf("clipboard read failed (%s): %w: %s", provider.readCmd, err, strings.TrimSpace(string(out)))
 	}
 	// Normalize Windows CRLF line endings to unix LF
 	return strings.ReplaceAll(string(out), "\r\n", "\n"), nil
