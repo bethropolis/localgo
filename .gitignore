@@ -17,7 +17,7 @@
 # Output directories
 .localgo_security/
 downloads/
-scripts/*.log
+*.log
 
 # Dependency directories (if vendoring)
 vendor/
