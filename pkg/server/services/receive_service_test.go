@@ -192,6 +192,11 @@ func TestReceiveService_ClaimFile_Concurrent(t *testing.T) {
 	}
 	session, _ := svc.CreateSession(sender, files)
 
+	// Evaluate args before goroutines to avoid data race
+	// on the shared session's Files map.
+	sid := session.SessionID
+	token := session.Files["f1"].Token
+
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 
@@ -199,7 +204,7 @@ func TestReceiveService_ClaimFile_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _, err := svc.ClaimFile(session.SessionID, "f1", session.Files["f1"].Token, "10.0.0.1")
+			_, _, err := svc.ClaimFile(sid, "f1", token, "10.0.0.1")
 			results <- err
 		}()
 	}
