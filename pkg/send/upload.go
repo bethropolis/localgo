@@ -1,6 +1,7 @@
 package send
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// memReadSeekCloser wraps a *bytes.Reader to implement io.ReadSeekCloser.
+type memReadSeekCloser struct {
+	*bytes.Reader
+}
+
+func (m *memReadSeekCloser) Close() error { return nil }
+
+// fileReader is satisfied by both *os.File and *memReadSeekCloser.
+type fileReader interface {
+	io.ReadSeeker
+	io.Closer
+}
+
 func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
@@ -26,17 +40,25 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 	}
 	defer file.Close()
 
-	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)
-
 	stat, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to get file stats: %w", err)
 	}
 
-	var body io.ReadCloser = file
+	return uploadStream(ctx, client, device, file, stat.Size(), fileID, sessionID, token, scheme, trackProgress, logger)
+}
+
+func uploadStream(ctx context.Context, client *http.Client, device *model.Device, r fileReader, size int64, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
+	if logger == nil {
+		logger = zap.NewNop().Sugar()
+	}
+
+	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)
+
+	var body io.ReadCloser = io.NopCloser(r)
 	if trackProgress != nil {
 		bar := &progressBar{current: 0, track: trackProgress}
-		body = &progressTracker{Reader: file, Closer: file, bar: bar}
+		body = &progressTracker{Reader: r, Closer: r, bar: bar}
 	}
 
 	// Wrap with idle timeout: cancel request if no data flows for 15s
@@ -50,7 +72,7 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		return fmt.Errorf("failed to create upload request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
-	req.ContentLength = stat.Size()
+	req.ContentLength = size
 
 	resp, err := client.Do(req)
 	if err != nil {
