@@ -42,6 +42,7 @@ var sendCmd = &cobra.Command{
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		files := sendfiles
+		var sendOpts []send.SendOption
 
 		if sendclipboard && sendstdin {
 			return fmt.Errorf("cannot use both --clipboard and --stdin")
@@ -55,19 +56,7 @@ var sendCmd = &cobra.Command{
 			if len(textBytes) == 0 {
 				return fmt.Errorf("standard input is empty")
 			}
-
-			tempFile, err := os.CreateTemp("", "localgo-clip-stdin-*.txt")
-			if err != nil {
-				return fmt.Errorf("failed to create temporary file for stdin: %w", err)
-			}
-			defer os.Remove(tempFile.Name())
-
-			if _, err := tempFile.Write(textBytes); err != nil {
-				tempFile.Close()
-				return fmt.Errorf("failed to write standard input content: %w", err)
-			}
-			tempFile.Close()
-			files = []string{tempFile.Name()}
+			sendOpts = append(sendOpts, send.WithInMemoryFile("stdin.txt", textBytes))
 		}
 
 		if sendclipboard {
@@ -78,34 +67,22 @@ var sendCmd = &cobra.Command{
 			if strings.TrimSpace(text) == "" {
 				return fmt.Errorf("clipboard is empty or does not contain text")
 			}
-
-			tempFile, err := os.CreateTemp("", "localgo-clip-*.txt")
-			if err != nil {
-				return fmt.Errorf("failed to create temporary file for clipboard: %w", err)
-			}
-			defer os.Remove(tempFile.Name())
-
-			if _, err := tempFile.WriteString(text); err != nil {
-				tempFile.Close()
-				return fmt.Errorf("failed to write clipboard text: %w", err)
-			}
-			tempFile.Close()
-			files = []string{tempFile.Name()}
+			sendOpts = append(sendOpts, send.WithInMemoryFile("clipboard.txt", []byte(text)))
 		}
 
-		if len(files) == 0 {
+		if len(files) == 0 && len(sendOpts) == 0 {
 			selected, err := cli.LaunchFilePicker()
 			if err == nil && selected != "" {
 				files = []string{selected}
 			}
 		}
 
-		if len(files) == 0 {
+		if len(files) == 0 && len(sendOpts) == 0 {
 			return fmt.Errorf("no file specified: use --file flag, --clipboard, or select from the file browser")
 		}
 
 		for _, file := range files {
-			if _, err := os.Stat(file); os.IsNotExist(err) && !sendclipboard {
+			if _, err := os.Stat(file); os.IsNotExist(err) && len(sendOpts) == 0 {
 				return fmt.Errorf("file not found: %s", file)
 			}
 		}
@@ -165,7 +142,7 @@ var sendCmd = &cobra.Command{
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
 			defer cancel()
 
-			if err := send.SendToDevice(ctx, Cfg, device, files, zap.S()); err != nil {
+			if err := send.SendToDevice(ctx, Cfg, device, files, zap.S(), sendOpts...); err != nil {
 				return fmt.Errorf("failed to send files: %w", err)
 			}
 
@@ -276,11 +253,11 @@ var sendCmd = &cobra.Command{
 		if selectedDevice != nil {
 			cli.PrintInfo("To: %s (%s:%d)", selectedDevice.Alias, selectedDevice.IP, selectedDevice.Port)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, zap.S())
+			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, zap.S(), sendOpts...)
 		} else {
 			cli.PrintInfo("To: %s", target)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendFiles(ctx, Cfg, files, target, sendport, zap.S())
+			err = send.SendFiles(ctx, Cfg, files, target, sendport, zap.S(), sendOpts...)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to send files: %w", err)

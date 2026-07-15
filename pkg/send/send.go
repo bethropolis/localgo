@@ -27,8 +27,27 @@ import (
 	"go.uber.org/zap"
 )
 
+// SendOption configures the send pipeline.
+type SendOption func(*sendConfig)
+
+type sendConfig struct {
+	memFiles []memFile
+}
+
+type memFile struct {
+	name    string
+	content []byte
+}
+
+// WithInMemoryFile adds an in-memory file (no disk I/O) to the send.
+func WithInMemoryFile(name string, content []byte) SendOption {
+	return func(c *sendConfig) {
+		c.memFiles = append(c.memFiles, memFile{name: name, content: content})
+	}
+}
+
 // SendFiles sends files or directories to a recipient.
-func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger) error {
+func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger, opts ...SendOption) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -92,7 +111,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 			return err
 		}
-		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
 	}
 
 	registerDto := cfg.ToRegisterDto()
@@ -136,10 +155,10 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		return err
 	}
 
-	return SendToDevice(ctx, cfg, targetDevice, filePaths, logger)
+	return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
 }
 
-func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger) error {
+func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger, opts ...SendOption) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -205,6 +224,11 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		defer tr.CloseIdleConnections()
 	}
 
+	var sc sendConfig
+	for _, opt := range opts {
+		opt(&sc)
+	}
+
 	fileMap, err := getFilesWithRelativePaths(filePaths)
 	if err != nil {
 		return fmt.Errorf("failed to process file paths: %w", err)
@@ -246,6 +270,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 	filesDtoMap := make(map[string]model.FileDto)
 	filePathMap := make(map[string]string)
+	memReaders := make(map[string]*memReadSeekCloser)
 
 	for filePath, remoteName := range fileMap {
 		fileInfo, err := os.Stat(filePath)
@@ -267,12 +292,6 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			remoteName = anonymizeFileName(contentType)
 		}
 
-		// If this is a temporary clipboard file, sanitize display name to text_transfer.txt
-		if strings.HasPrefix(filepath.Base(filePath), "localgo-clip-") {
-			remoteName = "text_transfer.txt"
-			contentType = "text/plain"
-		}
-
 		modTime := fileInfo.ModTime().Format(time.RFC3339)
 
 		var metadataPtr *model.FileMetadata
@@ -290,6 +309,26 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 
 		filesDtoMap[fileDto.ID] = fileDto
 		filePathMap[fileDto.ID] = filePath
+	}
+
+	for _, mf := range sc.memFiles {
+		id := uuid.NewString()
+		remoteName := mf.name
+		contentType := "text/plain"
+
+		if cfg.Private {
+			remoteName = anonymizeFileName(contentType)
+		}
+
+		fileDto := model.FileDto{
+			ID:       id,
+			FileName: remoteName,
+			Size:     int64(len(mf.content)),
+			FileType: contentType,
+		}
+
+		filesDtoMap[id] = fileDto
+		memReaders[id] = &memReadSeekCloser{bytes.NewReader(mf.content)}
 	}
 
 	infoAlias := cfg.Alias
@@ -359,32 +398,50 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	sem := make(chan struct{}, concurrency)
 
 	for fileID, token := range prepareResponse.Files {
-		filePath, exists := filePathMap[fileID]
-		if !exists {
+		if reader, ok := memReaders[fileID]; ok {
+			displayName := filesDtoMap[fileID].FileName
+			fileSize := filesDtoMap[fileID].Size
+			trackProgress := mp.AddBar(displayName, fileSize)
+
+			wg.Add(1)
+			go func(fID, tkn string, rdr *memReadSeekCloser, sz int64, name string, track func(int64)) {
+				defer wg.Done()
+
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				logger.Infof("Uploading in-memory file: %s", name)
+				err := uploadStream(ctx, client, device, rdr, sz, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
+				if err != nil {
+					logger.Errorf("Failed to upload %s: %v", name, err)
+					errCh <- fmt.Errorf("failed to upload %s: %w", name, err)
+				}
+			}(fileID, token, reader, fileSize, displayName, trackProgress)
+		} else if filePath, exists := filePathMap[fileID]; exists {
+			var fileSize int64
+			if fi, err := os.Stat(filePath); err == nil {
+				fileSize = fi.Size()
+			}
+			trackProgress := mp.AddBar(filepath.Base(filePath), fileSize)
+
+			wg.Add(1)
+			go func(fID, tkn, fPath string, track func(int64)) {
+				defer wg.Done()
+
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				logger.Infof("Uploading file: %s", filepath.Base(fPath))
+				err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
+				if err != nil {
+					logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
+					errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
+				}
+			}(fileID, token, filePath, trackProgress)
+		} else {
 			logger.Warnf("Server responded with unknown file ID: %s", fileID)
 			continue
 		}
-
-		var fileSize int64
-		if fi, err := os.Stat(filePath); err == nil {
-			fileSize = fi.Size()
-		}
-		trackProgress := mp.AddBar(filepath.Base(filePath), fileSize)
-
-		wg.Add(1)
-		go func(fID, tkn, fPath string, track func(int64)) {
-			defer wg.Done()
-
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			logger.Infof("Uploading file: %s", filepath.Base(fPath))
-			err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
-			if err != nil {
-				logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
-				errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
-			}
-		}(fileID, token, filePath, trackProgress)
 	}
 
 	wg.Wait()
