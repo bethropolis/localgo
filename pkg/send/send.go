@@ -320,11 +320,13 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			remoteName = anonymizeFileName(contentType)
 		}
 
+		preview := string(mf.content)
 		fileDto := model.FileDto{
 			ID:       id,
 			FileName: remoteName,
 			Size:     int64(len(mf.content)),
 			FileType: contentType,
+			Preview:  &preview,
 		}
 
 		filesDtoMap[id] = fileDto
@@ -376,6 +378,13 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to send prepare request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// 204 No Content means the receiver accepted a clipboard message
+	// and no file upload is needed (content was in the Preview field).
+	if resp.StatusCode == http.StatusNoContent {
+		logger.Info("Clipboard message accepted by receiver, no upload needed")
+		return nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("prepare request failed with status: %s", resp.Status)
