@@ -214,7 +214,10 @@ var sendCmd = &cobra.Command{
 
 							var ips []net.IP
 							for _, ip := range localIPs {
-								ips = append(ips, network.GetSubnetIPs(ip)...)
+								subnetIPs, err := network.GetUsableSubnetIPsFromIP(ip)
+								if err == nil {
+									ips = append(ips, subnetIPs...)
+								}
 							}
 							ips = append(ips, net.ParseIP("127.0.0.1"))
 

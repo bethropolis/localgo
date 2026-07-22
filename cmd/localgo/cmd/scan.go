@@ -66,8 +66,10 @@ var scanCmd = &cobra.Command{
 			}
 
 			for _, ip := range localIPs {
-				subnetIPs := network.GetSubnetIPs(ip)
-				ips = append(ips, subnetIPs...)
+				subnetIPs, err := network.GetUsableSubnetIPsFromIP(ip)
+				if err == nil {
+					ips = append(ips, subnetIPs...)
+				}
 			}
 
 			if !scanquiet {

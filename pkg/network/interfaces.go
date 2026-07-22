@@ -190,6 +190,34 @@ func GetInterfaceIPNet(ifaceName string) (*net.IPNet, error) {
 	return nil, fmt.Errorf("interface %q has no IPv4 address", ifaceName)
 }
 
+// GetUsableSubnetIPsFromIP returns all usable host IPs in the subnet of the
+// interface that owns the given IP, respecting its actual netmask. Falls back
+// to a flat /24 scan if the interface cannot be determined.
+func GetUsableSubnetIPsFromIP(ip net.IP) ([]net.IP, error) {
+	ipStr := ip.String()
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return GetSubnetIPs(ip), nil
+	}
+	for _, i := range ifaces {
+		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
+			continue
+		}
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				if ipnet.IP.To4() != nil && ipnet.IP.String() == ipStr {
+					return GetUsableSubnetIPs(i.Name)
+				}
+			}
+		}
+	}
+	return GetSubnetIPs(ip), nil
+}
+
 // GetUsableSubnetIPs returns all usable host IPs in the subnet of the named
 // interface, respecting its actual netmask. Subnets with more than 1022 hosts
 // (larger than /22) are capped at /22 to keep scanning practical. Network and
