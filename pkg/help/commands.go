@@ -15,6 +15,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo serve --auto-accept --quiet",
 				"localgo serve --no-clipboard",
 				"localgo serve --exec 'notify-send \"Got: %f\"'",
+				"localgo serve --daemon",
+				"localgo serve -d",
 			},
 			Flags: []FlagHelp{
 				{Name: "--port", Type: "int", Default: "from config", Description: "Port to run the server on"},
@@ -22,6 +24,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--pin", Type: "string", Default: "", Description: "PIN for authentication"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},
 				{Name: "--dir", Type: "string", Default: "from config", Description: "Download directory"},
+				{Name: "--daemon, -d", Type: "bool", Default: "false", Description: "Run server as a background daemon"},
 				{Name: "--interval", Type: "int", Default: "30", Description: "Discovery announcement interval in seconds"},
 				{Name: "--auto-accept", Type: "bool", Default: "false", Description: "Auto-accept incoming files without prompting"},
 				{Name: "--no-clipboard", Type: "bool", Default: "false", Description: "Save incoming text as a file instead of copying to clipboard"},
@@ -162,6 +165,15 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Flags: []FlagHelp{
 				{Name: "--json", Type: "bool", Default: "false", Description: "Output in JSON format"},
 			},
+		},
+		"stop": {
+			Name:        "stop",
+			Description: "Stop the running LocalGo daemon",
+			Usage:       "localgo stop",
+			Examples: []string{
+				"localgo stop",
+			},
+			Flags: []FlagHelp{},
 		},
 		"completion": {
 			Name:        "completion",
