@@ -64,7 +64,9 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- File Saving ---
-	rawFileName := dto.FileName
+	// Normalize incoming filenames: convert Windows backslashes to forward
+	// slashes so cross-OS directory transfers create correct subdirectories.
+	rawFileName := filepath.ToSlash(dto.FileName)
 	destinationPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
 
 	// Path traversal prevention: ensure the resolved path is still within DownloadDir

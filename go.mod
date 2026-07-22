@@ -18,7 +18,8 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/vbauerster/mpb/v7 v7.5.3
 	go.uber.org/zap v1.27.1
-	golang.org/x/sys v0.45.0
+	golang.org/x/sys v0.47.0
+	golang.org/x/term v0.45.0
 )
 
 require (
