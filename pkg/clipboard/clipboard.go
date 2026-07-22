@@ -47,14 +47,14 @@ func Read() (string, error) {
 		return "", fmt.Errorf("clipboard read unavailable: no supported tool found (install xclip, xsel, wl-paste, pbpaste, or Get-Clipboard)")
 	}
 	cmd := exec.Command(provider.readCmd, provider.readArgs...) //nolint:gosec
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		// Some tools (xclip, wl-paste) exit with 1 when the clipboard is empty
 		// and produce no output. Treat this as empty, not an error.
 		if len(out) == 0 {
 			return "", nil
 		}
-		return "", fmt.Errorf("clipboard read failed (%s): %w: %s", provider.readCmd, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("clipboard read failed (%s): %w", provider.readCmd, err)
 	}
 	// Normalize Windows CRLF line endings to unix LF
 	return strings.ReplaceAll(string(out), "\r\n", "\n"), nil
@@ -67,24 +67,29 @@ func Available() bool {
 
 // OverrideProvider replaces the auto-detected clipboard tool with custom commands.
 // Empty strings are ignored (auto-detected tool kept for that direction, if any).
+// Returns an error if the command string is non-empty but yields no tokens.
 func OverrideProvider(writeCmd, readCmd string) {
 	if writeCmd == "" && readCmd == "" {
 		return
 	}
 	p := &clipProvider{}
 	if writeCmd != "" {
-		wp := strings.Fields(writeCmd)
-		p.cmd = wp[0]
-		p.args = wp[1:]
-	} else if provider != nil {
+		if wp := strings.Fields(writeCmd); len(wp) > 0 {
+			p.cmd = wp[0]
+			p.args = wp[1:]
+		}
+	}
+	if p.cmd == "" && provider != nil {
 		p.cmd = provider.cmd
 		p.args = provider.args
 	}
 	if readCmd != "" {
-		rp := strings.Fields(readCmd)
-		p.readCmd = rp[0]
-		p.readArgs = rp[1:]
-	} else if provider != nil {
+		if rp := strings.Fields(readCmd); len(rp) > 0 {
+			p.readCmd = rp[0]
+			p.readArgs = rp[1:]
+		}
+	}
+	if p.readCmd == "" && provider != nil {
 		p.readCmd = provider.readCmd
 		p.readArgs = provider.readArgs
 	}

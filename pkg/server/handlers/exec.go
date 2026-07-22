@@ -17,9 +17,11 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 		h.logger.Infof("Running exec hook: %s", h.config.ExecHook)
 		var cmd *exec.Cmd
 		if h.config.Shell != "" {
-			parts := strings.Fields(h.config.Shell)
-			cmd = exec.Command(parts[0], append(parts[1:], h.config.ExecHook)...)
-		} else if runtime.GOOS == "windows" {
+			if parts := strings.Fields(h.config.Shell); len(parts) > 0 {
+				cmd = exec.Command(parts[0], append(parts[1:], h.config.ExecHook)...)
+			}
+		}
+		if cmd == nil && runtime.GOOS == "windows" {
 			cmd = exec.Command("cmd", "/c", h.config.ExecHook)
 		} else {
 			cmd = exec.Command("sh", "-c", h.config.ExecHook)
