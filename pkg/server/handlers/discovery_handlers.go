@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -108,7 +109,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 	device := model.NewDevice(requestDto, net.ParseIP(ip), requestDto.Port, requestDto.Protocol == model.ProtocolTypeHTTPS)
 	h.registryService.RegisterDevice(device)
 
-	h.logger.Infof("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, requestDto.Alias, requestDto.Fingerprint)
+	h.logger.Infof("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, cli.Sanitize(requestDto.Alias), requestDto.Fingerprint)
 
 	downloadCapable := h.sendService.GetSession() != nil
 

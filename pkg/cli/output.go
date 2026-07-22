@@ -131,7 +131,7 @@ func (ow *OutputWriter) writeDevicesTable(devices []*model.Device, method string
 	// Write devices
 	for _, device := range devices {
 		fmt.Fprintf(ow.writer, "%s\t%s\t%s\t%d\t%s\t%s...\n",
-			TruncateString(device.Alias, 20),
+			TruncateString(Sanitize(device.Alias), 20),
 			device.IP,
 			strings.ToUpper(string(device.Protocol)),
 			device.Port,
@@ -147,7 +147,7 @@ func (ow *OutputWriter) writeDevicesTable(devices []*model.Device, method string
 func (ow *OutputWriter) writeDevicesQuiet(devices []*model.Device) error {
 	for _, device := range devices {
 		fmt.Printf("%s\t%s\t%s\t%d\t%s\n",
-			device.Alias,
+			Sanitize(device.Alias),
 			device.IP,
 			device.Protocol,
 			device.Port,
@@ -228,7 +228,7 @@ func PickDevice(devices []*model.Device, private bool) *model.Device {
 	var selected *model.Device
 	options := make([]huh.Option[*model.Device], len(devices))
 	for i, d := range devices {
-		displayName := d.Alias
+		displayName := Sanitize(d.Alias)
 		if private {
 			displayName = AnonymizedAlias(d)
 		}

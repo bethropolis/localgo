@@ -81,7 +81,7 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	for id, f := range requestDto.Files {
 		f.FileName = sanitizeName(f.FileName)
 		if f.FileName == "" {
-			h.logger.Warnf("Rejected transfer from %s: file '%s' has empty name after sanitization", requestDto.Info.Alias, id)
+			h.logger.Warnf("Rejected transfer from %s: file '%s' has empty name after sanitization", cli.Sanitize(requestDto.Info.Alias), id)
 			httputil.RespondError(w, http.StatusBadRequest, "Invalid filename")
 			return
 		}
@@ -106,10 +106,10 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	}
 
 	if clipboardMessage != "" {
-		h.logger.Infof("Clipboard message from %s accepted and copied", requestDto.Info.Alias)
+		h.logger.Infof("Clipboard message from %s accepted and copied", cli.Sanitize(requestDto.Info.Alias))
 		if !h.config.AutoAccept {
 			h.promptMutex.Lock()
-			accepted := h.promptForClipboard(requestDto.Info.Alias, r.RemoteAddr, clipboardMessage)
+			accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
 			h.promptMutex.Unlock()
 			if !accepted {
 				httputil.RespondError(w, http.StatusForbidden, "Rejected")
@@ -127,7 +127,7 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	var totalSize int64
 	for _, f := range requestDto.Files {
 		if f.Size < 0 {
-			h.logger.Warnf("Rejected transfer from %s: file '%s' has negative size (%d)", requestDto.Info.Alias, f.FileName, f.Size)
+			h.logger.Warnf("Rejected transfer from %s: file '%s' has negative size (%d)", cli.Sanitize(requestDto.Info.Alias), cli.Sanitize(f.FileName), f.Size)
 			httputil.RespondError(w, http.StatusBadRequest, "Invalid file size")
 			return
 		}
@@ -139,18 +139,18 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		const safetyBuffer = 50 * 1024 * 1024
 		if freeSpace < uint64(totalSize)+safetyBuffer {
 			h.logger.Warnf("Rejected transfer from %s: Insufficient disk space (Required: %s, Available: %s)",
-				requestDto.Info.Alias, cli.FormatBytes(totalSize), cli.FormatBytes(int64(freeSpace)))
+				cli.Sanitize(requestDto.Info.Alias), cli.FormatBytes(totalSize), cli.FormatBytes(int64(freeSpace)))
 			httputil.RespondError(w, http.StatusBadRequest, "Insufficient storage space on receiver")
 			return
 		}
 	}
 
-	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", requestDto.Info.Alias, r.RemoteAddr, len(requestDto.Files))
+	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, len(requestDto.Files))
 
 	// Extract IP from RemoteAddr
 	senderIP, _, _ := net.SplitHostPort(r.RemoteAddr)
 	sender := model.DeviceInfo{
-		Alias:       requestDto.Info.Alias,
+		Alias:       cli.Sanitize(requestDto.Info.Alias),
 		Version:     requestDto.Info.Version,
 		DeviceModel: requestDto.Info.DeviceModel,
 		DeviceType:  requestDto.Info.DeviceType,
