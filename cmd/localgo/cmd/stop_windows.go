@@ -9,16 +9,13 @@ import (
 )
 
 func stopDaemonProcess(pid int, pidPath string) error {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		os.Remove(pidPath)
-		cli.PrintWarning("No running LocalGo daemon found (process %d not found)", pid)
-		return nil
-	}
-
 	cli.PrintInfo("Stopping LocalGo daemon (PID %d)...", pid)
+
+	// On Windows, os.FindProcess always returns a handle even for dead PIDs,
+	// so we skip the liveness probe and go straight to Kill.
+	process, _ := os.FindProcess(pid)
 	if err := process.Kill(); err != nil {
-		cli.PrintWarning("Failed to kill daemon process (PID %d): %v", pid, err)
+		cli.PrintWarning("No running LocalGo daemon found with PID %d", pid)
 	} else {
 		cli.PrintSuccess("LocalGo daemon stopped")
 	}
