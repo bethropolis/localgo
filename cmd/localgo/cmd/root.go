@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/logging"
@@ -60,6 +62,13 @@ var rootCmd = &cobra.Command{
 
 		if privateMode {
 			Cfg.Private = true
+		}
+
+		if Cfg.ClipboardWriteCmd != "" || Cfg.ClipboardReadCmd != "" {
+			clipboard.OverrideProvider(Cfg.ClipboardWriteCmd, Cfg.ClipboardReadCmd)
+		}
+		if Cfg.NotificationCmd != "" {
+			cli.SetNotificationCmd(Cfg.NotificationCmd)
 		}
 
 		return nil

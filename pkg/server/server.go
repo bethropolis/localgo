@@ -161,7 +161,13 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 
 	if s.config.HttpsEnabled {
 		s.logger.Infof("Starting HTTPS server on %s with alias %s", addr, s.config.Alias)
-		cert, err := tls.X509KeyPair([]byte(s.config.SecurityContext.Certificate), []byte(s.config.SecurityContext.PrivateKey))
+		var cert tls.Certificate
+		var err error
+		if s.config.CustomTLSCertPath != "" && s.config.CustomTLSKeyPath != "" {
+			cert, err = tls.LoadX509KeyPair(s.config.CustomTLSCertPath, s.config.CustomTLSKeyPath)
+		} else {
+			cert, err = tls.X509KeyPair([]byte(s.config.SecurityContext.Certificate), []byte(s.config.SecurityContext.PrivateKey))
+		}
 		if err != nil {
 			return fmt.Errorf("failed to load TLS key pair: %w", err)
 		}

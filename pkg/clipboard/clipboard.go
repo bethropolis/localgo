@@ -64,3 +64,31 @@ func Read() (string, error) {
 func Available() bool {
 	return provider != nil
 }
+
+// OverrideProvider replaces the auto-detected clipboard tool with custom commands.
+// Empty strings are ignored (auto-detected tool kept for that direction, if any).
+func OverrideProvider(writeCmd, readCmd string) {
+	if writeCmd == "" && readCmd == "" {
+		return
+	}
+	p := &clipProvider{}
+	if writeCmd != "" {
+		wp := strings.Fields(writeCmd)
+		p.cmd = wp[0]
+		p.args = wp[1:]
+	} else if provider != nil {
+		p.cmd = provider.cmd
+		p.args = provider.args
+	}
+	if readCmd != "" {
+		rp := strings.Fields(readCmd)
+		p.readCmd = rp[0]
+		p.readArgs = rp[1:]
+	} else if provider != nil {
+		p.readCmd = provider.readCmd
+		p.readArgs = provider.readArgs
+	}
+	if p.cmd != "" || p.readCmd != "" {
+		provider = p
+	}
+}
