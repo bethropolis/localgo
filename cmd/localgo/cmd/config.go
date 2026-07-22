@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -90,7 +91,7 @@ var configSetCmd = &cobra.Command{
 			configPath = os.ExpandEnv("$HOME/.config/localgo/config.yaml")
 		}
 
-		if err := os.MkdirAll(strings.TrimSuffix(configPath, "/config.yaml"), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
