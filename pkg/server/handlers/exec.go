@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP string, fileSize int64) {
@@ -15,7 +16,10 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 	go func() {
 		h.logger.Infof("Running exec hook: %s", h.config.ExecHook)
 		var cmd *exec.Cmd
-		if runtime.GOOS == "windows" {
+		if h.config.Shell != "" {
+			parts := strings.Fields(h.config.Shell)
+			cmd = exec.Command(parts[0], append(parts[1:], h.config.ExecHook)...)
+		} else if runtime.GOOS == "windows" {
 			cmd = exec.Command("cmd", "/c", h.config.ExecHook)
 		} else {
 			cmd = exec.Command("sh", "-c", h.config.ExecHook)

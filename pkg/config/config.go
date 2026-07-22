@@ -45,6 +45,13 @@ type Config struct {
 	Concurrency       int                           `json:"-"` // max parallel uploads (0 = use default)
 	MulticastInterface string                        `json:"-"` // multicast network interface name
 	Private           bool                          `json:"-"` // anonymize device identities
+
+	Shell             string `json:"-"` // shell command prefix for exec hooks (default: "sh -c" or "cmd /c")
+	ClipboardWriteCmd string `json:"-"` // custom clipboard write command
+	ClipboardReadCmd  string `json:"-"` // custom clipboard read command
+	CustomTLSCertPath string `json:"-"` // path to custom TLS certificate file
+	CustomTLSKeyPath  string `json:"-"` // path to custom TLS private key file
+	NotificationCmd   string `json:"-"` // custom notification command
 }
 
 // getSecurityDir determines the best location for the security directory
@@ -181,6 +188,13 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 
 	concurrency := v.GetInt("concurrency")
 
+	shell := v.GetString("shell")
+	clipboardWriteCmd := v.GetString("clipboard_write_cmd")
+	clipboardReadCmd := v.GetString("clipboard_read_cmd")
+	customTLSCertPath := v.GetString("tls_cert")
+	customTLSKeyPath := v.GetString("tls_key")
+	notificationCmd := v.GetString("notification_cmd")
+
 	cfg := &Config{
 		Alias:             alias,
 		Port:              port,
@@ -200,6 +214,12 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		ExecHook:          execHook,
 		Concurrency:       concurrency,
 		MulticastInterface: multicastInterface,
+		Shell:             shell,
+		ClipboardWriteCmd: clipboardWriteCmd,
+		ClipboardReadCmd:  clipboardReadCmd,
+		CustomTLSCertPath: customTLSCertPath,
+		CustomTLSKeyPath:  customTLSKeyPath,
+		NotificationCmd:   notificationCmd,
 	}
 
 	return cfg, nil
