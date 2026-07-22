@@ -3,7 +3,10 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -165,6 +168,13 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 		var err error
 		if s.config.CustomTLSCertPath != "" && s.config.CustomTLSKeyPath != "" {
 			cert, err = tls.LoadX509KeyPair(s.config.CustomTLSCertPath, s.config.CustomTLSKeyPath)
+			if err == nil && len(cert.Certificate) > 0 {
+				if leaf, parseErr := x509.ParseCertificate(cert.Certificate[0]); parseErr == nil {
+					hash := sha256.Sum256(leaf.Raw)
+					s.config.SetCustomFingerprint(hex.EncodeToString(hash[:]))
+					s.logger.Infof("Using custom TLS certificate, fingerprint: %.16s...", hex.EncodeToString(hash[:]))
+				}
+			}
 		} else {
 			cert, err = tls.X509KeyPair([]byte(s.config.SecurityContext.Certificate), []byte(s.config.SecurityContext.PrivateKey))
 		}
