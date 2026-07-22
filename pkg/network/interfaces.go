@@ -191,8 +191,9 @@ func GetInterfaceIPNet(ifaceName string) (*net.IPNet, error) {
 }
 
 // GetUsableSubnetIPs returns all usable host IPs in the subnet of the named
-// interface, respecting its actual netmask. Subnets larger than /22 are capped
-// at /22 to keep scanning practical. Network and broadcast addresses are excluded.
+// interface, respecting its actual netmask. Subnets with more than 1022 hosts
+// (larger than /22) are capped at /22 to keep scanning practical. Network and
+// broadcast addresses are excluded.
 func GetUsableSubnetIPs(ifaceName string) ([]net.IP, error) {
 	ipnet, err := GetInterfaceIPNet(ifaceName)
 	if err != nil {
@@ -207,15 +208,15 @@ func GetUsableSubnetIPs(ifaceName string) ([]net.IP, error) {
 	ones, bits := ipnet.Mask.Size()
 	hostBits := bits - ones
 
-	// Cap at /22 for practical scanning
+	// Cap at /22 for practical scanning (max 1022 usable hosts)
 	effectiveMask := ipnet.Mask
-	if hostBits > 22 {
+	if hostBits > 10 {
 		effectiveMask = net.CIDRMask(22, bits)
 		hostBits = bits - 22
 	}
 
 	if hostBits < 2 {
-		return nil, fmt.Errorf("interface %q subnet prefix /%d is too large for scanning", ifaceName, bits-hostBits)
+		return nil, fmt.Errorf("interface %q subnet prefix /%d is too small for scanning", ifaceName, bits-hostBits)
 	}
 
 	maskBits := []byte{effectiveMask[0], effectiveMask[1], effectiveMask[2], effectiveMask[3]}
