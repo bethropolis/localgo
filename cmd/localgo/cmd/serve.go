@@ -45,6 +45,15 @@ var serveCmd = &cobra.Command{
 			return daemonize()
 		}
 
+		// Daemon child: ensure PID file is cleaned up when server exits
+		if os.Getenv("LOCALGO_DAEMON_CHILD") == "1" {
+			defer func() {
+				if pidPath, err := pidFilePath(); err == nil {
+					_ = os.Remove(pidPath)
+				}
+			}()
+		}
+
 		// Apply overrides
 		if serveport > 0 {
 			Cfg.Port = serveport

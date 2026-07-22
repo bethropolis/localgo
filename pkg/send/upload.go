@@ -65,6 +65,7 @@ func uploadStream(ctx context.Context, client *http.Client, device *model.Device
 	uploadCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	body = NewIdleTimeoutReader(body, 15*time.Second, cancel)
+	defer body.Close()
 
 	req, err := http.NewRequestWithContext(uploadCtx, http.MethodPost, url, body)
 	if err != nil {

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -141,8 +140,8 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		}
 
 		// Fallback: save as file (NoClipboard mode or clipboard write failed)
-		clipboardPath := filepath.Join(h.config.DownloadDir, "clipboard.txt")
-		if err := os.WriteFile(clipboardPath, []byte(clipboardMessage), 0644); err != nil {
+		clipboardPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, "clipboard.txt")
+		if err := os.WriteFile(clipboardPath, []byte(clipboardMessage), 0600); err != nil {
 			h.logger.Errorf("Failed to save clipboard text to %s: %v", clipboardPath, err)
 			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save clipboard")
 			return
