@@ -45,29 +45,31 @@ var stopCmd = &cobra.Command{
 			return nil
 		}
 
+		// Check if process is alive (Signal(0) is a liveness probe)
+		if err := process.Signal(syscall.Signal(0)); err != nil {
+			os.Remove(pidPath)
+			cli.PrintWarning("No running LocalGo daemon found (process %d is dead)", pid)
+			return nil
+		}
+
 		cli.PrintInfo("Stopping LocalGo daemon (PID %d)...", pid)
-		if err := process.Signal(syscall.SIGTERM); err != nil {
-			return fmt.Errorf("failed to signal process %d: %w", pid, err)
+		process.Signal(syscall.SIGTERM)
+
+		// Poll for exit up to 5 seconds
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if err := process.Signal(syscall.Signal(0)); err != nil {
+				os.Remove(pidPath)
+				cli.PrintSuccess("LocalGo daemon stopped")
+				return nil
+			}
 		}
 
-		// Wait up to 5 seconds for graceful shutdown
-		done := make(chan struct{})
-		go func() {
-			process.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			cli.PrintSuccess("LocalGo daemon stopped")
-		case <-time.After(5 * time.Second):
-			cli.PrintWarning("Daemon did not stop gracefully, sending SIGKILL...")
-			process.Kill()
-			<-done
-			cli.PrintSuccess("LocalGo daemon killed")
-		}
-
+		// Timeout — force kill
+		cli.PrintWarning("Daemon did not stop gracefully, sending SIGKILL...")
+		process.Kill()
 		os.Remove(pidPath)
+		cli.PrintSuccess("LocalGo daemon killed")
 		return nil
 	},
 }

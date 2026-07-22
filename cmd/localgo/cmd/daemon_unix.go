@@ -7,10 +7,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 )
 
 func daemonize() error {
+	// Check if daemon is already running
+	pidPath, err := pidFilePath()
+	if err != nil {
+		return fmt.Errorf("cannot determine pid file path: %w", err)
+	}
+	if data, err := os.ReadFile(pidPath); err == nil {
+		if oldPid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+			if p, err := os.FindProcess(oldPid); err == nil && p.Signal(syscall.Signal(0)) == nil {
+				return fmt.Errorf("daemon already running (PID %d)", oldPid)
+			}
+		}
+	}
+
 	var childArgs []string
 	for _, a := range os.Args[1:] {
 		if a == "--daemon" || a == "-d" {
@@ -29,10 +44,6 @@ func daemonize() error {
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
-	pidPath, err := pidFilePath()
-	if err != nil {
-		return fmt.Errorf("cannot determine pid file path: %w", err)
-	}
 	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
 		return fmt.Errorf("cannot create pid directory: %w", err)
 	}

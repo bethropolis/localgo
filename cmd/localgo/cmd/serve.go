@@ -64,6 +64,11 @@ var serveCmd = &cobra.Command{
 		if serveautoAccept {
 			Cfg.AutoAccept = true
 		}
+		// Daemon child has no terminal — force auto-accept and quiet
+		if os.Getenv("LOCALGO_DAEMON_CHILD") != "" {
+			Cfg.AutoAccept = true
+			Cfg.Quiet = true
+		}
 		if servenoClipboard {
 			Cfg.NoClipboard = true
 		}
