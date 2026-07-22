@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -348,6 +349,9 @@ func TestUploadHandlerV2_TextPlain_PathTraversal_Returns400(t *testing.T) {
 }
 
 func TestUploadHandlerV2_TextPlain_SaveFailure_Returns500(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Chmod permission bits are not supported on Windows")
+	}
 	cfg := &config.Config{
 		AutoAccept:  true,
 		NoClipboard: true,
