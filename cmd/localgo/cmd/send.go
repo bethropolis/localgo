@@ -97,7 +97,16 @@ var sendCmd = &cobra.Command{
 			}
 			parsedIP := net.ParseIP(host)
 			if parsedIP == nil {
-				return fmt.Errorf("invalid IP address: %s", host)
+				// Not a raw IP — try hostname resolution (mDNS, DNS, etc.)
+				ips, err := net.LookupIP(host)
+				if err != nil || len(ips) == 0 {
+					return fmt.Errorf("invalid IP address or unresolvable hostname: %s", host)
+				}
+				parsedIP = ips[0].To4()
+				if parsedIP == nil {
+					// Use first result even if it's IPv6; the caller handles it
+					parsedIP = ips[0]
+				}
 			}
 
 			port := sendport
