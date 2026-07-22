@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -94,19 +96,28 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Extract IP from RemoteAddr early (used by clipboard path and elsewhere)
+	senderIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+
 	// --- Clipboard Message Detection ---
 	// The official LocalSend embeds clipboard text in the Preview field.
-	// When detected, no file upload is needed — the content is already here.
+	// Only short-circuit when it's a single clipboard message (full content
+	// already present, Size matches Preview length). Fall through to the
+	// normal upload path otherwise.
 	var clipboardMessage string
-	for _, f := range requestDto.Files {
+	var clipboardFileID string
+	for id, f := range requestDto.Files {
 		if f.Preview != nil && *f.Preview != "" && strings.HasPrefix(f.FileType, "text/plain") {
-			clipboardMessage = *f.Preview
+			if len(requestDto.Files) == 1 && f.Size == int64(len(*f.Preview)) {
+				clipboardMessage = *f.Preview
+				clipboardFileID = id
+			}
 			break
 		}
 	}
 
 	if clipboardMessage != "" {
-		h.logger.Infof("Clipboard message from %s accepted and copied", cli.Sanitize(requestDto.Info.Alias))
+		h.logger.Infof("Clipboard message from %s", cli.Sanitize(requestDto.Info.Alias))
 		if !h.config.AutoAccept {
 			h.promptMutex.Lock()
 			accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
@@ -116,9 +127,29 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 				return
 			}
 		}
+
 		if !h.config.NoClipboard {
-			clipboard.Write(clipboardMessage)
+			if err := clipboard.Write(clipboardMessage); err != nil {
+				h.logger.Warnf("Clipboard write failed (%v), saving text as file instead", err)
+			} else {
+				h.logger.Infof("Clipboard message from %s accepted and copied", cli.Sanitize(requestDto.Info.Alias))
+				h.logTransfer(requestDto.Info.Alias, senderIP, clipboardFileID, "<clipboard>", int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+				h.runExecHook("<clipboard>", clipboardFileID, requestDto.Info.Alias, senderIP, int64(len(clipboardMessage)))
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
+
+		// Fallback: save as file (NoClipboard mode or clipboard write failed)
+		clipboardPath := filepath.Join(h.config.DownloadDir, "clipboard.txt")
+		if err := os.WriteFile(clipboardPath, []byte(clipboardMessage), 0644); err != nil {
+			h.logger.Errorf("Failed to save clipboard text to %s: %v", clipboardPath, err)
+			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save clipboard")
+			return
+		}
+		h.logger.Infof("Clipboard message from %s saved to %s", cli.Sanitize(requestDto.Info.Alias), clipboardPath)
+		h.logTransfer(requestDto.Info.Alias, senderIP, clipboardFileID, clipboardPath, int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+		h.runExecHook(clipboardPath, clipboardFileID, requestDto.Info.Alias, senderIP, int64(len(clipboardMessage)))
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -147,8 +178,6 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 
 	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, len(requestDto.Files))
 
-	// Extract IP from RemoteAddr
-	senderIP, _, _ := net.SplitHostPort(r.RemoteAddr)
 	sender := model.DeviceInfo{
 		Alias:       cli.Sanitize(requestDto.Info.Alias),
 		Version:     requestDto.Info.Version,

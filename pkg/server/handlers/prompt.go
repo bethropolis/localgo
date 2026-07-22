@@ -95,7 +95,7 @@ func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) b
 		truncated = truncated[:500] + "\n… (truncated)"
 	}
 
-	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", cli.Sanitize(alias), remoteAddr, truncated)
+	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", cli.Sanitize(alias), remoteAddr, cli.Sanitize(truncated))
 
 	var accept bool = true
 	form := huh.NewForm(
