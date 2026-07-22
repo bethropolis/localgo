@@ -125,12 +125,19 @@ var sendCmd = &cobra.Command{
 				Cfg.Concurrency = sendconcurrency
 			}
 
-			cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
+			totalFiles := len(files) + len(sendOpts)
+			cli.PrintHeader(fmt.Sprintf("Sending %d file(s)", totalFiles))
 			for _, file := range files {
 				fileInfo, err := os.Stat(file)
 				if err == nil {
 					cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 				}
+			}
+			if sendclipboard {
+				cli.PrintInfo("- clipboard (in-memory)")
+			}
+			if sendstdin {
+				cli.PrintInfo("- stdin (in-memory)")
 			}
 			cli.PrintInfo("To: %s:%d", host, port)
 			fromAlias := Cfg.Alias
