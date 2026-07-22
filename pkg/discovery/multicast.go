@@ -143,6 +143,10 @@ func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 	key := device.Fingerprint
 	existingDevice, exists := md.devices[key]
 	if exists {
+		existingDevice.IP = device.IP
+		existingDevice.Port = device.Port
+		existingDevice.Alias = device.Alias
+		existingDevice.Protocol = device.Protocol
 		existingDevice.UpdateLastSeen()
 	} else {
 		md.devices[key] = device
