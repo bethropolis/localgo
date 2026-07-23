@@ -127,13 +127,15 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 			}
 		}
 
+		sanitizedAlias := cli.Sanitize(requestDto.Info.Alias)
+
 		if !h.config.NoClipboard {
 			if err := clipboard.Write(clipboardMessage); err != nil {
 				h.logger.Warnf("Clipboard write failed (%v), saving text as file instead", err)
 			} else {
-				h.logger.Infof("Clipboard message from %s accepted and copied", cli.Sanitize(requestDto.Info.Alias))
-				h.logTransfer(requestDto.Info.Alias, senderIP, clipboardFileID, "<clipboard>", int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
-				h.runExecHook("<clipboard>", clipboardFileID, requestDto.Info.Alias, senderIP, int64(len(clipboardMessage)))
+				h.logger.Infof("Clipboard message from %s accepted and copied", sanitizedAlias)
+				h.logTransfer(sanitizedAlias, senderIP, clipboardFileID, "<clipboard>", int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+				h.runExecHook("<clipboard>", clipboardFileID, sanitizedAlias, senderIP, int64(len(clipboardMessage)))
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -146,9 +148,9 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save clipboard")
 			return
 		}
-		h.logger.Infof("Clipboard message from %s saved to %s", cli.Sanitize(requestDto.Info.Alias), clipboardPath)
-		h.logTransfer(requestDto.Info.Alias, senderIP, clipboardFileID, clipboardPath, int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
-		h.runExecHook(clipboardPath, clipboardFileID, requestDto.Info.Alias, senderIP, int64(len(clipboardMessage)))
+		h.logger.Infof("Clipboard message from %s saved to %s", sanitizedAlias, clipboardPath)
+		h.logTransfer(sanitizedAlias, senderIP, clipboardFileID, clipboardPath, int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+		h.runExecHook(clipboardPath, clipboardFileID, sanitizedAlias, senderIP, int64(len(clipboardMessage)))
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -277,7 +279,7 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 // to prevent UI spoofing and terminal escape injection on display.
 func sanitizeName(name string) string {
 	return strings.Map(func(r rune) rune {
-		if r <= 0x1F {
+		if r <= 0x1F || r == 0x7F {
 			return -1
 		}
 		return r

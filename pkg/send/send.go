@@ -258,6 +258,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			}
 			tmpPath := tmp.Name()
 			tmp.Close()
+			os.Remove(tmpPath)
 
 			if err := metadata.StripTo(filePath, tmpPath); err != nil {
 				os.Remove(tmpPath)

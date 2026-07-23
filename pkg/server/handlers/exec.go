@@ -28,8 +28,7 @@ func (h *ReceiveHandler) runExecHook(filePath, fileName, senderAlias, senderIP s
 			if parts := strings.Fields(h.config.Shell); len(parts) > 0 {
 				cmd = exec.Command(parts[0], append(parts[1:], hook)...)
 			}
-		}
-		if cmd == nil && runtime.GOOS == "windows" {
+		} else if runtime.GOOS == "windows" {
 			cmd = exec.Command("cmd", "/c", hook)
 		} else {
 			cmd = exec.Command("sh", "-c", hook)

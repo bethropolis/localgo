@@ -67,7 +67,7 @@ func Available() bool {
 
 // OverrideProvider replaces the auto-detected clipboard tool with custom commands.
 // Empty strings are ignored (auto-detected tool kept for that direction, if any).
-// Returns an error if the command string is non-empty but yields no tokens.
+// Non-empty command strings that parse to zero tokens are silently ignored.
 func OverrideProvider(writeCmd, readCmd string) {
 	if writeCmd == "" && readCmd == "" {
 		return
