@@ -140,20 +140,13 @@ func (md *MulticastDiscovery) Stop() {
 
 func (md *MulticastDiscovery) updateDevice(device *model.Device) {
 	md.devicesMutex.Lock()
-	key := device.Fingerprint
-	existingDevice, exists := md.devices[key]
-	if exists {
-		existingDevice.UpdateLastSeen()
-	} else {
-		md.devices[key] = device
-	}
+	md.devices[device.Fingerprint] = device
 	md.devicesMutex.Unlock()
 
 	if md.peerCache != nil {
 		md.peerCache.Save(device)
 	}
 
-	// Always fire upward to Service so it can handle timestamps properly
 	md.handlersMu.RLock()
 	handlers := make([]func(*model.Device), len(md.handlers))
 	copy(handlers, md.handlers)

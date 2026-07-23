@@ -52,6 +52,13 @@ type Config struct {
 	CustomTLSCertPath string `json:"-"` // path to custom TLS certificate file
 	CustomTLSKeyPath  string `json:"-"` // path to custom TLS private key file
 	NotificationCmd   string `json:"-"` // custom notification command
+	customFingerprint string `json:"-"` // fingerprint computed from custom TLS cert
+}
+
+// SetCustomFingerprint overrides the advertised fingerprint with one computed
+// from a user-supplied TLS certificate.
+func (c *Config) SetCustomFingerprint(fp string) {
+	c.customFingerprint = fp
 }
 
 // getSecurityDir determines the best location for the security directory

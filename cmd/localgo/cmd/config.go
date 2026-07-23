@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -90,7 +92,7 @@ var configSetCmd = &cobra.Command{
 			configPath = os.ExpandEnv("$HOME/.config/localgo/config.yaml")
 		}
 
-		if err := os.MkdirAll(strings.TrimSuffix(configPath, "/config.yaml"), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
@@ -167,5 +169,10 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configPathCmd)
+	configCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if h := help.GetCommandHelp("config"); h != nil {
+			help.ShowCommandHelp(*h)
+		}
+	})
 	rootCmd.AddCommand(configCmd)
 }

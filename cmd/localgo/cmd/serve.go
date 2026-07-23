@@ -25,6 +25,7 @@ var (
 	servealias       string
 	servedir         string
 	servequiet       bool
+	servedaemon      bool
 	serveinterval    int
 	serveautoAccept  bool
 	servenoClipboard bool
@@ -38,6 +39,20 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the LocalGo server to receive files",
 	RunE: func(cmd *cobra.Command, args []string) error {
+
+		// Daemon mode: fork into background
+		if servedaemon && os.Getenv("LOCALGO_DAEMON_CHILD") != "1" {
+			return daemonize()
+		}
+
+		// Daemon child: ensure PID file is cleaned up when server exits
+		if os.Getenv("LOCALGO_DAEMON_CHILD") == "1" {
+			defer func() {
+				if pidPath, err := pidFilePath(); err == nil {
+					_ = os.Remove(pidPath)
+				}
+			}()
+		}
 
 		// Apply overrides
 		if serveport > 0 {
@@ -57,6 +72,11 @@ var serveCmd = &cobra.Command{
 		}
 		if serveautoAccept {
 			Cfg.AutoAccept = true
+		}
+		// Daemon child has no terminal — force auto-accept and quiet
+		if os.Getenv("LOCALGO_DAEMON_CHILD") != "" {
+			Cfg.AutoAccept = true
+			Cfg.Quiet = true
 		}
 		if servenoClipboard {
 			Cfg.NoClipboard = true
@@ -212,6 +232,7 @@ func init() {
 	serveCmd.Flags().StringVar(&servealias, "alias", "", "Device alias (default: from config)")
 	serveCmd.Flags().StringVar(&servedir, "dir", "", "Download directory (default: from config)")
 	serveCmd.Flags().BoolVar(&servequiet, "quiet", false, "Quiet mode - minimal output")
+	serveCmd.Flags().BoolVarP(&servedaemon, "daemon", "d", false, "Run server as a background daemon")
 	serveCmd.Flags().IntVar(&serveinterval, "interval", 30, "Discovery announcement interval in seconds")
 	serveCmd.Flags().BoolVar(&serveautoAccept, "auto-accept", false, "Auto-accept incoming files without prompting")
 	serveCmd.Flags().BoolVar(&servenoClipboard, "no-clipboard", false, "Save incoming text as a file instead of copying to clipboard")

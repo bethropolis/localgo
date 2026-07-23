@@ -5,7 +5,8 @@ LocalGo can be configured via Command Line Flags, Environment Variables, or a Co
 ## Precedence Order
 1.  **Command Line Flags** (Highest priority)
 2.  **Environment Variables**
-3.  **Default Values** (Lowest priority)
+3.  **Config File** (YAML)
+4.  **Default Values** (Lowest priority)
 
 ---
 
@@ -20,11 +21,14 @@ These can be passed before any subcommand.
 |------|-------------|---------|
 | `--verbose` | Enable debug logging | `false` |
 | `--json` | Enable JSON log output | `false` |
+| `--no-color` | Disable colored output | `false` |
+| `--config` | Config file path | — |
+| `--private`, `-p` | Hide device identity during discovery and transfer | `false` |
 
 ### `serve` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--port` | TCP port to listen on | `53317` |
+| `--port` | TCP port to listen on | from config |
 | `--http` | Disable HTTPS (use HTTP only) | `false` |
 | `--alias` | Device name visible to others | from config |
 | `--dir` | Directory to save incoming files | from config |
@@ -34,39 +38,57 @@ These can be passed before any subcommand.
 | `--no-clipboard` | Save incoming text as a file instead of copying to clipboard | `false` |
 | `--quiet` | Suppress non-essential output | `false` |
 | `--verbose` | Enable debug logging | `false` |
+| `--history` | Path to transfer history JSONL file | (auto) |
+| `--exec` | Shell command to run after each received file | — |
+| `--daemon`, `-d` | Run server as a background daemon | `false` |
+| `--open` | Open download directory after transfer completes | `false` |
+| `--iface` | Multicast network interface name | — |
 
 ### `share` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--file` | Path to file or directory to share (required, repeatable) | — |
-| `--port` | TCP port to listen on | `53317` |
-| `--http` | Disable HTTPS (use HTTP only) | `false` |
+| `--file` | Path to file or directory to share (repeatable) | — |
+| `--port` | TCP port to listen on | from config |
+| `--http` | Deprecated (HTTP is now default for share) | `false` |
+| `--https` | Use HTTPS (browsers reject self-signed certs) | `false` |
 | `--alias` | Device name visible to others | from config |
 | `--pin` | Require PIN for incoming transfers | — |
 | `--auto-accept` | Auto-accept incoming files without prompting | `false` |
 | `--no-clipboard` | Save incoming text as a file instead of copying to clipboard | `false` |
+| `--history` | Path to transfer history JSONL file | — |
+| `--exec` | Shell command to run after each received file | — |
+| `--quiet` | Suppress non-essential output | `false` |
+| `--zip` | Zip directories before sharing | `false` |
+| `--concurrency` | Max parallel uploads (0 = use default) | `0` |
+| `--iface` | Multicast network interface name | — |
 
 ### `send` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--file` | Path to file or directory to send (required, repeatable) | — |
-| `--to` | Exact alias of recipient (required) | — |
+| `--file` | Path to file or directory to send (repeatable) | — |
+| `--to` | Target device alias (omit to pick interactively) | — |
+| `--ip` | Target device IP (with optional `:port`, skips discovery) | — |
 | `--port` | Target device port | auto-detect |
 | `--timeout` | Transfer timeout in seconds | `30` |
 | `--alias` | Sender alias | from config |
+| `--concurrency` | Max parallel uploads (0 = use default) | `0` |
+| `--iface` | Multicast network interface name | — |
+| `--clipboard`, `-c` | Send current system clipboard text directly | `false` |
+| `--stdin` | Send text read from standard input (stdin) | `false` |
 
 ### `discover` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--timeout` | Discovery timeout in seconds | `5` |
+| `--timeout` | Discovery timeout in seconds | `10` |
 | `--json` | Output results in JSON format | `false` |
 | `--quiet` | Only show results, no status messages | `false` |
 
 ### `scan` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
+| `--range` | CIDR range to scan (e.g. `192.168.1.0/24`) | — |
 | `--timeout` | Scan timeout in seconds | `15` |
-| `--port` | Port to scan | `53317` |
+| `--port` | Port to scan | from config |
 | `--json` | Output results in JSON format | `false` |
 | `--quiet` | Only show results, no status messages | `false` |
 
@@ -74,6 +96,13 @@ These can be passed before any subcommand.
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--json` | Output results in JSON format | `false` |
+| `--probe` | Probe cached devices to verify if they are currently online | `false` |
+
+### `history` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--limit` | Maximum number of entries to display | `10` |
+| `--clear` | Clear all transfer history logs | `false` |
 
 ---
 
@@ -85,16 +114,28 @@ You can set these globally to avoid repeating flags.
 |----------|-------------|---------|
 | `LOCALSEND_ALIAS` | Device name | Hostname |
 | `LOCALSEND_PORT` | Port number | `53317` |
-| `LOCALSEND_DOWNLOAD_DIR` | Save path for incoming files | `./downloads` |
+| `LOCALSEND_DOWNLOAD_DIR` | Save path for incoming files | `$HOME/Downloads/localgo` |
 | `LOCALSEND_SECURITY_DIR` | Security files path | (Auto-detected) |
 | `LOCALSEND_PIN` | Security PIN | (Empty) |
 | `LOCALSEND_FORCE_HTTP` | Disable HTTPS, use HTTP only | `false` |
 | `LOCALSEND_DEVICE_TYPE` | Device type (`mobile`/`desktop`/`laptop`/`tablet`/`server`/`headless`/`web`/`other`) | `desktop` |
-| `LOCALSEND_DEVICE_MODEL` | Device model string | `LocalGo` |
+| `LOCALSEND_DEVICE_MODEL` | Device model string | `GoDevice` |
 | `LOCALSEND_AUTO_ACCEPT` | Auto-accept incoming files (`true` or `1`) | `false` |
 | `LOCALSEND_NO_CLIPBOARD` | Save incoming text as a file instead of clipboard (`true` or `1`) | `false` |
 | `LOCALSEND_MULTICAST_GROUP` | Multicast IP address | `224.0.0.167` |
 | `LOCALSEND_LOG_LEVEL` | Log verbosity (`debug`/`info`/`warn`/`error`) | `info` |
+| `LOCALSEND_HISTORY` | Path to transfer history JSONL file | (auto) |
+| `LOCALSEND_EXEC` | Shell command to run after each received file | — |
+| `LOCALSEND_QUIET` | Minimal output mode | `false` |
+| `LOCALSEND_CONCURRENCY` | Max parallel upload workers | `4` |
+| `LOCALSEND_MULTICAST_INTERFACE` | Network interface to bind multicast to | (all) |
+| `LOCALSEND_SHELL` | Shell prefix for exec hooks | (auto-detected) |
+| `LOCALSEND_CLIPBOARD_WRITE_CMD` | Custom clipboard write command | (auto-detected) |
+| `LOCALSEND_CLIPBOARD_READ_CMD` | Custom clipboard read command | (auto-detected) |
+| `LOCALSEND_TLS_CERT` | Custom TLS certificate file path | — |
+| `LOCALSEND_TLS_KEY` | Custom TLS private key file path | — |
+| `LOCALSEND_NOTIFICATION_CMD` | Custom notification display command | (auto-detected) |
+| `LOCALSEND_MAX_BODY_SIZE` | Max request body size in bytes (0 = unlimited) | `0` |
 
 ### Docker-specific Variables
 | Variable | Description | Default |

@@ -1,18 +1,20 @@
 package storage
 
 import (
-	"go.uber.org/zap"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 var testLogger = zap.NewNop().Sugar()
 
 func TestEnsureDirExists(t *testing.T) {
 	tmpDir := t.TempDir()
-	subDir := tmpDir + "/subdir"
+	subDir := filepath.Join(tmpDir, "subdir")
 
 	err := EnsureDirExists(subDir)
 	if err != nil {

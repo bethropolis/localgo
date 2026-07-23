@@ -124,8 +124,10 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	var ips []net.IP
 	for _, ip := range localIPs {
-		subnetIPs := network.GetSubnetIPs(ip)
-		ips = append(ips, subnetIPs...)
+		subnetIPs, err := network.GetUsableSubnetIPsFromIP(ip)
+		if err == nil {
+			ips = append(ips, subnetIPs...)
+		}
 	}
 	ips = append(ips, net.ParseIP("127.0.0.1"))
 
@@ -256,6 +258,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 			}
 			tmpPath := tmp.Name()
 			tmp.Close()
+			os.Remove(tmpPath)
 
 			if err := metadata.StripTo(filePath, tmpPath); err != nil {
 				os.Remove(tmpPath)

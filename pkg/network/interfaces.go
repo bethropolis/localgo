@@ -169,6 +169,97 @@ func GetSubnetIPs(ip net.IP) []net.IP {
 	return ips
 }
 
+// GetInterfaceIPNet returns the IPv4 network (IP + subnet mask) for the named interface.
+// Returns nil if the interface has no IPv4 address.
+func GetInterfaceIPNet(ifaceName string) (*net.IPNet, error) {
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return nil, fmt.Errorf("interface %q: %w", ifaceName, err)
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return nil, fmt.Errorf("interface %q addrs: %w", ifaceName, err)
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			if ipnet.IP.To4() != nil {
+				return ipnet, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("interface %q has no IPv4 address", ifaceName)
+}
+
+// GetUsableSubnetIPsFromIP returns all usable host IPs in the subnet of the
+// interface that owns the given IP, respecting its actual netmask. Falls back
+// to a flat /24 scan if the interface cannot be determined.
+func GetUsableSubnetIPsFromIP(ip net.IP) ([]net.IP, error) {
+	ipStr := ip.String()
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return GetSubnetIPs(ip), nil
+	}
+	for _, i := range ifaces {
+		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
+			continue
+		}
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				if ipnet.IP.To4() != nil && ipnet.IP.String() == ipStr {
+					return GetUsableSubnetIPs(i.Name)
+				}
+			}
+		}
+	}
+	return GetSubnetIPs(ip), nil
+}
+
+// GetUsableSubnetIPs returns all usable host IPs in the subnet of the named
+// interface, respecting its actual netmask. Subnets with more than 1022 hosts
+// (larger than /22) are capped at /22 to keep scanning practical. Network and
+// broadcast addresses are excluded.
+func GetUsableSubnetIPs(ifaceName string) ([]net.IP, error) {
+	ipnet, err := GetInterfaceIPNet(ifaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	ip4 := ipnet.IP.To4()
+	if ip4 == nil {
+		return nil, fmt.Errorf("interface %q has no IPv4 address", ifaceName)
+	}
+
+	ones, bits := ipnet.Mask.Size()
+	hostBits := bits - ones
+
+	// Cap at /22 for practical scanning (max 1022 usable hosts)
+	effectiveMask := ipnet.Mask
+	if hostBits > 10 {
+		effectiveMask = net.CIDRMask(22, bits)
+		hostBits = bits - 22
+	}
+
+	if hostBits < 2 {
+		return nil, fmt.Errorf("interface %q subnet prefix /%d is too small for scanning", ifaceName, bits-hostBits)
+	}
+
+	maskBits := []byte{effectiveMask[0], effectiveMask[1], effectiveMask[2], effectiveMask[3]}
+	base := uint32(ip4[0])<<24 | uint32(ip4[1])<<16 | uint32(ip4[2])<<8 | uint32(ip4[3])
+	base &= uint32(maskBits[0])<<24 | uint32(maskBits[1])<<16 | uint32(maskBits[2])<<8 | uint32(maskBits[3])
+
+	totalHosts := (1 << hostBits) - 2
+	var ips []net.IP
+	for i := 1; i <= totalHosts; i++ {
+		addr := base + uint32(i)
+		ips = append(ips, net.IPv4(byte(addr>>24), byte(addr>>16), byte(addr>>8), byte(addr)))
+	}
+	return ips, nil
+}
+
 // DefaultGatewayIP returns the IP address of the default network gateway.
 func DefaultGatewayIP() (net.IP, error) {
 	return gateway.DiscoverGateway()

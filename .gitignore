@@ -38,7 +38,8 @@ Thumbs.db
 coverage.*
 
 
-/config
+/mise.toml
+config
 test
 dist/
 .coverage/

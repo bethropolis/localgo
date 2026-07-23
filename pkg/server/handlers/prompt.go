@@ -24,11 +24,11 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 	}
 
 	cli.Notify("LocalGo: Incoming Transfer",
-		fmt.Sprintf("%s wants to send you %d file(s) (%s)", sender.Alias, fileCount, cli.FormatBytes(totalSize)))
+		fmt.Sprintf("%s wants to send you %d file(s) (%s)", cli.Sanitize(sender.Alias), fileCount, cli.FormatBytes(totalSize)))
 
 	// Build a structured summary of the incoming files
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("From: %s (IP: %s)\n\nFiles:\n", sender.Alias, sender.IP))
+	sb.WriteString(fmt.Sprintf("From: %s (IP: %s)\n\nFiles:\n", cli.Sanitize(sender.Alias), sender.IP))
 
 	count := 0
 	for _, file := range files {
@@ -46,10 +46,10 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 				}
 				sb.WriteString(fmt.Sprintf("  %s [Text] %q\n", cli.IconFile, preview))
 			} else {
-				sb.WriteString(fmt.Sprintf("  %s [Text] %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
+				sb.WriteString(fmt.Sprintf("  %s [Text] %s (%s)\n", cli.IconFile, cli.Sanitize(file.FileName), cli.FormatBytes(file.Size)))
 			}
 		} else {
-			sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", cli.IconFile, file.FileName, cli.FormatBytes(file.Size)))
+			sb.WriteString(fmt.Sprintf("  %s %s (%s)\n", cli.IconFile, cli.Sanitize(file.FileName), cli.FormatBytes(file.Size)))
 		}
 		count++
 	}
@@ -88,14 +88,14 @@ func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) b
 		return false
 	}
 	cli.Notify("LocalGo: Clipboard Message",
-		fmt.Sprintf("%s sent clipboard text (%d chars)", alias, len(message)))
+		fmt.Sprintf("%s sent clipboard text (%d chars)", cli.Sanitize(alias), len(message)))
 
 	truncated := message
 	if len(truncated) > 500 {
 		truncated = truncated[:500] + "\n… (truncated)"
 	}
 
-	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", alias, remoteAddr, truncated)
+	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", cli.Sanitize(alias), remoteAddr, cli.Sanitize(truncated))
 
 	var accept bool = true
 	form := huh.NewForm(

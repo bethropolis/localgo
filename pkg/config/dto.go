@@ -12,6 +12,9 @@ func (c *Config) Protocol() model.ProtocolType {
 
 // GetFingerprint returns the appropriate fingerprint (certificate hash if HTTPS, random otherwise).
 func (c *Config) GetFingerprint() string {
+	if c.customFingerprint != "" {
+		return c.customFingerprint
+	}
 	if c.HttpsEnabled {
 		return c.SecurityContext.CertificateHash
 	}

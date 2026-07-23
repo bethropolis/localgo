@@ -26,5 +26,10 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
+	versionCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if h := help.GetCommandHelp("version"); h != nil {
+			help.ShowCommandHelp(*h)
+		}
+	})
 	rootCmd.AddCommand(versionCmd)
 }

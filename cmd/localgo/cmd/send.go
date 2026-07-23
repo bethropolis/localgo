@@ -97,7 +97,16 @@ var sendCmd = &cobra.Command{
 			}
 			parsedIP := net.ParseIP(host)
 			if parsedIP == nil {
-				return fmt.Errorf("invalid IP address: %s", host)
+				// Not a raw IP — try hostname resolution (mDNS, DNS, etc.)
+				ips, err := net.LookupIP(host)
+				if err != nil || len(ips) == 0 {
+					return fmt.Errorf("invalid IP address or unresolvable hostname: %s", host)
+				}
+				parsedIP = ips[0].To4()
+				if parsedIP == nil {
+					// Use first result even if it's IPv6; the caller handles it
+					parsedIP = ips[0]
+				}
 			}
 
 			port := sendport
@@ -125,12 +134,19 @@ var sendCmd = &cobra.Command{
 				Cfg.Concurrency = sendconcurrency
 			}
 
-			cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
+			totalFiles := len(files) + len(sendOpts)
+			cli.PrintHeader(fmt.Sprintf("Sending %d file(s)", totalFiles))
 			for _, file := range files {
 				fileInfo, err := os.Stat(file)
 				if err == nil {
 					cli.PrintInfo("- %s (%s)", filepath.Base(file), cli.FormatBytes(fileInfo.Size()))
 				}
+			}
+			if sendclipboard {
+				cli.PrintInfo("- clipboard (in-memory)")
+			}
+			if sendstdin {
+				cli.PrintInfo("- stdin (in-memory)")
 			}
 			cli.PrintInfo("To: %s:%d", host, port)
 			fromAlias := Cfg.Alias
@@ -198,7 +214,10 @@ var sendCmd = &cobra.Command{
 
 							var ips []net.IP
 							for _, ip := range localIPs {
-								ips = append(ips, network.GetSubnetIPs(ip)...)
+								subnetIPs, err := network.GetUsableSubnetIPsFromIP(ip)
+								if err == nil {
+									ips = append(ips, subnetIPs...)
+								}
 							}
 							ips = append(ips, net.ParseIP("127.0.0.1"))
 

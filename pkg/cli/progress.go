@@ -5,6 +5,8 @@ import (
 	"os"
 	"sync"
 
+	"golang.org/x/term"
+
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
 )
@@ -68,9 +70,11 @@ func (mp *MultiProgress) Wait() {
 	barsRendered := len(mp.bars)
 	mp.mu.Unlock()
 
-	// Clear only the lines with actual rendered progress bars
-	for i := 0; i < barsRendered; i++ {
-		fmt.Fprintf(os.Stderr, "\033[F\033[K")
+	// Clear progress bar lines only when stderr is a terminal
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		for i := 0; i < barsRendered; i++ {
+			fmt.Fprintf(os.Stderr, "\033[F\033[K")
+		}
 	}
 	fmt.Fprintf(os.Stderr, "%s Files transferred successfully\n", IconCheck)
 }

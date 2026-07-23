@@ -99,7 +99,10 @@ var discoverCmd = &cobra.Command{
 			if ipErr == nil && len(localIPs) > 0 {
 				var scanIps []net.IP
 				for _, ip := range localIPs {
-					scanIps = append(scanIps, network.GetSubnetIPs(ip)...)
+					subnetIPs, err := network.GetUsableSubnetIPsFromIP(ip)
+					if err == nil {
+						scanIps = append(scanIps, subnetIPs...)
+					}
 				}
 				registerDto := Cfg.ToRegisterDto()
 				httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, zap.S())
