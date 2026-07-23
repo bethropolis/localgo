@@ -198,6 +198,15 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			},
 			Flags: []FlagHelp{},
 		},
+		"version": {
+			Name:        "version",
+			Description: "Show version information",
+			Usage:       "localgo version",
+			Examples: []string{
+				"localgo version",
+			},
+			Flags: []FlagHelp{},
+		},
 	}
 
 	return commands[commandName]

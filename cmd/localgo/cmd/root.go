@@ -31,6 +31,13 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "localgo",
 	Short: "LocalGo - LocalSend v2.1 Protocol Implementation",
+	Run: func(cmd *cobra.Command, args []string) {
+		if versionFlag {
+			help.ShowVersion(Version, GitCommit, BuildDate)
+			return
+		}
+		cmd.Help()
+	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if versionFlag {
 			help.ShowVersion(Version, GitCommit, BuildDate)
@@ -82,7 +89,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&versionFlag, "version", false, "Show version information")
+	rootCmd.PersistentFlags().BoolVarP(&versionFlag, "version", "v", false, "Show version information")
 	rootCmd.PersistentFlags().BoolVarP(&privateMode, "private", "p", false, "Hide device identity (alias, model) during discovery and transfer")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/localgo/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&Verbose, "verbose", false, "Enable debug logging")
