@@ -47,6 +47,7 @@ func ShowMainUsage() {
 		{"devices", "List recently discovered devices"},
 		{"history", "Show file transfer history log"},
 		{"stop", "Stop the running LocalGo daemon"},
+		{"config", "Manage LocalGo configuration (get/set/list/path)"},
 		{"info", "Show device information"},
 		{"completion", "Generate shell completion scripts"},
 		{"help", "Show help information"},

@@ -186,6 +186,18 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			},
 			Flags: []FlagHelp{},
 		},
+		"config": {
+			Name:        "config",
+			Description: "Manage LocalGo configuration",
+			Usage:       "localgo config <subcommand> [args]",
+			Examples: []string{
+				"localgo config get port",
+				"localgo config set alias MyDevice",
+				"localgo config list",
+				"localgo config path",
+			},
+			Flags: []FlagHelp{},
+		},
 	}
 
 	return commands[commandName]

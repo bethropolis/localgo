@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -168,5 +169,10 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configPathCmd)
+	configCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if h := help.GetCommandHelp("config"); h != nil {
+			help.ShowCommandHelp(*h)
+		}
+	})
 	rootCmd.AddCommand(configCmd)
 }
