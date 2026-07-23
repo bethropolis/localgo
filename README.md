@@ -37,12 +37,12 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ### Installation
 
-#### Online (macOS, Linux)
+#### Quick install (macOS, Linux)
 ```bash
 curl -fsSL https://bethropolis.github.io/localgo/install.sh | bash
 ```
 
-####  User installation (recommended)
+####  User installation
 ```bash
 # clone repo
 git clone https://github.com/bethropolis/localgo.git
@@ -67,6 +67,17 @@ brew install localgo
 ```powershell
 scoop bucket add bethropolis https://github.com/bethropolis/scoop-bucket
 scoop install localgo
+```
+
+#### using docker / podman
+```bash
+mkdir -p localgo/downloads localgo/config
+docker pull ghcr.io/bethropolis/localgo:latest
+docker run -d \
+  -p 53317:53317 \
+  -v ./localgo/config:/app/config \
+  -v ./localgo/downloads:/app/downloads \
+  ghcr.io/bethropolis/localgo:latest
 ```
 
 > [!NOTE]
@@ -99,7 +110,7 @@ localgo share --file document.pdf
 
 ### Docker and Podman
 
-For full details — deployment, macvlan networking, read-only root filesystem, watchtower, and more — see the [container documentation](docs/CONTAINER.md).
+For full details on deployment, macvlan networking, read-only root filesystem, watchtower, and more, see the [container documentation](docs/CONTAINER.md).
 
 ## Configuration
 
@@ -117,6 +128,17 @@ For full details — deployment, macvlan networking, read-only root filesystem, 
 | `LOCALSEND_AUTO_ACCEPT` | false | Auto-accept incoming files without prompting |
 | `LOCALSEND_NO_CLIPBOARD` | false | Save incoming text as a file instead of clipboard |
 | `LOCALSEND_LOG_LEVEL` | info | Log verbosity (debug/info/warn/error) |
+| `LOCALSEND_HISTORY` | (auto) | Path to transfer history file |
+| `LOCALSEND_EXEC` | — | Shell command to run after each received file |
+| `LOCALSEND_QUIET` | false | Minimal output mode |
+| `LOCALSEND_CONCURRENCY` | 4 | Max parallel upload workers |
+| `LOCALSEND_MULTICAST_INTERFACE` | (all) | Network interface for multicast |
+| `LOCALSEND_SHELL` | (auto) | Shell prefix for exec hooks |
+| `LOCALSEND_TLS_CERT` | — | Custom TLS certificate path |
+| `LOCALSEND_TLS_KEY` | — | Custom TLS private key path |
+| `LOCALSEND_NOTIFICATION_CMD` | (auto) | Custom notification command |
+| `LOCALSEND_MAX_BODY_SIZE` | 0 | Max request body size (0 = unlimited) |
+| `LOCALSEND_SECURITY_DIR` | (auto) | Security context directory |
 
 ### Example
 
@@ -136,9 +158,12 @@ localgo serve
 | `discover` | Find devices via multicast |
 | `scan` | Find devices via HTTP scan |
 | `send` | Send files to a device |
-| `history`| Show file transfer history log |
 | `info` | Show device information |
 | `devices` | List discovered devices |
+| `history` | Show transfer history log |
+| `stop` | Stop a running daemon |
+| `config` | Manage configuration (get/set/list/path) |
+| `version` | Show version information |
 
 Run `localgo help` for more options.
 
@@ -180,7 +205,7 @@ Want to build on top of LocalGo or contribute?
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request or report an issue.
 
 ## License
 
