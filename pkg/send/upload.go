@@ -29,7 +29,7 @@ type fileReader interface {
 	io.Closer
 }
 
-func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
+func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -45,15 +45,18 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 		return fmt.Errorf("failed to get file stats: %w", err)
 	}
 
-	return uploadStream(ctx, client, device, file, stat.Size(), fileID, sessionID, token, scheme, trackProgress, logger)
+	return uploadStream(ctx, client, device, file, stat.Size(), fileID, sessionID, token, scheme, pin, trackProgress, logger)
 }
 
-func uploadStream(ctx context.Context, client *http.Client, device *model.Device, r fileReader, size int64, fileID, sessionID, token, scheme string, trackProgress func(int64), logger *zap.SugaredLogger) error {
+func uploadStream(ctx context.Context, client *http.Client, device *model.Device, r fileReader, size int64, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *zap.SugaredLogger) error {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
 
 	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)
+	if pin != "" {
+		url += "&pin=" + pin
+	}
 
 	var body io.ReadCloser = io.NopCloser(r)
 	if trackProgress != nil {
