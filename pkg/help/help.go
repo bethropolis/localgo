@@ -100,8 +100,13 @@ func ShowMainUsage() {
 		"localgo send --file document.pdf --to MyPhone",
 		"localgo send --clipboard --to MyPhone",
 		"localgo send --stdin < document.txt --to MyPhone",
+		"localgo send --file large.zip --quick",
+		"localgo send --ip 192.168.1.42:53317 --file photo.jpg",
 		"localgo share --file document.pdf",
+		"localgo share --file photo.jpg --once",
 		"localgo history --limit 20",
+		"localgo config set alias MyDevice",
+		"localgo config list",
 		"localgo help send",
 	}
 
@@ -131,6 +136,16 @@ func ShowMainUsage() {
 		{"LOCALSEND_MULTICAST_GROUP", "Multicast group address"},
 		{"LOCALSEND_SECURITY_DIR", "Security directory path"},
 		{"LOCALSEND_LOG_LEVEL", "Log verbosity (debug/info/warn/error)"},
+		{"LOCALSEND_DISCOVERY_STRATEGY", "Discovery strategy: full (default) or fast"},
+		{"LOCALSEND_FILE_CONFLICT_RESOLUTION", "File conflict: rename (default), overwrite, skip"},
+		{"LOCALSEND_BIND_ADDRESS", "Bind to specific IP/interface"},
+		{"LOCALSEND_CONCURRENCY", "Max parallel upload workers (default: 4)"},
+		{"LOCALSEND_SHELL", "Shell prefix for exec hooks (default: sh -c)"},
+		{"LOCALSEND_CLIPBOARD_WRITE_CMD", "Custom clipboard write command"},
+		{"LOCALSEND_CLIPBOARD_READ_CMD", "Custom clipboard read command"},
+		{"LOCALSEND_TLS_CERT", "Custom TLS certificate path"},
+		{"LOCALSEND_TLS_KEY", "Custom TLS private key path"},
+		{"LOCALSEND_NOTIFICATION_CMD", "Custom notification command"},
 	}
 
 	for _, env := range envVars {
