@@ -2,9 +2,7 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/spf13/viper"
@@ -266,10 +264,7 @@ func TestConfig_Constants(t *testing.T) {
 		t.Errorf("Expected DefaultMulticastGroup '224.0.0.167', got '%s'", DefaultMulticastGroup)
 	}
 
-	if ProtocolVersion != "2.0" {
-		t.Errorf("Expected ProtocolVersion '2.0', got '%s'", ProtocolVersion)
+	if ProtocolVersion != "2.1" {
+		t.Errorf("Expected ProtocolVersion '2.1', got '%s'", ProtocolVersion)
 	}
 }
-
-var _ = time.Now      // silence unused import
-var _ = filepath.Join // silence unused import

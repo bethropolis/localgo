@@ -80,7 +80,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	if targetDevice != nil {
 		logger.Infof("Discovered recipient via cache: %s (%s)", targetDevice.Alias, targetDevice.IP)
-		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+		if err := VerifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 			return err
 		}
 		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
@@ -126,7 +126,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	discoverySvc.Stop()
 
 	if targetDevice != nil {
-		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+		if err := VerifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 			return err
 		}
 		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
@@ -178,7 +178,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	logger.Infof("Discovered recipient via subnet scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
 
-	if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+	if err := VerifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 		return err
 	}
 
