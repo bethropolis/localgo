@@ -256,14 +256,7 @@ var shareCmd = &cobra.Command{
 				// Terminal QR code for mobile scanning
 				primaryURL := fmt.Sprintf("http://%s:%d", localIPs[0].String(), Cfg.Port)
 				cli.PrintHeader("Scan QR Code on Mobile:")
-				cfg := qrterminal.Config{
-					Level:      qrterminal.M,
-					Writer:     os.Stdout,
-					HalfBlocks: true,
-					BlackChar:  qrterminal.BLACK,
-					WhiteChar:  qrterminal.WHITE,
-				}
-				qrterminal.GenerateWithConfig(primaryURL, cfg)
+				qrterminal.GenerateHalfBlock(primaryURL, qrterminal.M, os.Stdout)
 			}
 
 			if Cfg.HttpsEnabled {
