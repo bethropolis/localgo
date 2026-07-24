@@ -394,7 +394,11 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to marshal prepare dto: %w", err)
 	}
 
-	url := fmt.Sprintf("%s://%s/api/localsend/v2/prepare-upload", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)))
+	baseURL := fmt.Sprintf("%s://%s/api/localsend/v2/prepare-upload", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)))
+	if cfg.PIN != "" {
+		baseURL += "?pin=" + cfg.PIN
+	}
+	url := baseURL
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create prepare request: %w", err)
@@ -448,7 +452,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 				defer func() { <-sem }()
 
 				logger.Infof("Uploading in-memory file: %s", name)
-				err := uploadStream(ctx, client, device, rdr, sz, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
+				err := uploadStream(ctx, client, device, rdr, sz, fID, prepareResponse.SessionID, tkn, scheme, cfg.PIN, track, logger)
 				if err != nil {
 					logger.Errorf("Failed to upload %s: %v", name, err)
 					errCh <- fmt.Errorf("failed to upload %s: %w", name, err)
@@ -469,7 +473,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 				defer func() { <-sem }()
 
 				logger.Infof("Uploading file: %s", filepath.Base(fPath))
-				err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, track, logger)
+				err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, cfg.PIN, track, logger)
 				if err != nil {
 					logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
 					errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)

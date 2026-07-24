@@ -134,6 +134,8 @@ For full details on deployment, macvlan networking, read-only root filesystem, w
 | `LOCALSEND_CONCURRENCY` | 4 | Max parallel upload workers |
 | `LOCALSEND_MULTICAST_INTERFACE` | (all) | Network interface for multicast |
 | `LOCALSEND_SHELL` | (auto) | Shell prefix for exec hooks |
+| `LOCALSEND_CLIPBOARD_WRITE_CMD` | (auto) | Custom clipboard write command |
+| `LOCALSEND_CLIPBOARD_READ_CMD` | (auto) | Custom clipboard read command |
 | `LOCALSEND_TLS_CERT` | — | Custom TLS certificate path |
 | `LOCALSEND_TLS_KEY` | — | Custom TLS private key path |
 | `LOCALSEND_NOTIFICATION_CMD` | (auto) | Custom notification command |

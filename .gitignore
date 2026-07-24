@@ -39,7 +39,7 @@ coverage.*
 
 
 /mise.toml
-config
+/config
 test
 dist/
 .coverage/
