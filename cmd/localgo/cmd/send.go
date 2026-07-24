@@ -35,6 +35,7 @@ var (
 	sendclipboard      bool
 	sendstdin          bool
 	sendquick          bool
+	sendpin            string
 )
 
 var sendCmd = &cobra.Command{
@@ -270,6 +271,12 @@ var sendCmd = &cobra.Command{
 		if sendquick {
 			Cfg.DiscoveryStrategy = "fast"
 		}
+		if sendpin != "" {
+			Cfg.PIN = sendpin
+		}
+		if sendpin != "" {
+			Cfg.PIN = sendpin
+		}
 
 		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
 		for _, file := range files {
@@ -318,6 +325,7 @@ func init() {
 	sendCmd.Flags().BoolVarP(&sendclipboard, "clipboard", "c", false, "Send current system clipboard text directly")
 	sendCmd.Flags().BoolVar(&sendstdin, "stdin", false, "Send text read from standard input (stdin)")
 	sendCmd.Flags().BoolVarP(&sendquick, "quick", "q", false, "Skip subnet scan; use cache + multicast only")
+	sendCmd.Flags().StringVar(&sendpin, "pin", "", "PIN for receiver authentication")
 
 	sendCmd.RegisterFlagCompletionFunc("to", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		cache := discovery.NewPeerCache(nil)
