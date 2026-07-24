@@ -24,16 +24,17 @@ import (
 )
 
 var (
-	sendfiles       []string
-	sendip          string
-	sendto          string
-	sendport        int
-	sendtimeout     int
-	sendalias       string
-	sendconcurrency int
+	sendfiles          []string
+	sendip             string
+	sendto             string
+	sendport           int
+	sendtimeout        int
+	sendalias          string
+	sendconcurrency    int
 	sendmulticastiface string
-	sendclipboard   bool
-	sendstdin       bool
+	sendclipboard      bool
+	sendstdin          bool
+	sendquick          bool
 )
 
 var sendCmd = &cobra.Command{
@@ -252,6 +253,9 @@ var sendCmd = &cobra.Command{
 		if sendmulticastiface != "" {
 			Cfg.MulticastInterface = sendmulticastiface
 		}
+		if sendquick {
+			Cfg.DiscoveryStrategy = "fast"
+		}
 
 		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
 		for _, file := range files {
@@ -299,6 +303,7 @@ func init() {
 	sendCmd.Flags().StringVar(&sendmulticastiface, "iface", "", "Multicast network interface name")
 	sendCmd.Flags().BoolVarP(&sendclipboard, "clipboard", "c", false, "Send current system clipboard text directly")
 	sendCmd.Flags().BoolVar(&sendstdin, "stdin", false, "Send text read from standard input (stdin)")
+	sendCmd.Flags().BoolVarP(&sendquick, "quick", "q", false, "Skip subnet scan; use cache + multicast only")
 
 	sendCmd.RegisterFlagCompletionFunc("to", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		cache := discovery.NewPeerCache(nil)

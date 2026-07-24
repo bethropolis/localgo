@@ -132,13 +132,26 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 	}, nil
 }
 
+// tcpPreProbe performs a quick TCP dial to check if a host is reachable.
+func tcpPreProbe(ctx context.Context, ip net.IP, port int) bool {
+	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
+	dialer := net.Dialer{Timeout: 150 * time.Millisecond}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
 func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int) ([]*model.Device, error) {
 	var devices []*model.Device
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	deviceChan := make(chan *model.Device, len(ips))
 
 	// Semaphore limits parallel pinging to prevent socket exhaustion
-	sem := make(chan struct{}, 100)
+	sem := make(chan struct{}, 256)
 
 	hd.logger.Debugf("Scanning %d IPs on port %d", len(ips), port)
 
@@ -149,6 +162,11 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 
 			sem <- struct{}{}
 			defer func() { <-sem }()
+
+			// TCP pre-probe: 150ms dial to quickly eliminate dead IPs
+			if !tcpPreProbe(ctx, ip, port) {
+				return
+			}
 
 			device, err := hd.RegisterWithDevice(ctx, ip, port, "https")
 			if err != nil {
@@ -166,7 +184,9 @@ func (hd *HTTPDiscovery) ScanNetwork(ctx context.Context, ips []net.IP, port int
 	close(deviceChan)
 
 	for device := range deviceChan {
+		mu.Lock()
 		devices = append(devices, device)
+		mu.Unlock()
 	}
 
 	return devices, nil

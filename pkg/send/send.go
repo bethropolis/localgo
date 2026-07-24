@@ -60,20 +60,38 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 
 	var targetDevice *model.Device
 
-	// --- Multicast Discovery (Fast) ---
-	logger.Info("Sending multicast announcement...")
-
 	discoverySvcConfig := discovery.DefaultServiceConfig()
 	discoverySvcConfig.MulticastConfig.Port = cfg.Port
 	discoverySvcConfig.MulticastConfig.MulticastAddr = fmt.Sprintf("%s:%d", cfg.MulticastGroup, cfg.Port)
 	discoverySvcConfig.MulticastConfig.InterfaceName = cfg.MulticastInterface
 	multicastDto := cfg.ToMulticastDto(false)
 
+	peerCache := discovery.NewPeerCache(logger)
+
+	// --- Tier 1: Cache Probe (400ms) ---
+	logger.Info("Probing cached peers...")
+	cacheCtx, cancelCache := context.WithTimeout(ctx, 400*time.Millisecond)
+	discovery.ProbeCached(cacheCtx, peerCache, func(device *model.Device) {
+		if device.Alias == recipientAlias && targetDevice == nil {
+			targetDevice = device
+		}
+	}, logger)
+	cancelCache()
+
+	if targetDevice != nil {
+		logger.Infof("Discovered recipient via cache: %s (%s)", targetDevice.Alias, targetDevice.IP)
+		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
+			return err
+		}
+		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
+	}
+
+	// --- Tier 2: Multicast Discovery ---
+	logger.Info("Sending multicast announcement...")
+
 	multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logger)
 	httpDiscoverer := discovery.NewHTTPDiscovery(nil, cfg.ToRegisterDto(), nil, logger)
 	multicast.SetHTTPDiscoverer(httpDiscoverer)
-
-	peerCache := discovery.NewPeerCache(logger)
 	multicast.SetPeerCache(peerCache)
 
 	discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logger)
@@ -89,8 +107,7 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		}
 	})
 
-	multicastCtx, cancelMulticast := context.WithTimeout(ctx, 1500*time.Millisecond)
-	defer cancelMulticast()
+	multicastCtx, cancelMulticast := context.WithTimeout(ctx, 1200*time.Millisecond)
 
 	err := discoverySvc.Start(multicastCtx, cfg.ToMulticastDto(false))
 	if err != nil {
@@ -103,9 +120,10 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		targetDevice = device
 		discoverySvc.Stop()
 	case <-multicastCtx.Done():
-		logger.Info("Multicast discovery timed out, falling back to HTTP scan...")
-		discoverySvc.Stop()
+		logger.Info("Multicast discovery timed out")
 	}
+	cancelMulticast()
+	discoverySvc.Stop()
 
 	if targetDevice != nil {
 		if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
@@ -113,6 +131,14 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 		}
 		return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
 	}
+
+	// Skip Tier 3 (subnet scan) in fast mode
+	if cfg.DiscoveryStrategy == "fast" {
+		return fmt.Errorf("recipient '%s' not found on network (cache + multicast missed, scan skipped via fast strategy)", recipientAlias)
+	}
+
+	// --- Tier 3: Subnet Scan ---
+	logger.Info("Scanning local subnets...")
 
 	registerDto := cfg.ToRegisterDto()
 	httpFallback := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
@@ -131,7 +157,6 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 	ips = append(ips, net.ParseIP("127.0.0.1"))
 
-	// Give the scan a proper chunk of time to test all IPs safely
 	scanCtx, cancelScan := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelScan()
 
@@ -148,10 +173,10 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}
 
 	if targetDevice == nil {
-		return fmt.Errorf("recipient '%s' not found on network after scan", recipientAlias)
+		return fmt.Errorf("recipient '%s' not found on network after all discovery tiers", recipientAlias)
 	}
 
-	logger.Infof("Discovered recipient via HTTP Scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
+	logger.Infof("Discovered recipient via subnet scan: %s (%s)", targetDevice.Alias, targetDevice.IP)
 
 	if err := verifyDeviceFingerprint(peerCache, targetDevice); err != nil {
 		return err

@@ -44,7 +44,10 @@ type Config struct {
 	OpenDir           bool                          `json:"-"` // open download directory after transfer
 	Concurrency       int                           `json:"-"` // max parallel uploads (0 = use default)
 	MulticastInterface string                        `json:"-"` // multicast network interface name
-	Private           bool                          `json:"-"` // anonymize device identities
+	Private             bool                          `json:"-"` // anonymize device identities
+	DiscoveryStrategy   string                        `json:"-"` // discovery strategy: "full" (default) or "fast" (skip subnet scan)
+	FileConflictResolve string                        `json:"-"` // conflict resolution: "rename" (default), "overwrite", "skip"
+	BindAddress         string                        `json:"-"` // bind to specific interface/IP for listening
 
 	Shell             string `json:"-"` // shell command prefix for exec hooks (default: "sh -c" or "cmd /c")
 	ClipboardWriteCmd string `json:"-"` // custom clipboard write command
@@ -201,32 +204,44 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 	customTLSCertPath := v.GetString("tls_cert")
 	customTLSKeyPath := v.GetString("tls_key")
 	notificationCmd := v.GetString("notification_cmd")
+	discoveryStrategy := v.GetString("discovery_strategy")
+	if discoveryStrategy == "" {
+		discoveryStrategy = "full"
+	}
+	fileConflictResolve := v.GetString("file_conflict_resolution")
+	if fileConflictResolve == "" {
+		fileConflictResolve = "rename"
+	}
+	bindAddress := v.GetString("bind_address")
 
 	cfg := &Config{
-		Alias:             alias,
-		Port:              port,
-		MulticastGroup:    multicastGroup,
-		HttpsEnabled:      HttpsEnabled,
-		SecurityContext:   securityContext,
-		SecurityPath:      securityFilePath,
-		DeviceModel:       &deviceModel,
-		DeviceType:        deviceType,
-		DownloadDir:       downloadDir,
-		AutoAccept:        autoAccept,
-		RandomFingerprint: generateRandomID(64),
-		MaxBodySize:       maxBodySize,
-		NoClipboard:       noClipboard,
-		HistoryFile:       historyFile,
-		Quiet:             quiet,
-		ExecHook:          execHook,
-		Concurrency:       concurrency,
+		Alias:              alias,
+		Port:               port,
+		MulticastGroup:     multicastGroup,
+		HttpsEnabled:       HttpsEnabled,
+		SecurityContext:    securityContext,
+		SecurityPath:       securityFilePath,
+		DeviceModel:        &deviceModel,
+		DeviceType:         deviceType,
+		DownloadDir:        downloadDir,
+		AutoAccept:         autoAccept,
+		RandomFingerprint:  generateRandomID(64),
+		MaxBodySize:        maxBodySize,
+		NoClipboard:        noClipboard,
+		HistoryFile:        historyFile,
+		Quiet:              quiet,
+		ExecHook:           execHook,
+		Concurrency:        concurrency,
 		MulticastInterface: multicastInterface,
-		Shell:             shell,
-		ClipboardWriteCmd: clipboardWriteCmd,
-		ClipboardReadCmd:  clipboardReadCmd,
-		CustomTLSCertPath: customTLSCertPath,
-		CustomTLSKeyPath:  customTLSKeyPath,
-		NotificationCmd:   notificationCmd,
+		DiscoveryStrategy:  discoveryStrategy,
+		FileConflictResolve: fileConflictResolve,
+		BindAddress:        bindAddress,
+		Shell:              shell,
+		ClipboardWriteCmd:  clipboardWriteCmd,
+		ClipboardReadCmd:   clipboardReadCmd,
+		CustomTLSCertPath:  customTLSCertPath,
+		CustomTLSKeyPath:   customTLSKeyPath,
+		NotificationCmd:    notificationCmd,
 	}
 
 	return cfg, nil
