@@ -48,6 +48,7 @@ type Config struct {
 	DiscoveryStrategy   string                        `json:"-"` // discovery strategy: "full" (default) or "fast" (skip subnet scan)
 	FileConflictResolve string                        `json:"-"` // conflict resolution: "rename" (default), "overwrite", "skip"
 	BindAddress         string                        `json:"-"` // bind to specific interface/IP for listening
+	ShareOnce           bool                          `json:"-"` // stop after first download (--once)
 
 	Shell             string `json:"-"` // shell command prefix for exec hooks (default: "sh -c" or "cmd /c")
 	ClipboardWriteCmd string `json:"-"` // custom clipboard write command

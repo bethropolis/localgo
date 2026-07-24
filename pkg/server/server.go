@@ -119,8 +119,19 @@ func (s *Server) configureRoutes() {
 
 	// Download Handlers
 	downloadHandler := handlers.NewDownloadHandler(s.config, s.sendService, s.logger)
+	downloadHandler.SetShutdownFn(func() {
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			if s.httpServer != nil {
+				s.httpServer.Close()
+			}
+		}()
+	})
 	apiRouter.HandleFunc("/v2/prepare-download", downloadHandler.PrepareDownloadHandler).Methods("POST")
 	apiRouter.HandleFunc("/v2/download", downloadHandler.DownloadHandler).Methods("GET")
+
+	// Root web landing page for browser access (fixes 404 on http://IP:PORT)
+	s.muxRouter.HandleFunc("/", downloadHandler.WebShareHandler).Methods("GET")
 
 	s.logger.Info("Configured API routes.")
 }
