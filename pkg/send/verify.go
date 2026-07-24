@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-func verifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model.Device) error {
+func VerifyDeviceFingerprint(peerCache *discovery.PeerCache, targetDevice *model.Device) error {
 	if targetDevice == nil || targetDevice.Fingerprint == "" {
 		return nil
 	}

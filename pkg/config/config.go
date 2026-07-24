@@ -18,7 +18,7 @@ import (
 const (
 	DefaultPort           = 53317
 	DefaultMulticastGroup = "224.0.0.167"
-	ProtocolVersion       = "2.0"
+	ProtocolVersion       = "2.1"
 	DefaultSecurityDir    = ".localgo_security"
 	DefaultSecurityFile   = "context.json"
 )

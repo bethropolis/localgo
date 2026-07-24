@@ -159,9 +159,23 @@ var sendCmd = &cobra.Command{
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
 			defer cancel()
 
-			if err := send.SendToDevice(ctx, Cfg, device, files, zap.S(), sendOpts...); err != nil {
-				return fmt.Errorf("failed to send files: %w", err)
+			// TOFU check: verify cached fingerprint matches before connecting
+		if device.Fingerprint != "" {
+			pc := discovery.NewPeerCache(zap.S())
+			if err := send.VerifyDeviceFingerprint(pc, device); err != nil {
+				return err
 			}
+		}
+
+		if err := send.SendToDevice(ctx, Cfg, device, files, zap.S(), sendOpts...); err != nil {
+				return fmt.Errorf("failed to send files: %w", err)
+		}
+
+		// Save fingerprint for TOFU on subsequent connections
+		if device.Fingerprint != "" {
+			pc := discovery.NewPeerCache(zap.S())
+			pc.Save(device)
+		}
 
 			cli.PrintSuccess("Files sent successfully!")
 			return nil
