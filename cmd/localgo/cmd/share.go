@@ -18,6 +18,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/google/uuid"
+	"github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -35,8 +36,9 @@ var (
 	shareexecHook    string
 	sharequiet       bool
 	sharezip         bool
-	shareconcurrency int
+	shareconcurrency    int
 	sharemulticastiface string
+	shareOnce           bool
 )
 
 var shareCmd = &cobra.Command{
@@ -95,6 +97,9 @@ var shareCmd = &cobra.Command{
 		}
 		if sharemulticastiface != "" {
 			Cfg.MulticastInterface = sharemulticastiface
+		}
+		if shareOnce {
+			Cfg.ShareOnce = true
 		}
 
 		protocol := "HTTPS"
@@ -247,6 +252,22 @@ var shareCmd = &cobra.Command{
 					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
 				}
 				fmt.Println()
+
+				// Terminal QR code for mobile scanning
+				primaryURL := fmt.Sprintf("http://%s:%d", localIPs[0].String(), Cfg.Port)
+				cli.PrintHeader("Scan QR Code on Mobile:")
+				cfg := qrterminal.Config{
+					Level:      qrterminal.M,
+					Writer:     os.Stdout,
+					HalfBlocks: true,
+					BlackChar:  qrterminal.BLACK,
+					WhiteChar:  qrterminal.WHITE,
+				}
+				qrterminal.GenerateWithConfig(primaryURL, cfg)
+			}
+
+			if Cfg.HttpsEnabled {
+				cli.PrintWarning("HTTPS notice: browsers will show a security warning for self-signed certificates")
 			}
 
 			cli.PrintWarning("Press Ctrl+C to stop sharing")
@@ -281,6 +302,7 @@ func init() {
 	shareCmd.Flags().BoolVar(&sharezip, "zip", false, "Zip directories before sharing")
 	shareCmd.Flags().IntVar(&shareconcurrency, "concurrency", 0, "Max parallel uploads (0 = use default)")
 	shareCmd.Flags().StringVar(&sharemulticastiface, "iface", "", "Multicast network interface name")
+	shareCmd.Flags().BoolVar(&shareOnce, "once", false, "Stop sharing automatically after the first download completes")
 
 	shareCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		if h := help.GetCommandHelp("share"); h != nil {
