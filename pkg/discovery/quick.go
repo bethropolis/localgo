@@ -8,6 +8,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 )
 
+// DiscoverDevices performs tiered discovery: cache probe, then multicast.
+// The subnet scan fallback is omitted here — the caller (interactive send)
+// already falls back to a subnet scan if no devices are found.
 func DiscoverDevices(ctx context.Context, serviceCfg *ServiceConfig, appCfg *config.Config, httpsEnabled bool) ([]*model.Device, error) {
 	if serviceCfg == nil {
 		serviceCfg = DefaultServiceConfig()
@@ -22,8 +25,6 @@ func DiscoverDevices(ctx context.Context, serviceCfg *ServiceConfig, appCfg *con
 
 	svc := NewService(serviceCfg, multicast, nil)
 	svc.SetPeerCache(peerCache)
-
-
 
 	if err := svc.Start(ctx, multicastDto); err != nil {
 		return nil, err

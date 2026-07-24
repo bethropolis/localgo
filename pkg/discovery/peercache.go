@@ -16,11 +16,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// MaxCachedPeers is the maximum number of peers to keep in cache.
+const MaxCachedPeers = 50
+
+// StaleThreshold is how long without contact before a peer is evicted.
+const StaleThreshold = 14 * 24 * time.Hour
+
 // PeerCache persists discovered peers to disk and provides thread-safe access.
 type PeerCache struct {
 	mu       sync.RWMutex
 	filePath string
 	peers    map[string]*model.Device
+	order    []string // LRU order (most recent at end)
 	logger   *zap.SugaredLogger
 }
 
@@ -39,33 +46,81 @@ func NewPeerCache(logger *zap.SugaredLogger) *PeerCache {
 	pc := &PeerCache{
 		filePath: path,
 		peers:    make(map[string]*model.Device),
+		order:    make([]string, 0, MaxCachedPeers),
 		logger:   logger,
 	}
 	pc.load()
 	return pc
 }
 
-// Save adds or updates a peer and persists atomically.
+// Save adds or updates a peer, updates LRU order, evicts stale/over-limit entries, and persists.
 func (pc *PeerCache) Save(device *model.Device) {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
+	now := time.Now()
+	device.SetLastSeen(now)
+
+	if _, exists := pc.peers[device.Fingerprint]; !exists {
+		pc.order = append(pc.order, device.Fingerprint)
+	}
 	pc.peers[device.Fingerprint] = device
+
+	// Evict stale peers first
+	staleCutoff := now.Add(-StaleThreshold)
+	var fresh []string
+	for _, fp := range pc.order {
+		d, ok := pc.peers[fp]
+		if !ok || (!d.GetLastSeen().IsZero() && d.GetLastSeen().Before(staleCutoff)) {
+			delete(pc.peers, fp)
+			continue
+		}
+		fresh = append(fresh, fp)
+	}
+	pc.order = fresh
+
+	// LRU evict oldest entries if over cap
+	for len(pc.order) > MaxCachedPeers {
+		fp := pc.order[0]
+		pc.order = pc.order[1:]
+		delete(pc.peers, fp)
+	}
+
 	if err := pc.persist(); err != nil {
 		pc.logger.Warnf("Failed to persist peer cache: %v", err)
 	}
 }
 
-// GetPeers returns a snapshot of all cached peers.
+// touchLRU moves the given fingerprint to the end (most recently used).
+func (pc *PeerCache) touchLRU(fingerprint string) {
+	for i, fp := range pc.order {
+		if fp == fingerprint {
+			pc.order = append(pc.order[:i], pc.order[i+1:]...)
+			pc.order = append(pc.order, fp)
+			break
+		}
+	}
+}
+
+// GetPeers returns a snapshot of all cached peers (most recently seen first).
 func (pc *PeerCache) GetPeers() []*model.Device {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 
-	list := make([]*model.Device, 0, len(pc.peers))
-	for _, d := range pc.peers {
-		list = append(list, d)
+	list := make([]*model.Device, 0, len(pc.order))
+	for i := len(pc.order) - 1; i >= 0; i-- {
+		if d, ok := pc.peers[pc.order[i]]; ok {
+			list = append(list, d)
+		}
 	}
 	return list
+}
+
+// GetByFingerprint returns a cached peer by fingerprint.
+func (pc *PeerCache) GetByFingerprint(fp string) *model.Device {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	return pc.peers[fp]
 }
 
 // load reads peers.json into the in-memory map. Must be called with mu held.
@@ -87,22 +142,25 @@ func (pc *PeerCache) load() {
 		return
 	}
 
-	staleThreshold := 30 * 24 * time.Hour
 	now := time.Now()
+	staleCutoff := now.Add(-StaleThreshold)
 	evictedCount := 0
 
 	for _, d := range list {
-		// Evict peers not seen in the last 30 days
-		if !d.GetLastSeen().IsZero() && now.Sub(d.GetLastSeen()) > staleThreshold {
+		if !d.GetLastSeen().IsZero() && d.GetLastSeen().Before(staleCutoff) {
 			evictedCount++
 			continue
 		}
+		if len(pc.order) >= MaxCachedPeers {
+			evictedCount++
+			continue
+		}
+		pc.order = append(pc.order, d.Fingerprint)
 		pc.peers[d.Fingerprint] = d
 	}
 
 	if evictedCount > 0 {
-		pc.logger.Debugf("Evicted %d stale peer(s) from the local cache (older than 30 days)", evictedCount)
-		// Persist the cleaned cache back to disk in the background
+		pc.logger.Debugf("Evicted %d stale/over-limit peer(s) from the local cache (older than 14 days or >%d entries)", evictedCount, MaxCachedPeers)
 		go func() {
 			pc.mu.Lock()
 			defer pc.mu.Unlock()
@@ -111,12 +169,19 @@ func (pc *PeerCache) load() {
 	}
 }
 
-// persist writes the in-memory map to disk atomically via a temp file + rename.
+// cachedPeer represents a peer with its LRU ordering for serialization.
+type cachedPeer struct {
+	Device *model.Device `json:"device"`
+}
+
+// persist writes the in-memory cache to disk atomically via a temp file + rename.
 // Must be called with mu held.
 func (pc *PeerCache) persist() error {
-	list := make([]*model.Device, 0, len(pc.peers))
-	for _, d := range pc.peers {
-		list = append(list, d)
+	list := make([]*model.Device, 0, len(pc.order))
+	for _, fp := range pc.order {
+		if d, ok := pc.peers[fp]; ok {
+			list = append(list, d)
+		}
 	}
 
 	data, err := json.MarshalIndent(list, "", "  ")

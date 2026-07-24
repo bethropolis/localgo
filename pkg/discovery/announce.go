@@ -11,6 +11,12 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 )
 
+// multicastBurstCount is the number of rapid UDP multicast bursts sent.
+const multicastBurstCount = 3
+
+// multicastBurstInterval is the delay between consecutive bursts.
+const multicastBurstInterval = 30 * time.Millisecond
+
 // SendDiscoveryAnnouncement sends a multicast announcement
 func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 	announcementDto := md.dto
@@ -48,13 +54,16 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to send multicast announcement: %w", err)
+	for burst := 0; burst < multicastBurstCount; burst++ {
+		_, err = conn.Write(data)
+		if err != nil {
+			return fmt.Errorf("failed to send multicast announcement (burst %d): %w", burst, err)
+		}
+		time.Sleep(multicastBurstInterval)
 	}
 
-	md.logger.Debugf("Sent multicast announcement as %s (fingerprint: %s) to %s",
-		md.dto.Alias, getShortFingerprint(md.dto.Fingerprint), md.config.MulticastAddr)
+	md.logger.Debugf("Sent %d multicast announcement bursts as %s (fingerprint: %s) to %s",
+		multicastBurstCount, md.dto.Alias, getShortFingerprint(md.dto.Fingerprint), md.config.MulticastAddr)
 	return nil
 }
 
