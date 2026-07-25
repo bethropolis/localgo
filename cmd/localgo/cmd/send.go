@@ -274,9 +274,6 @@ var sendCmd = &cobra.Command{
 		if sendpin != "" {
 			Cfg.PIN = sendpin
 		}
-		if sendpin != "" {
-			Cfg.PIN = sendpin
-		}
 
 		cli.PrintHeader(fmt.Sprintf("Sending %d files", len(files)))
 		for _, file := range files {

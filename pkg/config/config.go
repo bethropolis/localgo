@@ -49,6 +49,8 @@ type Config struct {
 	FileConflictResolve string                        `json:"-"` // conflict resolution: "rename" (default), "overwrite", "skip"
 	BindAddress         string                        `json:"-"` // bind to specific interface/IP for listening
 	ShareOnce           bool                          `json:"-"` // stop after first download (--once)
+	StaticPeers         []string                      `json:"-"` // statically defined peer addresses for Tier 1 cache probe
+	TrustedFingerprints []string                      `json:"-"` // fingerprints that bypass the transfer acceptance prompt
 
 	Shell             string `json:"-"` // shell command prefix for exec hooks (default: "sh -c" or "cmd /c")
 	ClipboardWriteCmd string `json:"-"` // custom clipboard write command
@@ -214,6 +216,8 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		fileConflictResolve = "rename"
 	}
 	bindAddress := v.GetString("bind_address")
+	staticPeers := v.GetStringSlice("static_peers")
+	trustedFingerprints := v.GetStringSlice("trusted_fingerprints")
 
 	cfg := &Config{
 		Alias:              alias,
@@ -237,6 +241,8 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		DiscoveryStrategy:  discoveryStrategy,
 		FileConflictResolve: fileConflictResolve,
 		BindAddress:        bindAddress,
+		StaticPeers:        staticPeers,
+		TrustedFingerprints: trustedFingerprints,
 		Shell:              shell,
 		ClipboardWriteCmd:  clipboardWriteCmd,
 		ClipboardReadCmd:   clipboardReadCmd,

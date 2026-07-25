@@ -55,8 +55,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 			Flags: []FlagHelp{
 				{Name: "--file", Type: "string", Default: "", Description: "File or directory to share (required, can be specified multiple times)"},
 				{Name: "--port", Type: "int", Default: "from config", Description: "Port to run the server on"},
-				{Name: "--http", Type: "bool", Default: "false", Description: "Use HTTP instead of HTTPS"},
-				{Name: "--https", Type: "bool", Default: "false", Description: "Use HTTPS (browsers will show self-signed cert warning)"},
+				{Name: "--http", Type: "bool", Default: "false", Description: "Deprecated (HTTP is already the default for share)"},
+				{Name: "--https", Type: "bool", Default: "false", Description: "Use HTTPS with a self-signed certificate (browsers show a security warning)"},
 				{Name: "--once", Type: "bool", Default: "false", Description: "Stop sharing automatically after the first download completes"},
 				{Name: "--pin", Type: "string", Default: "", Description: "PIN for authentication"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Device alias"},

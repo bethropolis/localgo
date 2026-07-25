@@ -78,6 +78,40 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	}, logger)
 	cancelCache()
 
+	// --- Tier 1b: Static Peers Probe (400ms per peer) ---
+	if targetDevice == nil && len(cfg.StaticPeers) > 0 {
+		logger.Infof("Probing %d static peer(s)...", len(cfg.StaticPeers))
+		registerDto := cfg.ToRegisterDto()
+		httpDisc := discovery.NewHTTPDiscovery(nil, registerDto, nil, logger)
+		for _, staticPeer := range cfg.StaticPeers {
+			host, portStr, err := net.SplitHostPort(staticPeer)
+			if err != nil {
+				host = staticPeer
+				portStr = strconv.Itoa(recipientPort)
+			}
+			port, _ := strconv.Atoi(portStr)
+			ip := net.ParseIP(host)
+			if ip == nil {
+				ips, lookupErr := net.LookupIP(host)
+				if lookupErr != nil || len(ips) == 0 {
+					logger.Warnf("Static peer %s: hostname lookup failed: %v", staticPeer, lookupErr)
+					continue
+				}
+				ip = ips[0]
+			}
+
+			peerCtx, cancelPeer := context.WithTimeout(ctx, 400*time.Millisecond)
+			dev, fetchErr := httpDisc.FetchDeviceInfo(peerCtx, ip, port)
+			cancelPeer()
+
+			if fetchErr == nil && dev != nil && dev.Alias == recipientAlias {
+				logger.Infof("Discovered recipient via static peer: %s (%s)", dev.Alias, staticPeer)
+				targetDevice = dev
+				break
+			}
+		}
+	}
+
 	if targetDevice != nil {
 		logger.Infof("Discovered recipient via cache: %s (%s)", targetDevice.Alias, targetDevice.IP)
 		if err := VerifyDeviceFingerprint(peerCache, targetDevice); err != nil {
