@@ -64,7 +64,7 @@ func securityMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 
 		// Block cross-origin requests from external websites.
@@ -140,7 +140,12 @@ func (s *Server) configureRoutes() {
 func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	s.configureRoutes()
 
-	addr := fmt.Sprintf("0.0.0.0:%d", s.config.Port)
+	bindHost := "0.0.0.0"
+	if s.config.BindAddress != "" {
+		bindHost = s.config.BindAddress
+	}
+
+	addr := fmt.Sprintf("%s:%d", bindHost, s.config.Port)
 	s.httpServer = &http.Server{
 		Addr:              addr,
 		Handler:           s.muxRouter,
@@ -158,7 +163,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 		cli.Notify("LocalGo: Port Changed",
 			fmt.Sprintf("Port %d was busy. Now running on a different port.", s.config.Port))
 
-		addr = "0.0.0.0:0"
+		addr = fmt.Sprintf("%s:0", bindHost)
 		ln, err = net.Listen("tcp", addr)
 		if err != nil {
 			return fmt.Errorf("failed to bind port: %w", err)
@@ -166,7 +171,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 
 		actualPort := ln.Addr().(*net.TCPAddr).Port
 		s.config.Port = actualPort
-		addr = fmt.Sprintf("0.0.0.0:%d", actualPort)
+		addr = fmt.Sprintf("%s:%d", bindHost, actualPort)
 		s.httpServer.Addr = addr
 		s.logger.Infof("Server bound to port %d", actualPort)
 	}

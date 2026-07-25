@@ -41,6 +41,8 @@ var knownConfigKeys = map[string]configKey{
 	"discovery_strategy":         {typ: "enum", enums: []string{"full", "fast"}},
 	"file_conflict_resolution":   {typ: "enum", enums: []string{"rename", "overwrite", "skip"}},
 	"bind_address":               {typ: "string"},
+	"static_peers":               {typ: "string"},
+	"trusted_fingerprints":       {typ: "string"},
 	"clipboard_write_cmd":        {typ: "string"},
 	"clipboard_read_cmd":         {typ: "string"},
 	"tls_cert":                   {typ: "string"},

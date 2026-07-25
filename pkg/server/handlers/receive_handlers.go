@@ -190,14 +190,27 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 
 	// --- Interactive Accept/Reject Prompt ---
 	if !h.config.AutoAccept {
-		h.promptMutex.Lock()
-		accepted := h.promptUserForAcceptance(sender, requestDto.Files)
-		h.promptMutex.Unlock()
+		// Check if sender fingerprint is in trusted_fingerprints whitelist
+		isTrusted := false
+		if sender.Fingerprint != "" && len(h.config.TrustedFingerprints) > 0 {
+			for _, trusted := range h.config.TrustedFingerprints {
+				if strings.EqualFold(trusted, sender.Fingerprint) {
+					isTrusted = true
+					break
+				}
+			}
+		}
 
-		if !accepted {
-			h.logger.Infof("Transfer rejected by user")
-			httputil.RespondError(w, http.StatusForbidden, "Rejected") // 403 Forbidden
-			return
+		if !isTrusted {
+			h.promptMutex.Lock()
+			accepted := h.promptUserForAcceptance(sender, requestDto.Files)
+			h.promptMutex.Unlock()
+
+			if !accepted {
+				h.logger.Infof("Transfer rejected by user")
+				httputil.RespondError(w, http.StatusForbidden, "Rejected") // 403 Forbidden
+				return
+			}
 		}
 	}
 

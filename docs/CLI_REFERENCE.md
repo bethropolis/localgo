@@ -84,8 +84,9 @@ localgo share --file FILE [flags]
 |------|------|---------|-------------|
 | `--file` | stringSlice | — | File or directory to share (can be repeated) |
 | `--port` | int | from config | Port to run the server on |
-| `--http` | bool | false | Deprecated (HTTP is now default for share) |
-| `--https` | bool | false | Use HTTPS (browsers will reject self-signed certs) |
+| `--http` | bool | false | Deprecated (HTTP is already the default for share) |
+| `--https` | bool | false | Use HTTPS with a self-signed certificate (browsers show a security warning) |
+| `--once` | bool | false | Stop sharing automatically after the first download completes |
 | `--pin` | string | — | PIN for authentication |
 | `--alias` | string | from config | Device alias |
 | `--auto-accept` | bool | false | Auto-accept incoming files without prompting |
@@ -103,6 +104,8 @@ localgo share --file document.pdf
 localgo share --file document.pdf --file image.jpg
 localgo share --file data.zip --pin 1234
 localgo share --file mydir --zip
+localgo share --file document.pdf --https
+localgo share --file photo.jpg --once
 ```
 
 ---

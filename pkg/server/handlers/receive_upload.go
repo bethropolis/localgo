@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -67,7 +68,23 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	// Normalize incoming filenames: convert Windows backslashes to forward
 	// slashes so cross-OS directory transfers create correct subdirectories.
 	rawFileName := filepath.ToSlash(dto.FileName)
-	destinationPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+
+	// Determine destination path based on conflict resolution mode
+	var destinationPath string
+	switch h.config.FileConflictResolve {
+	case "skip":
+		destinationPath = filepath.Join(h.config.DownloadDir, rawFileName)
+		if _, err := os.Stat(destinationPath); err == nil {
+			h.logger.Infof("Skipping file transfer for existing file %s (file_conflict_resolution=skip)", rawFileName)
+			h.receiveService.CompleteFile(reqSessionId, reqFileId)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	case "overwrite":
+		destinationPath = filepath.Join(h.config.DownloadDir, rawFileName)
+	default:
+		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+	}
 
 	// Path traversal prevention: ensure the resolved path is still within DownloadDir
 	cleanPath := filepath.Clean(destinationPath)
@@ -193,7 +210,13 @@ func (h *ReceiveHandler) saveTextAsFileTo(sender model.DeviceInfo, reqSessionId,
 	} else {
 		combinedReader = bytes.NewReader(textBytes)
 	}
-	destinationPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+	var destinationPath string
+	switch h.config.FileConflictResolve {
+	case "overwrite":
+		destinationPath = filepath.Join(h.config.DownloadDir, rawFileName)
+	default:
+		destinationPath = storage.ResolveDuplicateFilename(h.config.DownloadDir, rawFileName)
+	}
 	cleanPath := filepath.Clean(destinationPath)
 	if !strings.HasPrefix(cleanPath, filepath.Clean(h.config.DownloadDir)+string(filepath.Separator)) &&
 		cleanPath != filepath.Clean(h.config.DownloadDir) {

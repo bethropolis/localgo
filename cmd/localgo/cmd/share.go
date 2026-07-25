@@ -66,7 +66,8 @@ var shareCmd = &cobra.Command{
 		if shareport > 0 {
 			Cfg.Port = shareport
 		}
-		// Browser download API must use HTTP (browsers reject self-signed certs)
+		// Default to HTTP for browser compatibility; opt into HTTPS with --https.
+		// Self-signed certs trigger a browser security warning that users can bypass.
 		Cfg.HttpsEnabled = false
 		if shareuseHTTPS {
 			Cfg.HttpsEnabled = true
@@ -117,6 +118,9 @@ var shareCmd = &cobra.Command{
 			cli.PrintInfo("Alias: %s", displayAlias)
 			cli.PrintInfo("Protocol: %s", protocol)
 			cli.PrintInfo("Port: %d", Cfg.Port)
+			if Cfg.HttpsEnabled && Cfg.SecurityContext != nil && Cfg.SecurityContext.CertificateHash != "" {
+				cli.PrintInfo("Fingerprint: %s...", Cfg.SecurityContext.CertificateHash[:16])
+			}
 		}
 
 	// Verify and prepare files
@@ -240,27 +244,29 @@ var shareCmd = &cobra.Command{
 		if !sharequiet {
 			cli.PrintSuccess("Server ready! Waiting for connections...")
 
+			scheme := "http"
+			if Cfg.HttpsEnabled {
+				scheme = "https"
+			}
+
 			// Retrieve active network interfaces to display direct URLs
 			localIPs, err := network.GetLocalIPAddresses()
 			if err == nil && len(localIPs) > 0 {
 				cli.PrintHeader("\nAccess URLs:")
 				for _, ip := range localIPs {
-					scheme := "https"
-					if !Cfg.HttpsEnabled {
-						scheme = "http"
-					}
 					cli.PrintInfo("  %s://%s:%d", scheme, ip.String(), Cfg.Port)
 				}
 				fmt.Println()
 
-				// Terminal QR code for mobile scanning
-				primaryURL := fmt.Sprintf("http://%s:%d", localIPs[0].String(), Cfg.Port)
+				// Terminal QR code for mobile scanning (must match server scheme)
+				primaryURL := fmt.Sprintf("%s://%s:%d", scheme, localIPs[0].String(), Cfg.Port)
 				cli.PrintHeader("Scan QR Code on Mobile:")
 				qrterminal.GenerateHalfBlock(primaryURL, qrterminal.M, os.Stdout)
 			}
 
 			if Cfg.HttpsEnabled {
-				cli.PrintWarning("HTTPS notice: browsers will show a security warning for self-signed certificates")
+				cli.PrintWarning("HTTPS notice: browsers will show a security warning for the self-signed certificate.")
+				cli.PrintWarning("Proceed past the warning (Advanced → Proceed) to download files.")
 			}
 
 			cli.PrintWarning("Press Ctrl+C to stop sharing")
@@ -283,8 +289,8 @@ func init() {
 	rootCmd.AddCommand(shareCmd)
 	shareCmd.Flags().StringSliceVar(&sharefiles, "file", []string{}, "File or directory to share")
 	shareCmd.Flags().IntVar(&shareport, "port", 0, "Port to run the server on")
-	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Deprecated (HTTP is now default for share)")
-	shareCmd.Flags().BoolVar(&shareuseHTTPS, "https", false, "Use HTTPS (browsers will reject self-signed certs)")
+	shareCmd.Flags().BoolVar(&shareuseHTTP, "http", false, "Deprecated (HTTP is already the default for share)")
+	shareCmd.Flags().BoolVar(&shareuseHTTPS, "https", false, "Use HTTPS with a self-signed certificate (browsers show a security warning)")
 	shareCmd.Flags().StringVar(&sharepin, "pin", "", "PIN for authentication")
 	shareCmd.Flags().StringVar(&sharealias, "alias", "", "Device alias")
 	shareCmd.Flags().BoolVar(&shareautoAccept, "auto-accept", false, "Auto-accept incoming files")
