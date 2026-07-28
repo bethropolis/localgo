@@ -4,14 +4,18 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
@@ -142,9 +146,39 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 				}
 			}
 		}
-		// Fall through to normal create-session + upload flow.
-		// The upload handler will write to clipboard or save as file
-		// when the sender completes the upload.
+
+		sanitizedAlias := cli.Sanitize(requestDto.Info.Alias)
+
+		if !h.config.NoClipboard {
+			if err := clipboard.Write(clipboardMessage); err != nil {
+				h.logger.Warnf("Clipboard write failed (%v), saving text as file instead", err)
+			} else {
+				h.logger.Infof("Clipboard message from %s accepted and copied", sanitizedAlias)
+				fmt.Fprintln(os.Stderr, "✓ Copied to clipboard!")
+				os.Stderr.Sync()
+				h.logTransfer(sanitizedAlias, senderIP, "<clipboard>", "<clipboard>", int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+				h.runExecHook("<clipboard>", "<clipboard>", sanitizedAlias, senderIP, int64(len(clipboardMessage)))
+				time.Sleep(1 * time.Second)
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+
+		// Fallback: save as file
+		clipboardFilePath := storage.ResolveDuplicateFilename(h.config.DownloadDir, "clipboard.txt")
+		if err := os.WriteFile(clipboardFilePath, []byte(clipboardMessage), 0600); err != nil {
+			h.logger.Errorf("Failed to save clipboard text to %s: %v", clipboardFilePath, err)
+			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save clipboard")
+			return
+		}
+		h.logger.Infof("Clipboard message from %s saved to %s", sanitizedAlias, clipboardFilePath)
+		fmt.Fprintln(os.Stderr, "✓ Saved clipboard to file")
+		os.Stderr.Sync()
+		h.logTransfer(sanitizedAlias, senderIP, "clipboard.txt", clipboardFilePath, int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
+		h.runExecHook(clipboardFilePath, "clipboard.txt", sanitizedAlias, senderIP, int64(len(clipboardMessage)))
+		time.Sleep(1 * time.Second)
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 
 	// --- Check Disk Space ---
