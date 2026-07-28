@@ -17,7 +17,7 @@ import (
 
 // configKey describes a known config key with its type and valid values.
 type configKey struct {
-	typ     string      // "string", "int", "bool", "enum"
+	typ     string      // "string", "int", "bool", "enum", "slice"
 	enums   []string    // valid values for enum type
 	intMin  int         // minimum for int type
 	intMax  int         // maximum for int type
@@ -41,8 +41,8 @@ var knownConfigKeys = map[string]configKey{
 	"discovery_strategy":         {typ: "enum", enums: []string{"full", "fast"}},
 	"file_conflict_resolution":   {typ: "enum", enums: []string{"rename", "overwrite", "skip"}},
 	"bind_address":               {typ: "string"},
-	"static_peers":               {typ: "string"},
-	"trusted_fingerprints":       {typ: "string"},
+	"static_peers":               {typ: "slice"},
+	"trusted_fingerprints":       {typ: "slice"},
 	"clipboard_write_cmd":        {typ: "string"},
 	"clipboard_read_cmd":         {typ: "string"},
 	"tls_cert":                   {typ: "string"},
@@ -147,6 +147,8 @@ func validateValue(ck configKey, raw string) (interface{}, error) {
 			}
 		}
 		return nil, fmt.Errorf("invalid value %q; valid values: %s", raw, strings.Join(ck.enums, ", "))
+	case "slice":
+		return nil, fmt.Errorf("use 'config add %s' or 'config remove %s' to manage list values", ck.typ, ck.typ)
 	}
 	return raw, nil
 }
