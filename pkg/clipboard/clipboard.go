@@ -6,9 +6,12 @@
 package clipboard
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // provider holds the resolved clipboard commands for this run.
@@ -32,10 +35,30 @@ func Write(text string) error {
 	if provider == nil {
 		return fmt.Errorf("clipboard unavailable: no supported tool found (install xclip, xsel, wl-copy, pbcopy, or clip.exe)")
 	}
-	cmd := exec.Command(provider.cmd, provider.args...) //nolint:gosec
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, provider.cmd, provider.args...) //nolint:gosec
 	cmd.Stdin = strings.NewReader(text)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("clipboard write failed (%s): %w: %s", provider.cmd, err, strings.TrimSpace(string(out)))
+
+	// Do NOT use CombinedOutput() here. Tools like xclip and wl-copy fork into
+	// the background to hold the selection and inherit stdout/stderr write pipes.
+	// Go's exec pipe reader goroutines wait indefinitely for EOF on those pipes,
+	// causing cmd.Wait() to hang until the process or daemon is killed.
+	// Using os.DevNull prevents pipe creation and inheritance.
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err == nil {
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+		defer devNull.Close()
+	}
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("clipboard write timed out (%s)", provider.cmd)
+		}
+		return fmt.Errorf("clipboard write failed (%s): %w", provider.cmd, err)
 	}
 	return nil
 }
@@ -46,9 +69,16 @@ func Read() (string, error) {
 	if provider == nil || provider.readCmd == "" {
 		return "", fmt.Errorf("clipboard read unavailable: no supported tool found (install xclip, xsel, wl-paste, pbpaste, or Get-Clipboard)")
 	}
-	cmd := exec.Command(provider.readCmd, provider.readArgs...) //nolint:gosec
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, provider.readCmd, provider.readArgs...) //nolint:gosec
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("clipboard read timed out (%s)", provider.readCmd)
+		}
 		// Some tools (xclip, wl-paste) exit with 1 when the clipboard is empty
 		// and produce no output. Treat this as empty, not an error.
 		if len(out) == 0 {
