@@ -6,14 +6,12 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/bethropolis/localgo/pkg/cli"
-	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
@@ -95,8 +93,17 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Extract IP from RemoteAddr early (used by clipboard path and elsewhere)
+	// Extract IP from RemoteAddr early
 	senderIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+
+	sender := model.DeviceInfo{
+		Alias:       cli.Sanitize(requestDto.Info.Alias),
+		Version:     requestDto.Info.Version,
+		DeviceModel: requestDto.Info.DeviceModel,
+		DeviceType:  requestDto.Info.DeviceType,
+		Fingerprint: requestDto.Info.Fingerprint,
+		IP:          senderIP,
+	}
 
 	// --- Clipboard Message Detection ---
 	// The official LocalSend embeds clipboard text in the Preview field.
@@ -104,12 +111,10 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	// already present, Size matches Preview length). Fall through to the
 	// normal upload path otherwise.
 	var clipboardMessage string
-	var clipboardFileID string
-	for id, f := range requestDto.Files {
+	for _, f := range requestDto.Files {
 		if f.Preview != nil && *f.Preview != "" && strings.HasPrefix(f.FileType, "text/plain") {
 			if len(requestDto.Files) == 1 && f.Size == int64(len(*f.Preview)) {
 				clipboardMessage = *f.Preview
-				clipboardFileID = id
 			}
 			break
 		}
@@ -118,41 +123,28 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	if clipboardMessage != "" {
 		h.logger.Infof("Clipboard message from %s", cli.Sanitize(requestDto.Info.Alias))
 		if !h.config.AutoAccept {
-			h.promptMutex.Lock()
-			accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
-			h.promptMutex.Unlock()
-			if !accepted {
-				httputil.RespondError(w, http.StatusForbidden, "Rejected")
-				return
+			isTrusted := false
+			if sender.Fingerprint != "" && len(h.config.TrustedFingerprints) > 0 {
+				for _, trusted := range h.config.TrustedFingerprints {
+					if strings.EqualFold(trusted, sender.Fingerprint) {
+						isTrusted = true
+						break
+					}
+				}
+			}
+			if !isTrusted {
+				h.promptMutex.Lock()
+				accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
+				h.promptMutex.Unlock()
+				if !accepted {
+					httputil.RespondError(w, http.StatusForbidden, "Rejected")
+					return
+				}
 			}
 		}
-
-		sanitizedAlias := cli.Sanitize(requestDto.Info.Alias)
-
-		if !h.config.NoClipboard {
-			if err := clipboard.Write(clipboardMessage); err != nil {
-				h.logger.Warnf("Clipboard write failed (%v), saving text as file instead", err)
-			} else {
-				h.logger.Infof("Clipboard message from %s accepted and copied", sanitizedAlias)
-				h.logTransfer(sanitizedAlias, senderIP, clipboardFileID, "<clipboard>", int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
-				h.runExecHook("<clipboard>", clipboardFileID, sanitizedAlias, senderIP, int64(len(clipboardMessage)))
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-		}
-
-		// Fallback: save as file (NoClipboard mode or clipboard write failed)
-		clipboardPath := storage.ResolveDuplicateFilename(h.config.DownloadDir, "clipboard.txt")
-		if err := os.WriteFile(clipboardPath, []byte(clipboardMessage), 0600); err != nil {
-			h.logger.Errorf("Failed to save clipboard text to %s: %v", clipboardPath, err)
-			httputil.RespondError(w, http.StatusInternalServerError, "Failed to save clipboard")
-			return
-		}
-		h.logger.Infof("Clipboard message from %s saved to %s", sanitizedAlias, clipboardPath)
-		h.logTransfer(sanitizedAlias, senderIP, clipboardFileID, clipboardPath, int64(len(clipboardMessage)), "text/plain", history.StatusClipboard)
-		h.runExecHook(clipboardPath, clipboardFileID, sanitizedAlias, senderIP, int64(len(clipboardMessage)))
-		w.WriteHeader(http.StatusNoContent)
-		return
+		// Fall through to normal create-session + upload flow.
+		// The upload handler will write to clipboard or save as file
+		// when the sender completes the upload.
 	}
 
 	// --- Check Disk Space ---
@@ -178,15 +170,6 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	}
 
 	h.logger.Infof("PrepareUpload request from %s (%s) for %d files:", cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, len(requestDto.Files))
-
-	sender := model.DeviceInfo{
-		Alias:       cli.Sanitize(requestDto.Info.Alias),
-		Version:     requestDto.Info.Version,
-		DeviceModel: requestDto.Info.DeviceModel,
-		DeviceType:  requestDto.Info.DeviceType,
-		Fingerprint: requestDto.Info.Fingerprint,
-		IP:          senderIP,
-	}
 
 	// --- Interactive Accept/Reject Prompt ---
 	if !h.config.AutoAccept {
