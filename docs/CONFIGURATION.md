@@ -24,6 +24,8 @@ These can be passed before any subcommand.
 | `--no-color` | Disable colored output | `false` |
 | `--config` | Config file path | — |
 | `--private`, `-p` | Hide device identity during discovery and transfer | `false` |
+| `-v`, `--version` | Show version information | — |
+| `-h`, `--help` | Show help | — |
 
 ### `serve` Flags
 | Flag | Description | Default |
@@ -75,6 +77,8 @@ These can be passed before any subcommand.
 | `--iface` | Multicast network interface name | — |
 | `--clipboard`, `-c` | Send current system clipboard text directly | `false` |
 | `--stdin` | Send text read from standard input (stdin) | `false` |
+| `--quick`, `-q` | Fast discovery mode (skip cache probe, multicast burst only) | `false` |
+| `--pin` | PIN for sender authentication | — |
 
 ### `discover` Flags
 | Flag | Description | Default |
@@ -92,11 +96,16 @@ These can be passed before any subcommand.
 | `--json` | Output results in JSON format | `false` |
 | `--quiet` | Only show results, no status messages | `false` |
 
-### `devices` / `info` Flags
+### `devices` Flags
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--json` | Output results in JSON format | `false` |
 | `--probe` | Probe cached devices to verify if they are currently online | `false` |
+
+### `info` Flags
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--json` | Output results in JSON format | `false` |
 
 ### `history` Flags
 | Flag | Description | Default |
@@ -129,6 +138,11 @@ You can set these globally to avoid repeating flags.
 | `LOCALSEND_QUIET` | Minimal output mode | `false` |
 | `LOCALSEND_CONCURRENCY` | Max parallel upload workers | `4` |
 | `LOCALSEND_MULTICAST_INTERFACE` | Network interface to bind multicast to | (all) |
+| `LOCALSEND_DISCOVERY_STRATEGY` | Discovery strategy (`full`/`fast`) | `full` |
+| `LOCALSEND_FILE_CONFLICT_RESOLUTION` | File conflict mode (`rename`/`overwrite`/`skip`) | `rename` |
+| `LOCALSEND_BIND_ADDRESS` | Bind to specific IP address | (all) |
+| `LOCALSEND_STATIC_PEERS` | Comma-separated list of static peer IP:port | — |
+| `LOCALSEND_TRUSTED_FINGERPRINTS` | Comma-separated list of trusted device fingerprints | — |
 | `LOCALSEND_SHELL` | Shell prefix for exec hooks | (auto-detected) |
 | `LOCALSEND_CLIPBOARD_WRITE_CMD` | Custom clipboard write command | (auto-detected) |
 | `LOCALSEND_CLIPBOARD_READ_CMD` | Custom clipboard read command | (auto-detected) |

@@ -24,13 +24,14 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ## Features
 
-- **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps (V3 planned)
-- **Secure** - HTTPS with certificates, optional PIN protection
-- **Fast Discovery** - Multicast UDP + HTTP fallback
-- **Multi-file Transfers** - Send multiple files concurrently
-- **Web Share** - Share files via browser download link
-- **Clipboard Integration** - Incoming text/plain transfers copied to clipboard automatically
-- **Metadata Preserved** - File timestamps preserved on transfer
+- **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps (v3 planned)
+- **Secure** - HTTPS with auto-generated certificates, PIN-protected transfers, fingerprint TOFU verification
+- **Fast Discovery** - Multicast UDP + HTTP fallback + CIDR range scanning
+- **Multi-file Transfers** - Send multiple files concurrently with progress bars
+- **Web Share** - Share files via browser download link with QR code and one-shot mode
+- **Clipboard Integration** - Incoming text/plain transfers copied to clipboard instantly; send clipboard text directly
+- **Privacy Mode** - Anonymize device identity during discovery and transfer (`--private`)
+- **Metadata Preserved** - File timestamps preserved on transfer; EXIF/metadata stripping in private mode
 - **Cross-Platform** - Linux, macOS, Windows
 
 ## Quick Start
@@ -98,8 +99,23 @@ localgo send --file document.pdf --to "My Phone"
 # Send clipboard contents directly
 localgo send --clipboard --to "My Phone"
 
+# Send with PIN authentication
+localgo send --file secret.pdf --to "My Phone" --pin 1234
+
+# Fast discovery (skip cache probe)
+localgo send --file large.zip --quick
+
+# Send directly to an IP (skips discovery)
+localgo send --ip 192.168.1.42:53317 --file photo.jpg
+
+# Scan a specific CIDR range
+localgo scan --range 192.168.1.0/24
+
 # Inspect transfer history logs
 localgo history
+
+# Share files for web download (single-use)
+localgo share --file document.pdf --once
 
 # Share files for web download
 localgo share --file document.pdf
@@ -133,6 +149,8 @@ For full details on deployment, macvlan networking, read-only root filesystem, w
 | `LOCALSEND_QUIET` | false | Minimal output mode |
 | `LOCALSEND_CONCURRENCY` | 4 | Max parallel upload workers |
 | `LOCALSEND_MULTICAST_INTERFACE` | (all) | Network interface for multicast |
+| `LOCALSEND_MULTICAST_GROUP` | 224.0.0.167 | Multicast group address |
+| `LOCALSEND_DISCOVERY_STRATEGY` | full | Discovery strategy (full/fast) |
 | `LOCALSEND_SHELL` | (auto) | Shell prefix for exec hooks |
 | `LOCALSEND_CLIPBOARD_WRITE_CMD` | (auto) | Custom clipboard write command |
 | `LOCALSEND_CLIPBOARD_READ_CMD` | (auto) | Custom clipboard read command |
@@ -141,6 +159,10 @@ For full details on deployment, macvlan networking, read-only root filesystem, w
 | `LOCALSEND_NOTIFICATION_CMD` | (auto) | Custom notification command |
 | `LOCALSEND_MAX_BODY_SIZE` | 0 | Max request body size (0 = unlimited) |
 | `LOCALSEND_SECURITY_DIR` | (auto) | Security context directory |
+| `LOCALSEND_FILE_CONFLICT_RESOLUTION` | rename | File conflict mode (rename/overwrite/skip) |
+| `LOCALSEND_BIND_ADDRESS` | (all) | Bind to specific IP address |
+| `LOCALSEND_STATIC_PEERS` | — | Comma-separated list of static peer IP:port |
+| `LOCALSEND_TRUSTED_FINGERPRINTS` | — | Comma-separated list of trusted device fingerprints |
 
 ### Example
 
@@ -164,7 +186,7 @@ localgo serve
 | `devices` | List discovered devices |
 | `history` | Show transfer history log |
 | `stop` | Stop a running daemon |
-| `config` | Manage configuration (get/set/list/path) |
+| `config` | Manage configuration (get/set/add/remove/open/unset/list/path) |
 | `version` | Show version information |
 
 Run `localgo help` for more options.
