@@ -183,12 +183,12 @@ print_plan() {
 
     echo
     echo "  ┌─ Installation Plan ──────────────────────────────────┐"
-    printf "  │  %-20s %-30s  │\n" "Version:"     "$TAG"
-    printf "  │  %-20s %-30s  │\n" "Platform:"    "${OS}_${ARCH}"
-    printf "  │  %-20s %-30s  │\n" "Destination:" "$dest"
-    printf "  │  %-20s %-30s  │\n" "Service:"     "$( [[ $INSTALL_SERVICE == true ]] && echo yes || echo no )"
-    printf "  │  %-20s %-30s  │\n" "Completions:" "$( [[ $INSTALL_COMPLETION == true ]] && echo yes || echo no )"
-    printf "  │  %-20s %-30s  │\n" "Config:"      "$( [[ $INSTALL_CONFIG == true ]] && echo yes || echo no )"
+    printf "  │  %-20s %-29s  │\n" "Version:"     "$TAG"
+    printf "  │  %-20s %-29s  │\n" "Platform:"    "${OS}_${ARCH}"
+    printf "  │  %-20s %-29s  │\n" "Destination:" "$dest"
+    printf "  │  %-20s %-29s  │\n" "Service:"     "$( [[ $INSTALL_SERVICE == true ]] && echo yes || echo no )"
+    printf "  │  %-20s %-29s  │\n" "Completions:" "$( [[ $INSTALL_COMPLETION == true ]] && echo yes || echo no )"
+    printf "  │  %-20s %-29s  │\n" "Config:"      "$( [[ $INSTALL_CONFIG == true ]] && echo yes || echo no )"
     echo "  └──────────────────────────────────────────────────────┘"
     echo
 
@@ -420,7 +420,7 @@ print_summary() {
 
     echo
     echo "  ┌─ Installation Complete ──────────────────────────┐"
-    printf "  │  LocalGo v%-30s  │\n" "$VERSION"
+    printf "  │  LocalGo v%-37s  │\n" "$VERSION"
     echo "  └──────────────────────────────────────────────────┘"
     echo
 
