@@ -121,7 +121,7 @@ func validateKey(key string) (configKey, error) {
 	return ck, nil
 }
 
-func validateValue(ck configKey, raw string) (interface{}, error) {
+func validateValue(ck configKey, key, raw string) (interface{}, error) {
 	switch ck.typ {
 	case "string":
 		return raw, nil
@@ -148,7 +148,7 @@ func validateValue(ck configKey, raw string) (interface{}, error) {
 		}
 		return nil, fmt.Errorf("invalid value %q; valid values: %s", raw, strings.Join(ck.enums, ", "))
 	case "slice":
-		return nil, fmt.Errorf("use 'config add %s' or 'config remove %s' to manage list values", ck.typ, ck.typ)
+		return nil, fmt.Errorf("use 'config add %s' or 'config remove %s' to manage list values", key, key)
 	}
 	return raw, nil
 }
@@ -219,7 +219,7 @@ var configSetCmd = &cobra.Command{
 			return err
 		}
 
-		val, err := validateValue(ck, args[1])
+		val, err := validateValue(ck, key, args[1])
 		if err != nil {
 			return err
 		}

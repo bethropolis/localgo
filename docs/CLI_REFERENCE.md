@@ -132,6 +132,8 @@ localgo send --file FILE [flags]
 | `--iface` | string | — | Multicast network interface name |
 | `--clipboard`, `-c` | bool | false | Send current system clipboard text directly |
 | `--stdin` | bool | false | Send text read from standard input (stdin) |
+| `--quick`, `-q` | bool | false | Fast discovery mode (skip cache probe, multicast burst only) |
+| `--pin` | string | — | PIN for sender authentication |
 
 **Discovery Logic:**
 1. **Direct IP** (`--ip`): Skips discovery entirely, sends directly to the given IP:port.
@@ -151,6 +153,8 @@ localgo send --file data.zip --to RemotePC --timeout 60
 localgo send --ip 192.168.1.100:53317 --file doc.pdf
 localgo send --clipboard --to MyPhone
 cat report.txt | localgo send --stdin --to MyPhone
+localgo send --file large.zip --quick
+localgo send --file secret.pdf --to MyPhone --pin 1234
 ```
 
 ---
@@ -281,6 +285,18 @@ Get a single config value by key.
 ### `localgo config set <key> <value>`
 Set a config value. Automatically detects the type (int, bool, float64, string).
 
+### `localgo config add <key> <value>`
+Append a value to a list config key (e.g. `static_peers`, `trusted_fingerprints`).
+
+### `localgo config remove <key> <value>`
+Remove a value from a list config key.
+
+### `localgo config open`
+Open the config file in the default text editor.
+
+### `localgo config unset <key>`
+Unset a config key, reverting it to its default value.
+
 ### `localgo config list`
 List all config values.
 
@@ -291,6 +307,10 @@ Show the config file path.
 ```bash
 localgo config get port
 localgo config set alias "MyDevice"
+localgo config add static_peers "10.0.0.5:53317"
+localgo config remove static_peers "10.0.0.5:53317"
+localgo config open
+localgo config unset port
 localgo config list
 localgo config path
 ```
