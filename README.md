@@ -24,7 +24,7 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ## Features
 
-- **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps
+- **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps (V3 planned)
 - **Secure** - HTTPS with certificates, optional PIN protection
 - **Fast Discovery** - Multicast UDP + HTTP fallback
 - **Multi-file Transfers** - Send multiple files concurrently
