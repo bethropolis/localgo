@@ -135,7 +135,7 @@ homebrew_casks:
     directory: Casks
 
     homepage: "https://github.com/bethropolis/localgo"
-    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    description: "LocalSend v2 protocol implementation. LAN file transfer CLI"
     license: "MIT"
 
     caveats: "Shell completions are installed automatically.\n\nTo start as a background service:\n  localgo serve --quiet --auto-accept"
@@ -147,7 +147,7 @@ aurs:
   - name: localgo-bin
     ids: [default]
     homepage: "https://github.com/bethropolis/localgo"
-    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    description: "LocalSend v2 protocol implementation. LAN file transfer CLI"
     maintainers:
       - "bethropolis <bethropolis at gmail dot com>"
     license: MIT
@@ -222,7 +222,7 @@ scoops:
       name: github-actions[bot]
       email: github-actions[bot]@users.noreply.github.com
     homepage: "https://github.com/bethropolis/localgo"
-    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    description: "LocalSend v2 protocol implementation. LAN file transfer CLI"
     license: MIT
     skip_upload: auto
 
@@ -236,7 +236,7 @@ nfpms:
     vendor: bethropolis
     homepage: "https://github.com/bethropolis/localgo"
     maintainer: "bethropolis"
-    description: "LocalSend v2.1 protocol implementation — LAN file transfer CLI"
+    description: "LocalSend v2 protocol implementation. LAN file transfer CLI"
     license: MIT
     formats:
       - deb
