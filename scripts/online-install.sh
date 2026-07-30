@@ -498,6 +498,12 @@ main() {
         && die "Invalid mode: $INSTALL_MODE (use user or system)"
 
     detect_platform
+    # Termux: use $PREFIX paths instead of ~/.local
+    if [[ "$OS" == "android" && -n "${PREFIX:-}" ]]; then
+        USER_BIN_DIR="$PREFIX/bin"
+        USER_CONFIG_DIR="$PREFIX/etc/localgo"
+        info "Termux environment detected, installing to $PREFIX"
+    fi
     resolve_version
     print_plan
 
