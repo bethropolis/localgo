@@ -11,7 +11,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 var (
@@ -54,7 +53,7 @@ var rootCmd = &cobra.Command{
 		if cfgFile != "" {
 			ViperCfg.SetConfigFile(cfgFile)
 			if err := ViperCfg.ReadInConfig(); err != nil {
-				zap.S().Warnf("Failed to read config file: %v", err)
+				logging.Global().Warnf("Failed to read config file: %v", err)
 			}
 		}
 

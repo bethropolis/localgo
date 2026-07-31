@@ -15,11 +15,11 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/crypto"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
-var testLoggerSend = zap.NewNop().Sugar()
+var testLoggerSend = logging.NewQuiet()
 
 func TestSendFiles_HappyPath(t *testing.T) {
 	tempDir := t.TempDir()

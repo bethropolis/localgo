@@ -4,12 +4,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
-var testLogger = zap.NewNop().Sugar()
+var testLogger = logging.NewQuiet()
 
 func TestLoadConfig_WithEnvVars(t *testing.T) {
 	origEnv := saveEnv()

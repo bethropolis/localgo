@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
-var testLoggerService = zap.NewNop().Sugar()
+var testLoggerService = logging.NewQuiet()
 
 // MockMulticastDiscovery is a mock implementation of the MulticastDiscovery for testing.
 

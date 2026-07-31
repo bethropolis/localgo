@@ -9,12 +9,12 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/crypto"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"go.uber.org/zap"
 )
 
-var testLogger = zap.NewNop().Sugar()
+var testLogger = logging.NewQuiet()
 
 func TestDiscoveryHandler_InfoHandler(t *testing.T) {
 	secCtx := &crypto.StoredSecurityContext{

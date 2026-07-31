@@ -12,7 +12,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/crypto"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 const (
@@ -70,13 +70,13 @@ func (c *Config) SetCustomFingerprint(fp string) {
 // getSecurityDir determines the best location for the security directory
 func getSecurityDir(v *viper.Viper) string {
 	if envDir := v.GetString("security_dir"); envDir != "" {
-		zap.S().Infof("Using security directory: %s", envDir)
+		logging.Global().Infof("Using security directory: %s", envDir)
 		return envDir
 	}
 
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		zap.S().Warnf("Could not determine config directory: %v; falling back to current directory", err)
+		logging.Global().Warnf("Could not determine config directory: %v; falling back to current directory", err)
 		return DefaultSecurityDir
 	}
 
@@ -110,7 +110,7 @@ func testDirWritable(dir string) bool {
 	return true
 }
 
-func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
+func LoadConfig(v *viper.Viper, logger *logging.Logger) (*Config, error) {
 	if v == nil {
 		v = InitViper()
 	}
@@ -149,7 +149,7 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		if size, err := strconv.ParseInt(maxBodySizeStr, 10, 64); err == nil {
 			maxBodySize = size
 		} else {
-			zap.S().Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
+			logging.Global().Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
 		}
 	}
 
@@ -162,16 +162,16 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 	securityContext, err := crypto.LoadSecurityContext(securityFilePath, logger)
 	if err != nil {
 		if os.IsNotExist(err) {
-			zap.S().Infof("Security context not found at %s, generating new one...", securityFilePath)
+			logging.Global().Infof("Security context not found at %s, generating new one...", securityFilePath)
 			securityContext, err = crypto.GenerateSecurityContext(alias, logger)
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate security context: %w", err)
 			}
 			if err := os.MkdirAll(securityDirPath, 0700); err != nil {
-				zap.S().Warnf("Could not create security directory '%s': %v", securityDirPath, err)
+				logging.Global().Warnf("Could not create security directory '%s': %v", securityDirPath, err)
 			}
 			if err := crypto.SaveSecurityContext(securityContext, securityFilePath, logger); err != nil {
-				zap.S().Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
+				logging.Global().Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
 			}
 		} else {
 			return nil, fmt.Errorf("failed to load security context from '%s': %w", securityFilePath, err)
@@ -257,7 +257,7 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 func generateDefaultAlias() string {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" {
-		zap.S().Infow("Could not get hostname, generating random alias suffix.")
+		logging.Global().Infow("Could not get hostname, generating random alias suffix.")
 		hostname = "LocalGo"
 	}
 	return hostname

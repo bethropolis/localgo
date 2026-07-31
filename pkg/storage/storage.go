@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // Thread-safe pool of 32KB buffers for small files.
@@ -60,7 +60,7 @@ func SaveStreamToFile(stream io.Reader, filePath string, onProgress func(bytesWr
 // SaveStreamToFileWithMetadata saves an io.Reader stream and restores optional timestamps.
 // If expectedSha256 is provided, the stream is verified against it after the copy succeeds.
 // fileSize is used to select an optimal copy buffer size.
-func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize int64, modified *string, accessed *string, expectedSha256 *string, onProgress func(bytesWritten int64), logger *zap.SugaredLogger) error {
+func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize int64, modified *string, accessed *string, expectedSha256 *string, onProgress func(bytesWritten int64), logger *logging.Logger) error {
 	dir := filepath.Dir(filePath)
 	if err := EnsureDirExists(dir); err != nil {
 		return err

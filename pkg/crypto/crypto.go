@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // StoredSecurityContext holds PEM-encoded cert/key for config/server
@@ -76,7 +76,7 @@ func calculateCertificateHash(certBytes []byte) string {
 }
 
 // GenerateSecurityContext creates a new security context with keys and a self-signed certificate.
-func GenerateSecurityContext(alias string, logger *zap.SugaredLogger) (*StoredSecurityContext, error) {
+func GenerateSecurityContext(alias string, logger *logging.Logger) (*StoredSecurityContext, error) {
 	privKey, err := generateKeys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate RSA keys: %w", err)
@@ -98,7 +98,7 @@ func GenerateSecurityContext(alias string, logger *zap.SugaredLogger) (*StoredSe
 }
 
 // SaveSecurityContext saves the context as JSON to the specified path.
-func SaveSecurityContext(ctx *StoredSecurityContext, path string, logger *zap.SugaredLogger) error {
+func SaveSecurityContext(ctx *StoredSecurityContext, path string, logger *logging.Logger) error {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to create security context file '%s': %w", path, err)
@@ -116,7 +116,7 @@ func SaveSecurityContext(ctx *StoredSecurityContext, path string, logger *zap.Su
 }
 
 // LoadSecurityContext loads the context from JSON from the specified path.
-func LoadSecurityContext(path string, logger *zap.SugaredLogger) (*StoredSecurityContext, error) {
+func LoadSecurityContext(path string, logger *logging.Logger) (*StoredSecurityContext, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

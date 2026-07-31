@@ -10,11 +10,11 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 var (
@@ -80,7 +80,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		// Initialize HTTP discovery
-		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
+		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, logging.Global())
 
 		// Perform scan
 		scanCtx, cancel := context.WithTimeout(context.Background(), time.Duration(scantimeout)*time.Second)
@@ -101,7 +101,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		if scanErr != nil && !scanquiet {
-			zap.S().Warnf("Scan completed with warnings: %v", scanErr)
+			logging.Global().Warnf("Scan completed with warnings: %v", scanErr)
 			cli.PrintWarning("Scan completed with warnings: %v", scanErr)
 		}
 
@@ -117,7 +117,7 @@ var scanCmd = &cobra.Command{
 		})
 
 		if !scanquiet && len(foundDevices) == 0 {
-			zap.S().Warnf("No devices found during scan")
+			logging.Global().Warnf("No devices found during scan")
 			cli.PrintWarning("No devices found during scan. Check your firewall or network.")
 		}
 

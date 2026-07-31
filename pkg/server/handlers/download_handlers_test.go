@@ -10,13 +10,13 @@ import (
 	"testing"
 
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"go.uber.org/zap"
 )
 
-var testLoggerDownload = zap.NewNop().Sugar()
+var testLoggerDownload = logging.NewQuiet()
 
 func setupDownloadHandler(t *testing.T, cfg *config.Config) (*handlers.DownloadHandler, *services.SendService, string) {
 	tempDir := t.TempDir()

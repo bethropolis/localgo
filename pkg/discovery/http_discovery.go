@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
-	"go.uber.org/zap"
 )
 
 type HTTPDiscoveryConfig struct {
@@ -34,15 +34,15 @@ type HTTPDiscovery struct {
 	dto           model.RegisterDto
 	client        *http.Client
 	deviceHandler func(*model.Device)
-	logger        *zap.SugaredLogger
+	logger        *logging.Logger
 }
 
-func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handler func(*model.Device), logger *zap.SugaredLogger) *HTTPDiscovery {
+func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handler func(*model.Device), logger *logging.Logger) *HTTPDiscovery {
 	if config == nil {
 		config = DefaultHTTPDiscoveryConfig()
 	}
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	client := &http.Client{

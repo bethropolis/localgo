@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
-var testLogger = zap.NewNop().Sugar()
+var testLogger = logging.NewQuiet()
 
 func TestEnsureDirExists(t *testing.T) {
 	tmpDir := t.TempDir()

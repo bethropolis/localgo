@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
 func TestPeerCache_SaveAndGetPeers(t *testing.T) {
@@ -18,7 +18,7 @@ func TestPeerCache_SaveAndGetPeers(t *testing.T) {
 	pc := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 
 	device := &model.Device{
@@ -36,7 +36,7 @@ func TestPeerCache_SaveAndGetPeers(t *testing.T) {
 	pc2 := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 	pc2.load()
 
@@ -55,7 +55,7 @@ func TestPeerCache_UpdateExisting(t *testing.T) {
 	pc := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 
 	device := &model.Device{
@@ -93,7 +93,7 @@ func TestPeerCache_LoadCorruptedFile(t *testing.T) {
 	pc := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 
 	pc.load()
@@ -107,7 +107,7 @@ func TestPeerCache_LoadMissingFile(t *testing.T) {
 	pc := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 
 	// Should not panic or error
@@ -122,7 +122,7 @@ func TestPeerCache_ConcurrentSave(t *testing.T) {
 	pc := &PeerCache{
 		filePath: cachePath,
 		peers:    make(map[string]*model.Device),
-		logger:   zap.NewNop().Sugar(),
+		logger:   logging.NewQuiet(),
 	}
 
 	done := make(chan struct{})

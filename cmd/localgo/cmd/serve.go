@@ -15,7 +15,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/bethropolis/localgo/pkg/server"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 var (
@@ -112,9 +112,9 @@ var serveCmd = &cobra.Command{
 			displayAlias = "Anonymous"
 		}
 
-		zap.S().Infof("Starting LocalGo server")
-		zap.S().Infof("Alias: %s", displayAlias)
-		zap.S().Infof("Protocol: %s", protocol)
+		logging.Global().Infof("Starting LocalGo server")
+		logging.Global().Infof("Alias: %s", displayAlias)
+		logging.Global().Infof("Protocol: %s", protocol)
 
 		if !servequiet {
 			cli.PrintHeader("Starting LocalGo server")
@@ -133,7 +133,7 @@ var serveCmd = &cobra.Command{
 		defer stop()
 
 		// Start server first to determine the actual port
-		srv := server.NewServer(Cfg, zap.S())
+		srv := server.NewServer(Cfg, logging.Global())
 
 		serverErrChan := make(chan error, 1)
 		serverReadyChan := make(chan struct{}, 1)
@@ -159,16 +159,16 @@ var serveCmd = &cobra.Command{
 			discoverySvcConfig.AnnounceInterval = time.Duration(serveinterval) * time.Second
 		}
 
-		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, Cfg.ToMulticastDto(false), zap.S())
+		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, Cfg.ToMulticastDto(false), logging.Global())
 
 		// Create HTTPDiscoverer for backchannel (HTTP response to multicast)
-		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
+		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, logging.Global())
 		multicast.SetHTTPDiscoverer(httpDiscoverer)
 
-		peerCache := discovery.NewPeerCache(zap.S())
+		peerCache := discovery.NewPeerCache(logging.Global())
 		multicast.SetPeerCache(peerCache)
 
-		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logging.Global())
 		discoverySvc.SetPeerCache(peerCache)
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
@@ -177,7 +177,7 @@ var serveCmd = &cobra.Command{
 				if Cfg.Private {
 					alias = cli.AnonymizedAlias(device)
 				}
-				zap.S().Infof("Device discovered: %s (%s)", alias, device.IP)
+				logging.Global().Infof("Device discovered: %s (%s)", alias, device.IP)
 				cli.PrintSuccess("Device discovered: %s (%s)", alias, device.IP)
 			}
 		})
@@ -189,7 +189,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		if !servequiet {
-			zap.S().Infof("Server ready! Waiting for files...")
+			logging.Global().Infof("Server ready! Waiting for files...")
 			cli.PrintSuccess("Server ready! Waiting for files...")
 
 			localIPs, err := network.GetLocalIPAddresses()
@@ -215,9 +215,9 @@ var serveCmd = &cobra.Command{
 
 		discoverySvc.Stop()
 		if servequiet {
-			zap.S().Infof("Server stopped")
+			logging.Global().Infof("Server stopped")
 		} else {
-			zap.S().Infof("Server stopped")
+			logging.Global().Infof("Server stopped")
 			cli.PrintInfo("Server stopped")
 		}
 		return nil

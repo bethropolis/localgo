@@ -18,9 +18,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"go.uber.org/zap"
 )
 
 // Server manages the HTTP/S server lifecycle.
@@ -31,14 +31,14 @@ type Server struct {
 	receiveService  *services.ReceiveService
 	sendService     *services.SendService
 	registryService *services.RegistryService
-	logger          *zap.SugaredLogger
+	logger          *logging.Logger
 	historyLog      *history.Logger // closed in Shutdown()
 	shutdownCtx     context.Context
 	shutdownCancel  context.CancelFunc
 }
 
 // NewServer creates a new Server instance.
-func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
+func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
 	httputil.SetLogger(logger)
 	router := http.NewServeMux()
 	receiveService := services.NewReceiveService()

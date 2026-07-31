@@ -8,8 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
 // MulticastDiscovery implements UDP multicast-based device discovery
@@ -25,16 +25,16 @@ type MulticastDiscovery struct {
 	closed         atomic.Bool
 	httpDiscoverer *HTTPDiscovery
 	peerCache      *PeerCache
-	logger         *zap.SugaredLogger
+	logger         *logging.Logger
 }
 
 // NewMulticastDiscovery creates a new multicast discovery instance
-func NewMulticastDiscovery(config *MulticastConfig, dto model.MulticastDto, logger *zap.SugaredLogger) *MulticastDiscovery {
+func NewMulticastDiscovery(config *MulticastConfig, dto model.MulticastDto, logger *logging.Logger) *MulticastDiscovery {
 	if config == nil {
 		config = DefaultMulticastConfig()
 	}
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	return &MulticastDiscovery{
