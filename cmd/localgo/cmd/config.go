@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // configKey describes a known config key with its type and valid values.
@@ -153,31 +153,28 @@ func validateValue(ck configKey, key, raw string) (interface{}, error) {
 	return raw, nil
 }
 
-func newViperForConfig() *viper.Viper {
-	v := viper.New()
-	v.SetConfigName("config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath("$HOME/.config/localgo/")
-	v.AddConfigPath("$HOME/.local/etc/localgo/")
-	v.SetEnvPrefix("LOCALSEND")
-	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-	v.AutomaticEnv()
-
+func newConfigSource() *config.Source {
+	src := config.LoadSource()
 	for key, ck := range knownConfigKeys {
 		if ck.defVal != nil {
-			v.SetDefault(key, ck.defVal)
+			src.SetDefault(key, ck.defVal)
 		}
 	}
-
-	_ = v.ReadInConfig()
-	return v
+	return src
 }
 
-func getConfigPath(v *viper.Viper) string {
-	if p := v.ConfigFileUsed(); p != "" {
-		return p
+// originFor reports the source of a key's value: file, env, or default.
+func originFor(src *config.Source, key string) (string, bool) {
+	if src.InFile(key) {
+		return "[file]", true
 	}
-	return os.ExpandEnv("$HOME/.config/localgo/config.yaml")
+	if _, ok := os.LookupEnv("LOCALSEND_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_"))); ok {
+		return "[env]", true
+	}
+	if ck, ok := knownConfigKeys[key]; ok && ck.defVal != nil {
+		return "[default]", true
+	}
+	return "", false
 }
 
 var configCmd = &cobra.Command{
@@ -190,18 +187,18 @@ var configGetCmd = &cobra.Command{
 	Short: "Get a config value",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
+		src := newConfigSource()
 		key := strings.ToLower(args[0])
 
 		if _, err := validateKey(key); err != nil {
 			return err
 		}
 
-		if !v.IsSet(key) {
+		if !src.IsSet(key) {
 			return fmt.Errorf("key %q not set", key)
 		}
 
-		fmt.Println(v.GetString(key))
+		fmt.Println(src.GetString(key))
 		return nil
 	},
 }
@@ -211,7 +208,7 @@ var configSetCmd = &cobra.Command{
 	Short: "Set a config value",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
+		src := newConfigSource()
 		key := strings.ToLower(args[0])
 
 		ck, err := validateKey(key)
@@ -224,18 +221,13 @@ var configSetCmd = &cobra.Command{
 			return err
 		}
 
-		v.Set(key, val)
+		src.Set(key, val)
 
-		configPath := getConfigPath(v)
-		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
+		if err := src.Save(); err != nil {
+			return err
 		}
 
-		if err := v.WriteConfigAs(configPath); err != nil {
-			return fmt.Errorf("failed to write config: %w", err)
-		}
-
-		fmt.Printf("Set %s = %v in %s\n", key, val, configPath)
+		fmt.Printf("Set %s = %v in %s\n", key, val, src.FilePath())
 		return nil
 	},
 }
@@ -244,33 +236,23 @@ var configListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all config values with origin",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
-		settings := v.AllSettings()
-
-		if len(settings) == 0 {
-			fmt.Println("(no settings)")
-			return nil
-		}
+		src := newConfigSource()
 
 		fmt.Printf("%-28s %-10s %s\n", "KEY", "ORIGIN", "VALUE")
 		fmt.Println(strings.Repeat("-", 80))
 
-		for _, key := range v.AllKeys() {
-			val := v.Get(key)
-			if val == nil {
+		shown := false
+		for _, key := range knownKeyNames() {
+			origin, ok := originFor(src, key)
+			if !ok {
 				continue
 			}
+			fmt.Printf("%-28s %-10s %v\n", key, origin, src.Get(key))
+			shown = true
+		}
 
-			origin := "[env]"
-			if v.InConfig(key) {
-				origin = "[file]"
-			} else if _, ok := knownConfigKeys[key]; ok && knownConfigKeys[key].defVal != nil && fmt.Sprint(v.Get(key)) == fmt.Sprint(knownConfigKeys[key].defVal) {
-				origin = "[default]"
-			} else if !v.InConfig(key) {
-				origin = "[env]"
-			}
-
-			fmt.Printf("%-28s %-10s %v\n", key, origin, val)
+		if !shown {
+			fmt.Println("(no settings)")
 		}
 		return nil
 	},
@@ -281,35 +263,24 @@ var configUnsetCmd = &cobra.Command{
 	Short: "Remove a config key (reverts to default)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
+		src := newConfigSource()
 		key := strings.ToLower(args[0])
 
 		if _, err := validateKey(key); err != nil {
 			return err
 		}
 
-		if !v.InConfig(key) {
+		if !src.InFile(key) {
 			return fmt.Errorf("key %q is not in config file", key)
 		}
 
-		settings := v.AllSettings()
-		delete(settings, key)
+		src.Unset(key)
 
-		// Rebuild the config with the key removed
-		for k, val := range settings {
-			v.Set(k, val)
+		if err := src.Save(); err != nil {
+			return err
 		}
 
-		configPath := getConfigPath(v)
-		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
-		}
-
-		if err := v.WriteConfigAs(configPath); err != nil {
-			return fmt.Errorf("failed to write config: %w", err)
-		}
-
-		fmt.Printf("Removed %s from %s\n", key, configPath)
+		fmt.Printf("Removed %s from %s\n", key, src.FilePath())
 		return nil
 	},
 }
@@ -318,8 +289,8 @@ var configOpenCmd = &cobra.Command{
 	Use:   "open",
 	Short: "Open config file in system editor",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
-		configPath := getConfigPath(v)
+		src := newConfigSource()
+		configPath := src.FilePath()
 
 		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
@@ -327,7 +298,7 @@ var configOpenCmd = &cobra.Command{
 
 		// If the file doesn't exist yet, create it
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
-			if err := v.WriteConfigAs(configPath); err != nil {
+			if err := src.Save(); err != nil {
 				return fmt.Errorf("failed to create config file: %w", err)
 			}
 		}
@@ -367,27 +338,22 @@ var configAddCmd = &cobra.Command{
 	Short: "Append a value to a list config key",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
+		src := newConfigSource()
 		key := strings.ToLower(args[0])
 
 		if _, err := validateKey(key); err != nil {
 			return err
 		}
 
-		current := v.GetStringSlice(key)
+		current := src.GetStringSlice(key)
 		current = append(current, args[1])
-		v.Set(key, current)
+		src.Set(key, current)
 
-		configPath := getConfigPath(v)
-		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
+		if err := src.Save(); err != nil {
+			return err
 		}
 
-		if err := v.WriteConfigAs(configPath); err != nil {
-			return fmt.Errorf("failed to write config: %w", err)
-		}
-
-		fmt.Printf("Added %q to %s in %s\n", args[1], key, configPath)
+		fmt.Printf("Added %q to %s in %s\n", args[1], key, src.FilePath())
 		return nil
 	},
 }
@@ -397,14 +363,14 @@ var configRemoveCmd = &cobra.Command{
 	Short: "Remove a value from a list config key",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
+		src := newConfigSource()
 		key := strings.ToLower(args[0])
 
 		if _, err := validateKey(key); err != nil {
 			return err
 		}
 
-		current := v.GetStringSlice(key)
+		current := src.GetStringSlice(key)
 		filtered := make([]string, 0, len(current))
 		removed := false
 		for _, item := range current {
@@ -419,18 +385,13 @@ var configRemoveCmd = &cobra.Command{
 			return fmt.Errorf("value %q not found in %s", args[1], key)
 		}
 
-		v.Set(key, filtered)
+		src.Set(key, filtered)
 
-		configPath := getConfigPath(v)
-		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
-			return fmt.Errorf("failed to create config directory: %w", err)
+		if err := src.Save(); err != nil {
+			return err
 		}
 
-		if err := v.WriteConfigAs(configPath); err != nil {
-			return fmt.Errorf("failed to write config: %w", err)
-		}
-
-		fmt.Printf("Removed %q from %s in %s\n", args[1], key, configPath)
+		fmt.Printf("Removed %q from %s in %s\n", args[1], key, src.FilePath())
 		return nil
 	},
 }
@@ -439,8 +400,8 @@ var configPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Show config file path",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		v := newViperForConfig()
-		path := getConfigPath(v)
+		src := newConfigSource()
+		path := src.FilePath()
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			fmt.Println(path + " (file does not exist yet)")
 		} else {
