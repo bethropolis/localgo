@@ -129,6 +129,9 @@ func (s *Server) configureRoutes() {
 	// Root web landing page for browser access (fixes 404 on http://IP:PORT)
 	s.router.HandleFunc("GET /", downloadHandler.WebShareHandler)
 
+	// Root web landing page for browser access (fixes 404 on http://IP:PORT)
+	s.muxRouter.HandleFunc("/", downloadHandler.WebShareHandler).Methods("GET")
+
 	s.logger.Info("Configured API routes.")
 }
 

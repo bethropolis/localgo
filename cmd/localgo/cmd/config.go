@@ -396,6 +396,165 @@ var configRemoveCmd = &cobra.Command{
 	},
 }
 
+var configUnsetCmd = &cobra.Command{
+	Use:   "unset <key>",
+	Short: "Remove a config key (reverts to default)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v := newViperForConfig()
+		key := strings.ToLower(args[0])
+
+		if _, err := validateKey(key); err != nil {
+			return err
+		}
+
+		if !v.InConfig(key) {
+			return fmt.Errorf("key %q is not in config file", key)
+		}
+
+		settings := v.AllSettings()
+		delete(settings, key)
+
+		// Rebuild the config with the key removed
+		for k, val := range settings {
+			v.Set(k, val)
+		}
+
+		configPath := getConfigPath(v)
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		if err := v.WriteConfigAs(configPath); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+
+		fmt.Printf("Removed %s from %s\n", key, configPath)
+		return nil
+	},
+}
+
+var configOpenCmd = &cobra.Command{
+	Use:   "open",
+	Short: "Open config file in system editor",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v := newViperForConfig()
+		configPath := getConfigPath(v)
+
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		// If the file doesn't exist yet, create it
+		if _, err := os.Stat(configPath); os.IsNotExist(err) {
+			if err := v.WriteConfigAs(configPath); err != nil {
+				return fmt.Errorf("failed to create config file: %w", err)
+			}
+		}
+
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			switch runtime.GOOS {
+			case "windows":
+				editor = "notepad"
+			case "darwin":
+				editor = "nano"
+			default:
+				editor = "nano"
+				for _, e := range []string{"nvim", "vim", "micro", "vi", "nano"} {
+					if _, err := exec.LookPath(e); err == nil {
+						editor = e
+						break
+					}
+				}
+			}
+		}
+
+		editorCmd := exec.Command(editor, configPath)
+		editorCmd.Stdin = os.Stdin
+		editorCmd.Stdout = os.Stdout
+		editorCmd.Stderr = os.Stderr
+
+		if err := editorCmd.Run(); err != nil {
+			return fmt.Errorf("editor %q failed: %w", editor, err)
+		}
+		return nil
+	},
+}
+
+var configAddCmd = &cobra.Command{
+	Use:   "add <key> <value>",
+	Short: "Append a value to a list config key",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v := newViperForConfig()
+		key := strings.ToLower(args[0])
+
+		if _, err := validateKey(key); err != nil {
+			return err
+		}
+
+		current := v.GetStringSlice(key)
+		current = append(current, args[1])
+		v.Set(key, current)
+
+		configPath := getConfigPath(v)
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		if err := v.WriteConfigAs(configPath); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+
+		fmt.Printf("Added %q to %s in %s\n", args[1], key, configPath)
+		return nil
+	},
+}
+
+var configRemoveCmd = &cobra.Command{
+	Use:   "remove <key> <value>",
+	Short: "Remove a value from a list config key",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v := newViperForConfig()
+		key := strings.ToLower(args[0])
+
+		if _, err := validateKey(key); err != nil {
+			return err
+		}
+
+		current := v.GetStringSlice(key)
+		filtered := make([]string, 0, len(current))
+		removed := false
+		for _, item := range current {
+			if item == args[1] {
+				removed = true
+			} else {
+				filtered = append(filtered, item)
+			}
+		}
+
+		if !removed {
+			return fmt.Errorf("value %q not found in %s", args[1], key)
+		}
+
+		v.Set(key, filtered)
+
+		configPath := getConfigPath(v)
+		if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		if err := v.WriteConfigAs(configPath); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+
+		fmt.Printf("Removed %q from %s in %s\n", args[1], key, configPath)
+		return nil
+	},
+}
+
 var configPathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Show config file path",
