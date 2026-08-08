@@ -158,7 +158,7 @@ aurs:
     license: MIT
     private_key: "{{ .Env.AUR_SSH_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/localgo-bin.git"
-    skip_upload: auto
+    skip_upload: true
 
     depends: []
     optdepends:
