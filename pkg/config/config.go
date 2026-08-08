@@ -10,9 +10,8 @@ import (
 	mathrand "math/rand/v2"
 
 	"github.com/bethropolis/localgo/pkg/crypto"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 const (
@@ -68,15 +67,15 @@ func (c *Config) SetCustomFingerprint(fp string) {
 }
 
 // getSecurityDir determines the best location for the security directory
-func getSecurityDir(v *viper.Viper) string {
-	if envDir := v.GetString("security_dir"); envDir != "" {
-		zap.S().Infof("Using security directory: %s", envDir)
+func getSecurityDir(src *Source) string {
+	if envDir := src.GetString("security_dir"); envDir != "" {
+		logging.Global().Infof("Using security directory: %s", envDir)
 		return envDir
 	}
 
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		zap.S().Warnf("Could not determine config directory: %v; falling back to current directory", err)
+		logging.Global().Warnf("Could not determine config directory: %v; falling back to current directory", err)
 		return DefaultSecurityDir
 	}
 
@@ -110,31 +109,31 @@ func testDirWritable(dir string) bool {
 	return true
 }
 
-func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
-	if v == nil {
-		v = InitViper()
+func LoadConfig(src *Source, logger *logging.Logger) (*Config, error) {
+	if src == nil {
+		src = NewSourceFromMap(map[string]any{})
 	}
-	alias := v.GetString("alias")
+	alias := src.GetString("alias")
 	if alias == "" {
 		alias = generateDefaultAlias()
 	}
 
 	// Use the new security directory resolution
-	securityDirPath := getSecurityDir(v)
+	securityDirPath := getSecurityDir(src)
 	securityFilePath := filepath.Join(securityDirPath, DefaultSecurityFile)
 
-	portStr := v.GetString("port")
+	portStr := src.GetString("port")
 	port := DefaultPort
 	if p, err := strconv.Atoi(portStr); err == nil {
 		port = p
 	}
 
-	multicastGroup := v.GetString("multicast_group")
+	multicastGroup := src.GetString("multicast_group")
 	if multicastGroup == "" {
 		multicastGroup = DefaultMulticastGroup
 	}
 
-	downloadDir := v.GetString("download_dir")
+	downloadDir := src.GetString("download_dir")
 	if downloadDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -143,35 +142,35 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 		downloadDir = filepath.Join(home, "Downloads", "localgo")
 	}
 
-	maxBodySizeStr := v.GetString("max_body_size")
+	maxBodySizeStr := src.GetString("max_body_size")
 	maxBodySize := int64(0)
 	if maxBodySizeStr != "" {
 		if size, err := strconv.ParseInt(maxBodySizeStr, 10, 64); err == nil {
 			maxBodySize = size
 		} else {
-			zap.S().Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
+			logging.Global().Warnf("Invalid LOCALSEND_MAX_BODY_SIZE value: %s, using default", maxBodySizeStr)
 		}
 	}
 
-	multicastInterface := v.GetString("multicast_interface")
+	multicastInterface := src.GetString("multicast_interface")
 
 	// Parse LOCALSEND_FORCE_HTTP
-	forceHTTP := v.GetString("force_http") == "true" || v.GetString("force_http") == "1"
+	forceHTTP := src.GetString("force_http") == "true" || src.GetString("force_http") == "1"
 	HttpsEnabled := !forceHTTP
 
 	securityContext, err := crypto.LoadSecurityContext(securityFilePath, logger)
 	if err != nil {
 		if os.IsNotExist(err) {
-			zap.S().Infof("Security context not found at %s, generating new one...", securityFilePath)
+			logging.Global().Infof("Security context not found at %s, generating new one...", securityFilePath)
 			securityContext, err = crypto.GenerateSecurityContext(alias, logger)
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate security context: %w", err)
 			}
 			if err := os.MkdirAll(securityDirPath, 0700); err != nil {
-				zap.S().Warnf("Could not create security directory '%s': %v", securityDirPath, err)
+				logging.Global().Warnf("Could not create security directory '%s': %v", securityDirPath, err)
 			}
 			if err := crypto.SaveSecurityContext(securityContext, securityFilePath, logger); err != nil {
-				zap.S().Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
+				logging.Global().Warnf("failed to save newly generated security context to '%s': %v", securityFilePath, err)
 			}
 		} else {
 			return nil, fmt.Errorf("failed to load security context from '%s': %w", securityFilePath, err)
@@ -182,42 +181,42 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 	deviceType := model.DeviceTypeDesktop
 
 	// Parse LOCALSEND_DEVICE_MODEL
-	if envDeviceModel := v.GetString("device_model"); envDeviceModel != "" {
+	if envDeviceModel := src.GetString("device_model"); envDeviceModel != "" {
 		deviceModel = envDeviceModel
 	}
 
 	// Parse LOCALSEND_DEVICE_TYPE
-	if envDeviceType := v.GetString("device_type"); envDeviceType != "" {
+	if envDeviceType := src.GetString("device_type"); envDeviceType != "" {
 		deviceType = model.DeviceType(envDeviceType)
 	}
 
-	autoAccept := v.GetString("auto_accept") == "true" || v.GetString("auto_accept") == "1"
-	noClipboard := v.GetString("no_clipboard") == "true" || v.GetString("no_clipboard") == "1"
-	quiet := v.GetString("quiet") == "true" || v.GetString("quiet") == "1"
+	autoAccept := src.GetString("auto_accept") == "true" || src.GetString("auto_accept") == "1"
+	noClipboard := src.GetString("no_clipboard") == "true" || src.GetString("no_clipboard") == "1"
+	quiet := src.GetString("quiet") == "true" || src.GetString("quiet") == "1"
 
-	historyFile := v.GetString("history")
+	historyFile := src.GetString("history")
 
-	execHook := v.GetString("exec")
+	execHook := src.GetString("exec")
 
-	concurrency := v.GetInt("concurrency")
+	concurrency := src.GetInt("concurrency")
 
-	shell := v.GetString("shell")
-	clipboardWriteCmd := v.GetString("clipboard_write_cmd")
-	clipboardReadCmd := v.GetString("clipboard_read_cmd")
-	customTLSCertPath := v.GetString("tls_cert")
-	customTLSKeyPath := v.GetString("tls_key")
-	notificationCmd := v.GetString("notification_cmd")
-	discoveryStrategy := v.GetString("discovery_strategy")
+	shell := src.GetString("shell")
+	clipboardWriteCmd := src.GetString("clipboard_write_cmd")
+	clipboardReadCmd := src.GetString("clipboard_read_cmd")
+	customTLSCertPath := src.GetString("tls_cert")
+	customTLSKeyPath := src.GetString("tls_key")
+	notificationCmd := src.GetString("notification_cmd")
+	discoveryStrategy := src.GetString("discovery_strategy")
 	if discoveryStrategy == "" {
 		discoveryStrategy = "full"
 	}
-	fileConflictResolve := v.GetString("file_conflict_resolution")
+	fileConflictResolve := src.GetString("file_conflict_resolution")
 	if fileConflictResolve == "" {
 		fileConflictResolve = "rename"
 	}
-	bindAddress := v.GetString("bind_address")
-	staticPeers := v.GetStringSlice("static_peers")
-	trustedFingerprints := v.GetStringSlice("trusted_fingerprints")
+	bindAddress := src.GetString("bind_address")
+	staticPeers := src.GetStringSlice("static_peers")
+	trustedFingerprints := src.GetStringSlice("trusted_fingerprints")
 
 	cfg := &Config{
 		Alias:              alias,
@@ -257,7 +256,7 @@ func LoadConfig(v *viper.Viper, logger *zap.SugaredLogger) (*Config, error) {
 func generateDefaultAlias() string {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" {
-		zap.S().Infow("Could not get hostname, generating random alias suffix.")
+		logging.Global().Infow("Could not get hostname, generating random alias suffix.")
 		hostname = "LocalGo"
 	}
 	return hostname

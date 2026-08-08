@@ -17,8 +17,9 @@ GIT_COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknow
 BUILD_DATE     := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 LD_BASE        := -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT) -X main.BuildDate=$(BUILD_DATE)
-LDFLAGS        := -ldflags "$(LD_BASE)"
-LDFLAGS_STRIP  := -ldflags "-s -w $(LD_BASE)"
+LDFLAGS        := -ldflags "-s -w $(LD_BASE)"
+LDFLAGS_DEBUG  := -ldflags "$(LD_BASE)"
+TRIMFLAGS      := -trimpath
 
 # Colour helpers — silently degrade when not a tty
 ifeq ($(TERM),)
@@ -53,9 +54,9 @@ all: fmt vet build ## Format, vet, and build
 ##@ Build
 
 .PHONY: build
-build: ## Build the binary for the current platform
+build: ## Build the binary for the current platform (stripped, release-style)
 	$(call log,Building $(BINARY_NAME) $(VERSION))
-	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BINARY_NAME) $(BUILD_DIR)
+	$(GO) build $(GOFLAGS) $(TRIMFLAGS) $(LDFLAGS) -o $(BINARY_NAME) $(BUILD_DIR)
 	@printf '%s  binary: ./%s%s\n' '$(_GREEN)' '$(BINARY_NAME)' '$(_RESET)'
 
 .PHONY: build-fast

@@ -20,7 +20,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/send"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 var (
@@ -162,19 +162,19 @@ var sendCmd = &cobra.Command{
 
 			// TOFU check: verify cached fingerprint matches before connecting
 		if device.Fingerprint != "" {
-			pc := discovery.NewPeerCache(zap.S())
+			pc := discovery.NewPeerCache(logging.Global())
 			if err := send.VerifyDeviceFingerprint(pc, device); err != nil {
 				return err
 			}
 		}
 
-		if err := send.SendToDevice(ctx, Cfg, device, files, zap.S(), sendOpts...); err != nil {
+		if err := send.SendToDevice(ctx, Cfg, device, files, logging.Global(), sendOpts...); err != nil {
 				return fmt.Errorf("failed to send files: %w", err)
 		}
 
 		// Save fingerprint for TOFU on subsequent connections
 		if device.Fingerprint != "" {
-			pc := discovery.NewPeerCache(zap.S())
+			pc := discovery.NewPeerCache(logging.Global())
 			pc.Save(device)
 		}
 
@@ -294,11 +294,11 @@ var sendCmd = &cobra.Command{
 		if selectedDevice != nil {
 			cli.PrintInfo("To: %s (%s:%d)", selectedDevice.Alias, selectedDevice.IP, selectedDevice.Port)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, zap.S(), sendOpts...)
+			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, logging.Global(), sendOpts...)
 		} else {
 			cli.PrintInfo("To: %s", target)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendFiles(ctx, Cfg, files, target, sendport, zap.S(), sendOpts...)
+			err = send.SendFiles(ctx, Cfg, files, target, sendport, logging.Global(), sendOpts...)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to send files: %w", err)

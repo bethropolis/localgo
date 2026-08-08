@@ -13,14 +13,14 @@ import (
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // DownloadHandler handles file downloading requests.
 type DownloadHandler struct {
 	config      *config.Config
 	sendService *services.SendService
-	logger      *zap.SugaredLogger
+	logger      *logging.Logger
 	shutdownFn  func() // optional; set by Server for --once support
 }
 
@@ -31,7 +31,7 @@ func (h *DownloadHandler) SetShutdownFn(fn func()) {
 
 
 // NewDownloadHandler creates a new DownloadHandler.
-func NewDownloadHandler(cfg *config.Config, sendService *services.SendService, logger *zap.SugaredLogger) *DownloadHandler {
+func NewDownloadHandler(cfg *config.Config, sendService *services.SendService, logger *logging.Logger) *DownloadHandler {
 	return &DownloadHandler{
 		config:      cfg,
 		sendService: sendService,

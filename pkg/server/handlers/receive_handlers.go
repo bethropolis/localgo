@@ -19,10 +19,10 @@ import (
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
 	"github.com/bethropolis/localgo/pkg/storage"
-	"go.uber.org/zap"
 )
 
 // maxTextSize is the maximum bytes read from a text/plain body before
@@ -33,14 +33,14 @@ const maxTextSize = 1 * 1024 * 1024 // 1 MB
 type ReceiveHandler struct {
 	config         *config.Config
 	receiveService *services.ReceiveService
-	logger         *zap.SugaredLogger
+	logger         *logging.Logger
 	historyLog     *history.Logger
 	promptMutex    sync.Mutex
 	shutdownCtx    context.Context
 }
 
 // NewReceiveHandler creates a new ReceiveHandler.
-func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, historyLog *history.Logger, shutdownCtx context.Context, logger *zap.SugaredLogger) *ReceiveHandler {
+func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveService, historyLog *history.Logger, shutdownCtx context.Context, logger *logging.Logger) *ReceiveHandler {
 	return &ReceiveHandler{
 		config:         cfg,
 		receiveService: receiveService,

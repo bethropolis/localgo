@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // MaxCachedPeers is the maximum number of peers to keep in cache.
@@ -28,13 +28,13 @@ type PeerCache struct {
 	filePath string
 	peers    map[string]*model.Device
 	order    []string // LRU order (most recent at end)
-	logger   *zap.SugaredLogger
+	logger   *logging.Logger
 }
 
 // NewPeerCache creates or loads a peer cache from the XDG cache directory.
-func NewPeerCache(logger *zap.SugaredLogger) *PeerCache {
+func NewPeerCache(logger *logging.Logger) *PeerCache {
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	cacheDir, err := os.UserCacheDir()
@@ -226,7 +226,7 @@ func (pc *PeerCache) persist() error {
 
 // ProbeCached pings each cached peer with GET /api/localsend/v2/info
 // and calls onFound for every peer that responds.
-func ProbeCached(ctx context.Context, cache *PeerCache, onFound func(*model.Device), logger *zap.SugaredLogger) {
+func ProbeCached(ctx context.Context, cache *PeerCache, onFound func(*model.Device), logger *logging.Logger) {
 	if cache == nil {
 		return
 	}

@@ -5,16 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // logger is an optional package-level logger set via SetLogger.
-// Falls back to the global zap logger when nil.
-var logger *zap.SugaredLogger
+// Falls back to the global logging logger when nil.
+var logger *logging.Logger
 
 // SetLogger configures the package-level logger used by httputil helpers.
 // Call this once at server startup with the same logger used by handlers.
-func SetLogger(l *zap.SugaredLogger) {
+func SetLogger(l *logging.Logger) {
 	logger = l
 }
 
@@ -22,7 +22,7 @@ func logError(msg string, err error) {
 	if logger != nil {
 		logger.Errorw(msg, "error", err)
 	} else {
-		zap.L().Error(msg, zap.Error(err))
+		logging.Global().Errorf("%s: %v", msg, err)
 	}
 }
 

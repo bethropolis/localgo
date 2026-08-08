@@ -14,11 +14,11 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/crypto"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
-var testLoggerSendErrors = zap.NewNop().Sugar()
+var testLoggerSendErrors = logging.NewQuiet()
 
 func TestSendFiles_UploadRejection(t *testing.T) {
 	tempDir := t.TempDir()

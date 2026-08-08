@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
-var testLoggerMulticast = zap.NewNop().Sugar()
+var testLoggerMulticast = logging.NewQuiet()
 
 // We use a different multicast address for testing to avoid conflicting with actual apps
 const testMulticastAddr = "224.0.0.254:53318"

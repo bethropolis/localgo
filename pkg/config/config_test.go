@@ -4,12 +4,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
-var testLogger = zap.NewNop().Sugar()
+var testLogger = logging.NewQuiet()
 
 func TestLoadConfig_WithEnvVars(t *testing.T) {
 	origEnv := saveEnv()
@@ -27,12 +26,7 @@ func TestLoadConfig_WithEnvVars(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(func() *viper.Viper {
-		v := viper.New()
-		v.SetEnvPrefix("LOCALSEND")
-		v.AutomaticEnv()
-		return v
-	}(), testLogger)
+	cfg, err := LoadConfig(NewSourceFromMap(map[string]any{}), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -79,12 +73,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(func() *viper.Viper {
-		v := viper.New()
-		v.SetEnvPrefix("LOCALSEND")
-		v.AutomaticEnv()
-		return v
-	}(), testLogger)
+	cfg, err := LoadConfig(NewSourceFromMap(map[string]any{}), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -117,12 +106,7 @@ func TestToRegisterDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(func() *viper.Viper {
-		v := viper.New()
-		v.SetEnvPrefix("LOCALSEND")
-		v.AutomaticEnv()
-		return v
-	}(), testLogger)
+	cfg, err := LoadConfig(NewSourceFromMap(map[string]any{}), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -161,12 +145,7 @@ func TestToInfoDto(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	cfg, err := LoadConfig(func() *viper.Viper {
-		v := viper.New()
-		v.SetEnvPrefix("LOCALSEND")
-		v.AutomaticEnv()
-		return v
-	}(), testLogger)
+	cfg, err := LoadConfig(NewSourceFromMap(map[string]any{}), testLogger)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -195,12 +174,7 @@ func TestGetSecurityDir_EnvOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("LOCALSEND_SECURITY_DIR", tmpDir)
 
-	dir := getSecurityDir(func() *viper.Viper {
-		v := viper.New()
-		v.SetEnvPrefix("LOCALSEND")
-		v.AutomaticEnv()
-		return v
-	}())
+	dir := getSecurityDir(NewSourceFromMap(map[string]any{}))
 	if dir != tmpDir {
 		t.Errorf("Expected security dir '%s', got '%s'", tmpDir, dir)
 	}

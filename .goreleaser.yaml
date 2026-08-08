@@ -21,6 +21,8 @@ builds:
     binary: localgo
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X main.Version={{.Version}}
@@ -30,6 +32,7 @@ builds:
       - linux
       - darwin
       - windows
+      - android
     goarch:
       - amd64
       - arm64
@@ -37,6 +40,8 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+      - goos: android
+        goarch: amd64
 
 # ---------------------------------------------------------------------------
 # Archives

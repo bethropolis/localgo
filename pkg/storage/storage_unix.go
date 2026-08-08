@@ -9,5 +9,5 @@ func getAvailableBytes(path string) (uint64, error) {
 	if err := unix.Statfs(path, &stat); err != nil {
 		return 0, err
 	}
-	return stat.Bavail * uint64(stat.Bsize), nil
+	return uint64(stat.Bavail) * uint64(stat.Bsize), nil
 }

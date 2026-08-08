@@ -9,9 +9,9 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"go.uber.org/zap"
 )
 
 // DiscoveryHandler handles /info and /register requests.
@@ -19,11 +19,11 @@ type DiscoveryHandler struct {
 	config          *config.Config
 	registryService *services.RegistryService
 	sendService     *services.SendService
-	logger          *zap.SugaredLogger
+	logger          *logging.Logger
 }
 
 // NewDiscoveryHandler creates a new DiscoveryHandler.
-func NewDiscoveryHandler(cfg *config.Config, registryService *services.RegistryService, sendService *services.SendService, logger *zap.SugaredLogger) *DiscoveryHandler {
+func NewDiscoveryHandler(cfg *config.Config, registryService *services.RegistryService, sendService *services.SendService, logger *logging.Logger) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		config:          cfg,
 		registryService: registryService,

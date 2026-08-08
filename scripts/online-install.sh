@@ -2,7 +2,8 @@
 #
 # LocalGo Online Installer
 # Downloads and installs the latest pre-built LocalGo binary from GitHub Releases.
-# No Go toolchain required. Works on Linux (amd64/arm64) and macOS (amd64/arm64).
+# No Go toolchain required. Works on Linux (amd64/arm64), macOS (amd64/arm64),
+# and Android/Termux (arm64).
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/bethropolis/localgo/main/scripts/online-install.sh | bash
@@ -126,11 +127,16 @@ detect_platform() {
     os_raw=$(uname -s | tr '[:upper:]' '[:lower:]')
     arch_raw=$(uname -m)
 
-    case "$os_raw" in
-        linux)  OS="linux" ;;
-        darwin) OS="darwin" ;;
-        *)      die "Unsupported OS: $os_raw (expected linux or darwin)" ;;
-    esac
+    # Detect Android/Termux
+    if [[ -n "${TERMUX_VERSION:-}" ]] || [[ "$(uname -o 2>/dev/null)" == "Android" ]]; then
+        OS="android"
+    else
+        case "$os_raw" in
+            linux)  OS="linux"  ;;
+            darwin) OS="darwin" ;;
+            *)      die "Unsupported OS: $os_raw (expected linux, darwin, or android)" ;;
+        esac
+    fi
 
     case "$arch_raw" in
         x86_64|amd64)    ARCH="amd64" ;;
@@ -331,6 +337,7 @@ install_completions() {
 install_service() {
     header "Installing systemd service..."
 
+    [[ "$OS" == "android" ]] && { warn "systemd not available on Android/Termux, skipping"; return; }
     [[ "$OS" != "linux" ]] && { warn "systemd not available on macOS, skipping"; return; }
     command -v systemctl &>/dev/null || { warn "systemctl not found, skipping"; return; }
 
@@ -491,6 +498,12 @@ main() {
         && die "Invalid mode: $INSTALL_MODE (use user or system)"
 
     detect_platform
+    # Termux: use $PREFIX paths instead of ~/.local
+    if [[ "$OS" == "android" && -n "${PREFIX:-}" ]]; then
+        USER_BIN_DIR="$PREFIX/bin"
+        USER_CONFIG_DIR="$PREFIX/etc/localgo"
+        info "Termux environment detected, installing to $PREFIX"
+    fi
     resolve_version
     print_plan
 

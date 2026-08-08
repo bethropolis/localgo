@@ -14,7 +14,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/charmbracelet/huh/spinner"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 var (
@@ -48,12 +48,12 @@ var discoverCmd = &cobra.Command{
 		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 		multicastDto := Cfg.ToMulticastDto(false)
 
-		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
+		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logging.Global())
 
-		peerCache := discovery.NewPeerCache(zap.S())
+		peerCache := discovery.NewPeerCache(logging.Global())
 		multicast.SetPeerCache(peerCache)
 
-		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logging.Global())
 		discoverySvc.SetPeerCache(peerCache)
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
@@ -62,7 +62,7 @@ var discoverCmd = &cobra.Command{
 				if Cfg.Private {
 					alias = cli.AnonymizedAlias(device)
 				}
-				zap.S().Infof("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
+				logging.Global().Infof("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
 				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
 			}
 		})
@@ -86,7 +86,7 @@ var discoverCmd = &cobra.Command{
 		}
 
 		if discErr != nil && !discoverquiet {
-			zap.S().Warnf("Discovery completed with warnings: %v", discErr)
+			logging.Global().Warnf("Discovery completed with warnings: %v", discErr)
 			cli.PrintWarning("Discovery completed with warnings: %v", discErr)
 		}
 
@@ -105,7 +105,7 @@ var discoverCmd = &cobra.Command{
 					}
 				}
 				registerDto := Cfg.ToRegisterDto()
-				httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, zap.S())
+				httpDiscoverer := discovery.NewHTTPDiscovery(nil, registerDto, nil, logging.Global())
 
 				scanCtx, scanCancel := context.WithTimeout(context.Background(), time.Duration(discovertimeout)*time.Second)
 				defer scanCancel()
@@ -134,7 +134,7 @@ var discoverCmd = &cobra.Command{
 		}
 
 		if !discoverquiet && len(foundDevices) == 0 {
-			zap.S().Warnf("No devices discovered")
+			logging.Global().Warnf("No devices discovered")
 			cli.PrintWarning("No devices discovered. Check your firewall or network.")
 		}
 

@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
 // memReadSeekCloser wraps a *bytes.Reader to implement io.ReadSeekCloser.
@@ -29,9 +29,9 @@ type fileReader interface {
 	io.Closer
 }
 
-func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *zap.SugaredLogger) error {
+func uploadFile(ctx context.Context, client *http.Client, device *model.Device, filePath, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *logging.Logger) error {
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	file, err := os.Open(filePath)
@@ -48,9 +48,9 @@ func uploadFile(ctx context.Context, client *http.Client, device *model.Device, 
 	return uploadStream(ctx, client, device, file, stat.Size(), fileID, sessionID, token, scheme, pin, trackProgress, logger)
 }
 
-func uploadStream(ctx context.Context, client *http.Client, device *model.Device, r fileReader, size int64, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *zap.SugaredLogger) error {
+func uploadStream(ctx context.Context, client *http.Client, device *model.Device, r fileReader, size int64, fileID, sessionID, token, scheme, pin string, trackProgress func(int64), logger *logging.Logger) error {
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	url := fmt.Sprintf("%s://%s/api/localsend/v2/upload?sessionId=%s&fileId=%s&token=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), sessionID, fileID, token)

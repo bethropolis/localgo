@@ -18,37 +18,36 @@ import (
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 	"github.com/bethropolis/localgo/pkg/server/services"
-	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 )
 
 // Server manages the HTTP/S server lifecycle.
 type Server struct {
 	config          *config.Config
 	httpServer      *http.Server
-	muxRouter       *mux.Router
+	router          *http.ServeMux
 	receiveService  *services.ReceiveService
 	sendService     *services.SendService
 	registryService *services.RegistryService
-	logger          *zap.SugaredLogger
+	logger          *logging.Logger
 	historyLog      *history.Logger // closed in Shutdown()
 	shutdownCtx     context.Context
 	shutdownCancel  context.CancelFunc
 }
 
 // NewServer creates a new Server instance.
-func NewServer(cfg *config.Config, logger *zap.SugaredLogger) *Server {
+func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
 	httputil.SetLogger(logger)
-	router := mux.NewRouter()
+	router := http.NewServeMux()
 	receiveService := services.NewReceiveService()
 	sendService := services.NewSendService()
 	registryService := services.NewRegistryService()
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	return &Server{
 		config:          cfg,
-		muxRouter:       router,
+		router:          router,
 		receiveService:  receiveService,
 		sendService:     sendService,
 		registryService: registryService,
@@ -86,15 +85,12 @@ func securityMiddleware(next http.Handler) http.Handler {
 
 // configureRoutes sets up the API routes.
 func (s *Server) configureRoutes() {
-	s.muxRouter.Use(securityMiddleware)
-	apiRouter := s.muxRouter.PathPrefix("/api/localsend").Subrouter()
-
 	// Discovery Handlers (Phase 1)
 	discoveryHandler := handlers.NewDiscoveryHandler(s.config, s.registryService, s.sendService, s.logger)
-	apiRouter.HandleFunc("/v1/info", discoveryHandler.InfoHandler).Methods("GET")
-	apiRouter.HandleFunc("/v2/info", discoveryHandler.InfoHandler).Methods("GET")
-	apiRouter.HandleFunc("/v1/register", discoveryHandler.RegisterHandler).Methods("POST")
-	apiRouter.HandleFunc("/v2/register", discoveryHandler.RegisterHandler).Methods("POST")
+	s.router.HandleFunc("GET /api/localsend/v1/info", discoveryHandler.InfoHandler)
+	s.router.HandleFunc("GET /api/localsend/v2/info", discoveryHandler.InfoHandler)
+	s.router.HandleFunc("POST /api/localsend/v1/register", discoveryHandler.RegisterHandler)
+	s.router.HandleFunc("POST /api/localsend/v2/register", discoveryHandler.RegisterHandler)
 
 	// Receive Handlers (Phase 2)
 	path := s.config.HistoryFile
@@ -112,10 +108,10 @@ func (s *Server) configureRoutes() {
 	}
 
 	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.historyLog, s.shutdownCtx, s.logger)
-	apiRouter.HandleFunc("/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1).Methods("POST")
-	apiRouter.HandleFunc("/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2).Methods("POST")
-	apiRouter.HandleFunc("/v2/upload", receiveHandler.UploadHandlerV2).Methods("POST")
-	apiRouter.HandleFunc("/v2/cancel", receiveHandler.CancelHandler).Methods("POST")
+	s.router.HandleFunc("POST /api/localsend/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1)
+	s.router.HandleFunc("POST /api/localsend/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2)
+	s.router.HandleFunc("POST /api/localsend/v2/upload", receiveHandler.UploadHandlerV2)
+	s.router.HandleFunc("POST /api/localsend/v2/cancel", receiveHandler.CancelHandler)
 
 	// Download Handlers
 	downloadHandler := handlers.NewDownloadHandler(s.config, s.sendService, s.logger)
@@ -127,11 +123,11 @@ func (s *Server) configureRoutes() {
 			}
 		}()
 	})
-	apiRouter.HandleFunc("/v2/prepare-download", downloadHandler.PrepareDownloadHandler).Methods("POST")
-	apiRouter.HandleFunc("/v2/download", downloadHandler.DownloadHandler).Methods("GET")
+	s.router.HandleFunc("POST /api/localsend/v2/prepare-download", downloadHandler.PrepareDownloadHandler)
+	s.router.HandleFunc("GET /api/localsend/v2/download", downloadHandler.DownloadHandler)
 
 	// Root web landing page for browser access (fixes 404 on http://IP:PORT)
-	s.muxRouter.HandleFunc("/", downloadHandler.WebShareHandler).Methods("GET")
+	s.router.HandleFunc("GET /", downloadHandler.WebShareHandler)
 
 	s.logger.Info("Configured API routes.")
 }
@@ -148,7 +144,7 @@ func (s *Server) Start(ctx context.Context, readyChan chan<- struct{}) error {
 	addr := fmt.Sprintf("%s:%d", bindHost, s.config.Port)
 	s.httpServer = &http.Server{
 		Addr:              addr,
-		Handler:           s.muxRouter,
+		Handler:           securityMiddleware(s.router),
 		ReadTimeout:       0, // body timeout handled by MaxBytesReader / LimitReader
 		WriteTimeout:      300 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,

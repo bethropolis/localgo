@@ -10,8 +10,6 @@ import (
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 var (
@@ -25,7 +23,7 @@ var (
 	Verbose    bool
 	JSONOutput bool
 	Cfg        *config.Config
-	ViperCfg   *viper.Viper
+	ViperCfg   *config.Source
 )
 
 var rootCmd = &cobra.Command{
@@ -50,12 +48,13 @@ var rootCmd = &cobra.Command{
 
 		logger := logging.Init(Verbose, JSONOutput, noColor)
 
-		ViperCfg = config.InitViper()
+		ViperCfg = config.LoadSource()
 		if cfgFile != "" {
-			ViperCfg.SetConfigFile(cfgFile)
-			if err := ViperCfg.ReadInConfig(); err != nil {
-				zap.S().Warnf("Failed to read config file: %v", err)
+			src, err := config.LoadSourceFile(cfgFile)
+			if err != nil {
+				logging.Global().Warnf("Failed to read config file: %v", err)
 			}
+			ViperCfg = src
 		}
 
 		var err error

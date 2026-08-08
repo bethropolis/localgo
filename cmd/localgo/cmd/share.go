@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mdp/qrterminal/v3"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 var (
@@ -192,7 +192,7 @@ var shareCmd = &cobra.Command{
 		}()
 
 		// Create server
-		srv := server.NewServer(Cfg, zap.S())
+		srv := server.NewServer(Cfg, logging.Global())
 		sendService := srv.GetSendService()
 
 		// Register files in session
@@ -225,14 +225,14 @@ var shareCmd = &cobra.Command{
 		discoverySvcConfig.MulticastConfig.InterfaceName = Cfg.MulticastInterface
 		multicastDto := Cfg.ToMulticastDto(true)
 
-		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, zap.S())
-		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, zap.S())
+		multicast := discovery.NewMulticastDiscovery(discoverySvcConfig.MulticastConfig, multicastDto, logging.Global())
+		httpDiscoverer := discovery.NewHTTPDiscovery(nil, Cfg.ToRegisterDto(), nil, logging.Global())
 		multicast.SetHTTPDiscoverer(httpDiscoverer)
 
-		peerCache := discovery.NewPeerCache(zap.S())
+		peerCache := discovery.NewPeerCache(logging.Global())
 		multicast.SetPeerCache(peerCache)
 
-		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, zap.S())
+		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logging.Global())
 		discoverySvc.SetPeerCache(peerCache)
 
 		// Start discovery AFTER server is ready

@@ -24,7 +24,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
+	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // SendOption configures the send pipeline.
@@ -47,9 +47,9 @@ func WithInMemoryFile(name string, content []byte) SendOption {
 }
 
 // SendFiles sends files or directories to a recipient.
-func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *zap.SugaredLogger, opts ...SendOption) error {
+func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, recipientAlias string, recipientPort int, logger *logging.Logger, opts ...SendOption) error {
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	logger.Infof("Searching for recipient '%s'...", recipientAlias)
@@ -219,9 +219,9 @@ func SendFiles(ctx context.Context, cfg *config.Config, filePaths []string, reci
 	return SendToDevice(ctx, cfg, targetDevice, filePaths, logger, opts...)
 }
 
-func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *zap.SugaredLogger, opts ...SendOption) error {
+func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device, filePaths []string, logger *logging.Logger, opts ...SendOption) error {
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	client := &http.Client{}

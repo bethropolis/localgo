@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
-	"go.uber.org/zap"
 )
 
 // Service coordinates different discovery mechanisms
@@ -23,7 +23,7 @@ type Service struct {
 	peerCache     *PeerCache
 	stopCh        chan struct{}
 	stopOnce      sync.Once
-	logger        *zap.SugaredLogger
+	logger        *logging.Logger
 }
 
 // ServiceConfig contains settings for the discovery service
@@ -45,12 +45,12 @@ func DefaultServiceConfig() *ServiceConfig {
 }
 
 // NewService creates a new discovery service
-func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *zap.SugaredLogger) *Service {
+func NewService(config *ServiceConfig, multicast MulticastDiscoverer, logger *logging.Logger) *Service {
 	if config == nil {
 		config = DefaultServiceConfig()
 	}
 	if logger == nil {
-		logger = zap.NewNop().Sugar()
+		logger = logging.NewQuiet()
 	}
 
 	s := &Service{
