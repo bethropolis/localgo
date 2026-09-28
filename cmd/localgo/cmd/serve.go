@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -182,10 +183,14 @@ var serveCmd = &cobra.Command{
 			}
 		})
 
-		// Start discovery. A failure here is NOT fatal: the file server must keep
-		// running even when discovery is unavailable (e.g. on Android/Termux,
-		// where the sandbox blocks the netlink calls discovery relies on).
+		// Start discovery. On Android/Termux a failure here is NOT fatal: the
+		// file server must keep running even when discovery is unavailable
+		// (the sandbox blocks the netlink calls discovery relies on).
+		// Everywhere else discovery is required, so fail fast.
 		if err := discoverySvc.Start(ctx, Cfg.ToMulticastDto(false)); err != nil {
+			if runtime.GOOS != "android" {
+				return fmt.Errorf("discovery service failed: %w", err)
+			}
 			logging.Global().Warnf("Discovery unavailable: %v", err)
 			if !servequiet {
 				cli.PrintWarning("Network discovery unavailable: %v", err)

@@ -1,10 +1,12 @@
-//go:build linux || android
+//go:build android
 
-// Interface enumeration for Linux and Android.
+// Interface enumeration fallback for Android (including Termux).
 //
-// On Android (including Termux), SELinux blocks the netlink route dumps that
-// net.Interfaces()/net.InterfaceAddrs() rely on, so we fall back to the
-// SIOCGIFCONF family of ioctls, which the sandbox still permits.
+// The Android sandbox (SELinux) blocks the netlink route dumps that
+// net.Interfaces()/net.InterfaceAddrs() rely on, so enumeration falls back
+// to the SIOCGIFCONF family of ioctls, which the sandbox still permits.
+// This file is compiled on android only; every other platform uses the
+// standard library directly (see interfaces_default.go).
 package network
 
 import (
@@ -24,6 +26,14 @@ const (
 	siocGIFINDEX   = 0x8933
 )
 
+// ifreqSize is sizeof(struct ifreq) on 64-bit Linux: 16-byte name + 24-byte
+// union (sized by struct ifmap). All supported android targets are 64-bit
+// (arm64), so a fixed stride is safe.
+const ifreqSize = 40
+
+// maxIfconfSize caps the SIOCGIFCONF buffer growth below.
+const maxIfconfSize = 1 << 20
+
 // ifreq is the Linux ioctl request struct: 16-byte name + 24-byte union.
 type ifreq struct {
 	name  [unix.IFNAMSIZ]byte
@@ -34,6 +44,16 @@ type ifreq struct {
 type ifconf struct {
 	length int32
 	buf    uintptr
+}
+
+// platformInterfaceFallback enumerates interfaces via ioctls when netlink is
+// unavailable.
+func platformInterfaceFallback(origErr error) ([]systemInterface, error) {
+	fallback, err := ioctlSystemInterfaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network interfaces: %w", errors.Join(origErr, err))
+	}
+	return fallback, nil
 }
 
 func ioctl(fd uintptr, req uintptr, arg unsafe.Pointer) error {
@@ -55,6 +75,9 @@ func ioctlSystemInterfaces() ([]systemInterface, error) {
 	// SIOCGIFCONF: grow the buffer until it holds the full interface list.
 	var buf []byte
 	for size := 4096; ; size *= 2 {
+		if size > maxIfconfSize {
+			return nil, errors.New("SIOCGIFCONF interface list exceeds size limit")
+		}
 		buf = make([]byte, size)
 		conf := ifconf{length: int32(size), buf: uintptr(unsafe.Pointer(&buf[0]))}
 		if err := ioctl(uintptr(fd), siocGIFCONF, unsafe.Pointer(&conf)); err != nil {
@@ -70,7 +93,6 @@ func ioctlSystemInterfaces() ([]systemInterface, error) {
 		return nil, errors.New("SIOCGIFCONF returned no interfaces")
 	}
 
-	const ifreqSize = 40
 	seen := make(map[string]bool)
 	var out []systemInterface
 	for off := 0; off+ifreqSize <= len(buf); off += ifreqSize {

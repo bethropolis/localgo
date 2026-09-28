@@ -90,6 +90,12 @@ Notes for Android:
 - **Clipboard**: install the `termux-api` package to copy received clipboard
   messages (`termux-clipboard-set`). Without it, LocalGo saves the text to
   `clipboard.txt` in the download directory, or pass `--no-clipboard`.
+  Text *files* are always saved to the download directory — only clipboard
+  messages go to the clipboard.
+- **Download directory**: files land in `~/Downloads/localgo` inside Termux's
+  private home, not the shared-storage `Downloads` folder. Use
+  `localgo serve --dir ~/storage/downloads/localgo` (after `termux-setup-storage`)
+  to receive straight into shared storage.
 - **Open download dir**: use `localgo serve --open`; LocalGo opens the folder
   via `termux-open`.
 - **Notifications**: with `termux-api`, received notifications are shown via

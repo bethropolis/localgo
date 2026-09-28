@@ -282,23 +282,29 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 				var args []string
 				// On Android/Termux, prefer termux-open so the directory opens
 				// in a file manager rather than failing under XDG.
-				if _, err := exec.LookPath("termux-open"); err == nil {
-					cmd = "termux-open"
-					args = []string{h.config.DownloadDir}
-				} else if runtime.GOOS == "windows" {
-					cmd = "explorer.exe"
-					args = []string{h.config.DownloadDir}
-				} else if runtime.GOOS == "darwin" {
-					cmd = "open"
-					args = []string{h.config.DownloadDir}
-				} else if _, err := exec.LookPath("xdg-open"); err == nil {
-					cmd = "xdg-open"
-					args = []string{h.config.DownloadDir}
-				} else {
-					h.logger.Debugf("No opener found in PATH, skip opening download dir")
-					return
+				// (termux-* tools only exist on Android; skip the PATH scan elsewhere.)
+				if runtime.GOOS == "android" {
+					if _, err := exec.LookPath("termux-open"); err == nil {
+						cmd = "termux-open"
+						args = []string{h.config.DownloadDir}
+					}
 				}
-				exec.Command(cmd, args...).Run()
+				if cmd == "" {
+					if runtime.GOOS == "windows" {
+						cmd = "explorer.exe"
+						args = []string{h.config.DownloadDir}
+					} else if runtime.GOOS == "darwin" {
+						cmd = "open"
+						args = []string{h.config.DownloadDir}
+					} else if _, err := exec.LookPath("xdg-open"); err == nil {
+						cmd = "xdg-open"
+						args = []string{h.config.DownloadDir}
+					} else {
+						h.logger.Debugf("No opener found in PATH, skip opening download dir")
+						return
+					}
+					exec.Command(cmd, args...).Run()
+				}
 			}()
 		}
 	} else {

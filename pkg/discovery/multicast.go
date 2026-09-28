@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -86,7 +87,10 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 	} else {
 		allIfaces, err := network.EnumerateInterfaces()
 		if err != nil {
-			// e.g. Android/Termux where netlink is blocked by SELinux.
+			if runtime.GOOS != "android" {
+				return fmt.Errorf("failed to list network interfaces: %w", err)
+			}
+			// Android/Termux where netlink is blocked by SELinux.
 			md.logger.Warnf("Failed to list network interfaces (%v); falling back to the default multicast interface", err)
 			return md.listenOnDefaultInterface(ctx, addr)
 		}
@@ -99,6 +103,9 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 	}
 
 	if len(targetIfaces) == 0 {
+		if runtime.GOOS != "android" {
+			return fmt.Errorf("no suitable multicast interface found")
+		}
 		// No usable multicast interface (e.g. Android on cellular, where the
 		// only visible interfaces don't support multicast). Fall back to the
 		// kernel's default multicast interface, which the sandbox permits.

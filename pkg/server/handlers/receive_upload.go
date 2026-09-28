@@ -137,7 +137,14 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- Text/Clipboard Handling ---
-	if strings.HasPrefix(dto.FileType, "text/plain") && !h.config.NoClipboard {
+	// Only treat the upload as a clipboard message when the sender embedded
+	// the full content in Preview (the LocalSend clipboard-message signal,
+	// also used by `send --clipboard`/`--stdin`). A real text FILE (no
+	// Preview, or a Preview smaller than the payload such as a thumbnail)
+	// must always land on disk — otherwise both sides report success while
+	// no file appears in the download directory.
+	isClipboardMessage := dto.Preview != nil && int64(len(*dto.Preview)) >= dto.Size
+	if strings.HasPrefix(dto.FileType, "text/plain") && isClipboardMessage && !h.config.NoClipboard {
 		limited := io.LimitReader(bodyReader, maxTextSize+1)
 		textBytes, readErr := io.ReadAll(limited)
 

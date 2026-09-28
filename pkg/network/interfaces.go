@@ -19,16 +19,13 @@ type systemInterface struct {
 }
 
 // systemInterfaces returns all system interfaces with their IPv4 addresses.
-// It prefers netlink-based enumeration (net.Interfaces) and transparently
-// falls back to ioctl-based enumeration when netlink is unavailable.
+// It uses netlink-based enumeration (net.Interfaces); on android it
+// transparently falls back to ioctl-based enumeration when netlink is
+// unavailable (see platformInterfaceFallback).
 func systemInterfaces() ([]systemInterface, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
-		fallback, ferr := ioctlSystemInterfaces()
-		if ferr == nil {
-			return fallback, nil
-		}
-		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
+		return platformInterfaceFallback(err)
 	}
 
 	out := make([]systemInterface, 0, len(ifs))

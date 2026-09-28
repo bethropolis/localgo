@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -313,6 +314,147 @@ func TestUploadHandlerV2_TextPlain_NoClipboard(t *testing.T) {
 	}
 	if string(written) != body {
 		t.Errorf("file content mismatch: got %q, want %q", string(written), body)
+	}
+}
+
+// testClipboardSuccessStub returns a clipboard write command that always
+// succeeds, so tests can prove the handler does (or does not) invoke it.
+func testClipboardSuccessStub() string {
+	if runtime.GOOS == "windows" {
+		return "cmd /c exit 0"
+	}
+	return "true"
+}
+
+// TestUploadHandlerV2_TextPlain_RealFile_SavedToDisk verifies that a genuine
+// text FILE (no Preview) is saved to disk even when a working clipboard tool
+// is available. Regression test: the handler used to route every text/plain
+// upload to the clipboard, so both sides reported success while no file
+// appeared in the download directory (seen on Termux with termux-api).
+func TestUploadHandlerV2_TextPlain_RealFile_SavedToDisk(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "notes.txt", Size: 11, FileType: "text/plain"},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	body := "hello world"
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=f1&token="+token,
+		strings.NewReader(body),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	written, err := os.ReadFile(filepath.Join(tempDir, "notes.txt"))
+	if err != nil {
+		t.Fatalf("expected real text file to be saved to disk, not consumed by clipboard: %v", err)
+	}
+	if string(written) != body {
+		t.Errorf("file content mismatch: got %q, want %q", string(written), body)
+	}
+}
+
+// TestUploadHandlerV2_TextPlain_ClipboardMessage_Copied verifies that a genuine
+// clipboard message (full content embedded in Preview, as sent by
+// `send --clipboard`/`--stdin` and official clients) still goes to the
+// clipboard instead of being saved as a file.
+func TestUploadHandlerV2_TextPlain_ClipboardMessage_Copied(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	preview := "hello world"
+	files := map[string]model.FileDto{
+		"c1": {ID: "c1", FileName: "message.txt", Size: 11, FileType: "text/plain", Preview: &preview},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=c1&token="+token,
+		strings.NewReader(preview),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	// Clipboard messages must not land on disk.
+	if _, err := os.Stat(filepath.Join(tempDir, "message.txt")); !os.IsNotExist(err) {
+		t.Errorf("expected clipboard message to be copied, not saved as a file")
+	}
+}
+
+// TestUploadHandlerV2_TextPlain_ClipboardMessage_ClipboardFailure_SavesFile
+// verifies that a clipboard message still reaches the user as a file when the
+// clipboard tool itself fails.
+func TestUploadHandlerV2_TextPlain_ClipboardMessage_ClipboardFailure_SavesFile(t *testing.T) {
+	clipboard.OverrideProvider("localgo-test-nonexistent-tool", "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	preview := "hello world"
+	files := map[string]model.FileDto{
+		"c1": {ID: "c1", FileName: "message.txt", Size: 11, FileType: "text/plain", Preview: &preview},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=c1&token="+token,
+		strings.NewReader(preview),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	written, err := os.ReadFile(filepath.Join(tempDir, "message.txt"))
+	if err != nil {
+		t.Fatalf("expected clipboard fallback file to be saved to disk: %v", err)
+	}
+	if string(written) != preview {
+		t.Errorf("file content mismatch: got %q, want %q", string(written), preview)
 	}
 }
 
