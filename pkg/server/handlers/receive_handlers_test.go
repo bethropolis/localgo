@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
@@ -73,6 +74,75 @@ func TestPrepareUploadHandlerV2_Success(t *testing.T) {
 	}
 	if token, ok := respDto.Files["file1"]; !ok || token == "" {
 		t.Errorf("expected token for file1")
+	}
+}
+
+// TestPrepareUpload_PromptlessReceiver_RejectsFast verifies that a receiver
+// without auto-accept and without an interactive terminal rejects promptly
+// instead of waiting out the 30s prompt timeout invisible while the sender
+// hangs (seen on Termux, where the huh prompt never visibly renders).
+func TestPrepareUpload_PromptlessReceiver_RejectsFast(t *testing.T) {
+	// AutoAccept off + untrusted sender to reach the prompt path.
+	cfg := &config.Config{
+		AutoAccept: false,
+	}
+	handler, _, _ := setupReceiveHandler(t, cfg)
+
+	reqDto := model.PrepareUploadRequestDto{
+		Info: model.InfoDto{Alias: "TestSender"},
+		Files: map[string]model.FileDto{
+			"file1": {ID: "file1", FileName: "test.txt", Size: 10},
+		},
+	}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	start := time.Now()
+	handler.PrepareUploadHandlerV2(rr, req)
+	elapsed := time.Since(start)
+
+	if status := rr.Code; status != http.StatusForbidden {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusForbidden)
+	}
+	if elapsed >= 20*time.Second {
+		t.Errorf("promptless receiver took %v to reject; must fail fast, not wait out the prompt timeout", elapsed)
+	}
+}
+
+// TestPrepareUpload_ClipboardPromptlessReceiver_RejectsFast is the clipboard-
+// message counterpart: a Preview-embedded message to a promptless receiver
+// must also reject fast instead of hanging the sender.
+func TestPrepareUpload_ClipboardPromptlessReceiver_RejectsFast(t *testing.T) {
+	cfg := &config.Config{
+		AutoAccept: false,
+	}
+	handler, _, _ := setupReceiveHandler(t, cfg)
+
+	preview := "hello"
+	reqDto := model.PrepareUploadRequestDto{
+		Info: model.InfoDto{Alias: "TestSender"},
+		Files: map[string]model.FileDto{
+			"clip1": {ID: "clip1", FileName: "message.txt", Size: int64(len(preview)), FileType: "text/plain", Preview: &preview},
+		},
+	}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	start := time.Now()
+	handler.PrepareUploadHandlerV2(rr, req)
+	elapsed := time.Since(start)
+
+	if status := rr.Code; status != http.StatusForbidden {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusForbidden)
+	}
+	if elapsed >= 20*time.Second {
+		t.Errorf("promptless receiver took %v to reject; must fail fast, not wait out the prompt timeout", elapsed)
 	}
 }
 

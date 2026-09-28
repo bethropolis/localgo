@@ -103,6 +103,10 @@ Notes for Android:
 - **Daemon**: `localgo serve -d` runs in the background, but Android may kill
   it when the app is swiped away or under aggressive battery optimization.
   Allow Termux unrestricted background access for reliable long-running use.
+- **Accept prompts**: the interactive accept prompt may not render on Termux.
+  Run `localgo serve --auto-accept` (or add the sender to
+  `trusted_fingerprints`) so incoming transfers don't hang waiting for an
+  invisible prompt.
 
 
 ---

@@ -137,7 +137,12 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 				}
 			}
 			if !isTrusted {
-				h.promptMutex.Lock()
+				// Never queue behind an active prompt: the sender would hang
+				// with no feedback. Fail fast so it can retry or surface it.
+				if !h.promptMutex.TryLock() {
+					httputil.RespondError(w, http.StatusConflict, "Another transfer is awaiting approval")
+					return
+				}
 				accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
 				h.promptMutex.Unlock()
 				if !accepted {
@@ -219,7 +224,12 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		}
 
 		if !isTrusted {
-			h.promptMutex.Lock()
+			// Never queue behind an active prompt: the sender would hang
+			// with no feedback. Fail fast so it can retry or surface it.
+			if !h.promptMutex.TryLock() {
+				httputil.RespondError(w, http.StatusConflict, "Another transfer is awaiting approval")
+				return
+			}
 			accepted := h.promptUserForAcceptance(sender, requestDto.Files)
 			h.promptMutex.Unlock()
 
