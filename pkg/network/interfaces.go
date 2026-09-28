@@ -10,17 +10,97 @@ import (
 	"github.com/jackpal/gateway"
 )
 
+// systemInterface is a network interface paired with its IPv4 addresses.
+// It exists so interface enumeration can be performed without netlink, which
+// the Android/Termux sandbox blocks (net.Interfaces() returns EPERM there).
+type systemInterface struct {
+	net.Interface
+	addrs []*net.IPNet
+}
+
+// systemInterfaces returns all system interfaces with their IPv4 addresses.
+// It prefers netlink-based enumeration (net.Interfaces) and transparently
+// falls back to ioctl-based enumeration when netlink is unavailable.
+func systemInterfaces() ([]systemInterface, error) {
+	ifs, err := net.Interfaces()
+	if err != nil {
+		fallback, ferr := ioctlSystemInterfaces()
+		if ferr == nil {
+			return fallback, nil
+		}
+		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
+	}
+
+	out := make([]systemInterface, 0, len(ifs))
+	for _, i := range ifs {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		si := systemInterface{Interface: i}
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil {
+				si.addrs = append(si.addrs, ipn)
+			}
+		}
+		out = append(out, si)
+	}
+	return out, nil
+}
+
+// systemInterfaceByName returns the interface with the given name, or an error.
+func systemInterfaceByName(name string) (*systemInterface, error) {
+	ifs, err := systemInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	for i := range ifs {
+		if ifs[i].Name == name {
+			return &ifs[i], nil
+		}
+	}
+	return nil, fmt.Errorf("interface %q not found", name)
+}
+
+// EnumerateInterfaces returns all system interfaces. Unlike net.Interfaces,
+// this works even where netlink is blocked (e.g. Android/Termux).
+func EnumerateInterfaces() ([]net.Interface, error) {
+	ifs, err := systemInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]net.Interface, 0, len(ifs))
+	for _, i := range ifs {
+		out = append(out, i.Interface)
+	}
+	return out, nil
+}
+
+// InterfaceByName returns the named system interface. Unlike net.InterfaceByName,
+// this works even where netlink is blocked (e.g. Android/Termux).
+func InterfaceByName(name string) (*net.Interface, error) {
+	si, err := systemInterfaceByName(name)
+	if err != nil {
+		return nil, err
+	}
+	iface := si.Interface
+	return &iface, nil
+}
+
 // GetLocalIP returns the primary non-loopback IP address of the machine
 func GetLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
+	ifs, err := systemInterfaces()
 	if err != nil {
 		return "", err
 	}
 
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
+	for _, i := range ifs {
+		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
+			continue
+		}
+		for _, ipn := range i.addrs {
+			if !ipn.IP.IsLoopback() {
+				return ipn.IP.String(), nil
 			}
 		}
 	}
@@ -31,30 +111,18 @@ func GetLocalIP() (string, error) {
 // GetLocalIPAddresses returns a list of local IP addresses for all non-loopback interfaces
 func GetLocalIPAddresses() ([]net.IP, error) {
 	var ips []net.IP
-	ifaces, err := net.Interfaces()
+	ifs, err := systemInterfaces()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get network interfaces: %w", err)
+		return nil, err
 	}
 
-	for _, i := range ifaces {
+	for _, i := range ifs {
 		// Skip down and loopback interfaces
 		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
 			continue
 		}
-
-		addrs, err := i.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			var ip net.IP
-			if ipnet, ok := addr.(*net.IPNet); ok {
-				// Get the IPv4 address
-				if ip = ipnet.IP.To4(); ip != nil {
-					ips = append(ips, ip)
-				}
-			}
+		for _, ipn := range i.addrs {
+			ips = append(ips, ipn.IP)
 		}
 	}
 	return ips, nil
@@ -62,26 +130,15 @@ func GetLocalIPAddresses() ([]net.IP, error) {
 
 // GetInterfaceIPs returns all IP addresses for a specific network interface
 func GetInterfaceIPs(interfaceName string) ([]string, error) {
+	iface, err := systemInterfaceByName(interfaceName)
+	if err != nil {
+		return nil, err
+	}
+
 	var ips []string
-
-	iface, err := net.InterfaceByName(interfaceName)
-	if err != nil {
-		return nil, err
+	for _, ipn := range iface.addrs {
+		ips = append(ips, ipn.IP.String())
 	}
-
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok {
-			if ipnet.IP.To4() != nil {
-				ips = append(ips, ipnet.IP.String())
-			}
-		}
-	}
-
 	return ips, nil
 }
 
@@ -172,20 +229,12 @@ func GetSubnetIPs(ip net.IP) []net.IP {
 // GetInterfaceIPNet returns the IPv4 network (IP + subnet mask) for the named interface.
 // Returns nil if the interface has no IPv4 address.
 func GetInterfaceIPNet(ifaceName string) (*net.IPNet, error) {
-	iface, err := net.InterfaceByName(ifaceName)
+	iface, err := systemInterfaceByName(ifaceName)
 	if err != nil {
 		return nil, fmt.Errorf("interface %q: %w", ifaceName, err)
 	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return nil, fmt.Errorf("interface %q addrs: %w", ifaceName, err)
-	}
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok {
-			if ipnet.IP.To4() != nil {
-				return ipnet, nil
-			}
-		}
+	if len(iface.addrs) > 0 {
+		return iface.addrs[0], nil
 	}
 	return nil, fmt.Errorf("interface %q has no IPv4 address", ifaceName)
 }
@@ -195,23 +244,17 @@ func GetInterfaceIPNet(ifaceName string) (*net.IPNet, error) {
 // to a flat /24 scan if the interface cannot be determined.
 func GetUsableSubnetIPsFromIP(ip net.IP) ([]net.IP, error) {
 	ipStr := ip.String()
-	ifaces, err := net.Interfaces()
+	ifs, err := systemInterfaces()
 	if err != nil {
 		return GetSubnetIPs(ip), nil
 	}
-	for _, i := range ifaces {
+	for _, i := range ifs {
 		if (i.Flags&net.FlagUp) == 0 || (i.Flags&net.FlagLoopback) != 0 {
 			continue
 		}
-		addrs, err := i.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok {
-				if ipnet.IP.To4() != nil && ipnet.IP.String() == ipStr {
-					return GetUsableSubnetIPs(i.Name)
-				}
+		for _, ipn := range i.addrs {
+			if ipn.IP.String() == ipStr {
+				return GetUsableSubnetIPs(i.Name)
 			}
 		}
 	}

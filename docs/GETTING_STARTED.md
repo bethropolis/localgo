@@ -59,6 +59,45 @@ podman run -d \
 > ensure the mounted `downloads` and `config` directories exist and have the correct permissions.
 > for more information see [container documentation](CONTAINER.md)
 
+### Option 8: Termux / Android (Android without root)
+
+LocalGo runs natively in [Termux](https://termux.dev) on Android. The Android
+sandbox blocks the netlink calls Go's standard library uses to enumerate
+network interfaces, so LocalGo falls back to ioctls automatically — no extra
+setup required.
+
+```bash
+pkg update && pkg install -y golang termux-api
+git clone https://github.com/bethropolis/localgo.git
+cd localgo
+go build -o $PREFIX/bin/localgo ./cmd/localgo
+```
+
+Start receiving files:
+
+```bash
+localgo serve
+```
+
+Notes for Android:
+
+- **Wi-Fi**: make sure Wi-Fi (not mobile data) is enabled so discovery and
+  transfers work on your LAN. On mobile data, the app is behind carrier NAT.
+- **LAN discovery**: multicast announcements and `localgo scan`/`discover` work
+  over Wi-Fi. The sandbox blocks reading the routing table, so gateway
+  prioritization is skipped and subnets are derived from each interface's
+  netmask instead.
+- **Clipboard**: install the `termux-api` package to copy received clipboard
+  messages (`termux-clipboard-set`). Without it, LocalGo saves the text to
+  `clipboard.txt` in the download directory, or pass `--no-clipboard`.
+- **Open download dir**: use `localgo serve --open`; LocalGo opens the folder
+  via `termux-open`.
+- **Notifications**: with `termux-api`, received notifications are shown via
+  `termux-notification`.
+- **Daemon**: `localgo serve -d` runs in the background, but Android may kill
+  it when the app is swiped away or under aggressive battery optimization.
+  Allow Termux unrestricted background access for reliable long-running use.
+
 
 ---
 

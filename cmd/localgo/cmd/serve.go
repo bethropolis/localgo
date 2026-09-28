@@ -182,10 +182,15 @@ var serveCmd = &cobra.Command{
 			}
 		})
 
-		// Start discovery
-		err := discoverySvc.Start(ctx, Cfg.ToMulticastDto(false))
-		if err != nil {
-			return fmt.Errorf("discovery service failed: %w", err)
+		// Start discovery. A failure here is NOT fatal: the file server must keep
+		// running even when discovery is unavailable (e.g. on Android/Termux,
+		// where the sandbox blocks the netlink calls discovery relies on).
+		if err := discoverySvc.Start(ctx, Cfg.ToMulticastDto(false)); err != nil {
+			logging.Global().Warnf("Discovery unavailable: %v", err)
+			if !servequiet {
+				cli.PrintWarning("Network discovery unavailable: %v", err)
+				cli.PrintWarning("Running without discovery. Use a manual IP (localgo send --ip) or the peer cache.")
+			}
 		}
 
 		if !servequiet {

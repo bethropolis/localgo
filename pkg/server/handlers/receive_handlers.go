@@ -280,7 +280,12 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 			go func() {
 				var cmd string
 				var args []string
-				if runtime.GOOS == "windows" {
+				// On Android/Termux, prefer termux-open so the directory opens
+				// in a file manager rather than failing under XDG.
+				if _, err := exec.LookPath("termux-open"); err == nil {
+					cmd = "termux-open"
+					args = []string{h.config.DownloadDir}
+				} else if runtime.GOOS == "windows" {
 					cmd = "explorer.exe"
 					args = []string{h.config.DownloadDir}
 				} else if runtime.GOOS == "darwin" {
@@ -290,7 +295,7 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 					cmd = "xdg-open"
 					args = []string{h.config.DownloadDir}
 				} else {
-					h.logger.Debugf("xdg-open not found in PATH, skip opening download dir")
+					h.logger.Debugf("No opener found in PATH, skip opening download dir")
 					return
 				}
 				exec.Command(cmd, args...).Run()
