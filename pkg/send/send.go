@@ -32,6 +32,9 @@ type SendOption func(*sendConfig)
 
 type sendConfig struct {
 	memFiles []memFile
+	// remoteNames overrides the filename the receiver sees for a local
+	// path (e.g. temp directory zips sent under a clean "<dir>.zip" name).
+	remoteNames map[string]string
 }
 
 type memFile struct {
@@ -43,6 +46,27 @@ type memFile struct {
 func WithInMemoryFile(name string, content []byte) SendOption {
 	return func(c *sendConfig) {
 		c.memFiles = append(c.memFiles, memFile{name: name, content: content})
+	}
+}
+
+// WithRemoteName overrides the filename the receiver sees for a local path.
+// Useful when sending temp files (e.g. directory zips) under a clean name.
+func WithRemoteName(localPath, remoteName string) SendOption {
+	return func(c *sendConfig) {
+		if c.remoteNames == nil {
+			c.remoteNames = make(map[string]string)
+		}
+		c.remoteNames[localPath] = remoteName
+	}
+}
+
+// applyRemoteNameOverrides rewrites fileMap destinations for explicitly
+// overridden local paths. Unknown paths are ignored.
+func applyRemoteNameOverrides(fileMap map[string]string, overrides map[string]string) {
+	for localPath, remoteName := range overrides {
+		if _, ok := fileMap[localPath]; ok {
+			fileMap[localPath] = remoteName
+		}
 	}
 }
 
@@ -294,6 +318,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	if err != nil {
 		return fmt.Errorf("failed to process file paths: %w", err)
 	}
+	applyRemoteNameOverrides(fileMap, sc.remoteNames)
 
 	// Strip EXIF/metadata from image files in private mode.
 	// StripTo writes a stripped copy to a temp file; the original is never modified.
@@ -449,19 +474,29 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	// and no file upload is needed (content was in the Preview field).
 	if resp.StatusCode == http.StatusNoContent {
 		logger.Info("Clipboard message accepted by receiver, no upload needed")
+		cli.EmitEvent(cli.IPCEvent{Type: cli.EventSuccess, Data: "clipboard message accepted, no upload needed"})
 		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("prepare request failed with status: %s", resp.Status)
+		err := fmt.Errorf("prepare request failed with status: %s", resp.Status)
+		cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, Error: err.Error()})
+		return err
 	}
 
 	var prepareResponse model.PrepareUploadResponseDto
 	if err := json.NewDecoder(resp.Body).Decode(&prepareResponse); err != nil {
-		return fmt.Errorf("failed to decode prepare response: %w", err)
+		err := fmt.Errorf("failed to decode prepare response: %w", err)
+		cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, Error: err.Error()})
+		return err
 	}
 
-	mp := cli.NewMultiProgress(int64(len(prepareResponse.Files)))
+	// Progress bars render on stderr; in JSON mode stdout must stay pure
+	// NDJSON, so skip the TUI and emit track events instead.
+	var mp *cli.MultiProgress
+	if !cli.JSONMode() {
+		mp = cli.NewMultiProgress(int64(len(prepareResponse.Files)))
+	}
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(prepareResponse.Files))
@@ -476,7 +511,14 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		if reader, ok := memReaders[fileID]; ok {
 			displayName := filesDtoMap[fileID].FileName
 			fileSize := filesDtoMap[fileID].Size
-			trackProgress := mp.AddBar(displayName, fileSize)
+			var trackProgress func(int64)
+			if mp != nil {
+				trackProgress = mp.AddBar(displayName, fileSize)
+			}
+			if cli.JSONMode() {
+				trackProgress = cli.EmitProgressTracker(displayName, fileSize, trackProgress)
+				cli.EmitEvent(cli.IPCEvent{Type: cli.EventTransferStart, File: displayName, Total: fileSize})
+			}
 
 			wg.Add(1)
 			go func(fID, tkn string, rdr *memReadSeekCloser, sz int64, name string, track func(int64)) {
@@ -489,18 +531,32 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 				err := uploadStream(ctx, client, device, rdr, sz, fID, prepareResponse.SessionID, tkn, scheme, cfg.PIN, track, logger)
 				if err != nil {
 					logger.Errorf("Failed to upload %s: %v", name, err)
+					cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, File: name, Error: err.Error()})
 					errCh <- fmt.Errorf("failed to upload %s: %w", name, err)
+					return
 				}
+				cli.EmitEvent(cli.IPCEvent{Type: cli.EventFileComplete, File: name, Bytes: sz, Total: sz, Percent: 100})
 			}(fileID, token, reader, fileSize, displayName, trackProgress)
 		} else if filePath, exists := filePathMap[fileID]; exists {
 			var fileSize int64
 			if fi, err := os.Stat(filePath); err == nil {
 				fileSize = fi.Size()
 			}
-			trackProgress := mp.AddBar(filepath.Base(filePath), fileSize)
+			displayName := filepath.Base(filePath)
+			if remoteName, ok := fileMap[filePath]; ok && remoteName != "" {
+				displayName = remoteName
+			}
+			var trackProgress func(int64)
+			if mp != nil {
+				trackProgress = mp.AddBar(displayName, fileSize)
+			}
+			if cli.JSONMode() {
+				trackProgress = cli.EmitProgressTracker(displayName, fileSize, trackProgress)
+				cli.EmitEvent(cli.IPCEvent{Type: cli.EventTransferStart, File: displayName, Total: fileSize})
+			}
 
 			wg.Add(1)
-			go func(fID, tkn, fPath string, track func(int64)) {
+			go func(fID, tkn, fPath string, track func(int64), name string, sz int64) {
 				defer wg.Done()
 
 				sem <- struct{}{}
@@ -510,9 +566,12 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 				err := uploadFile(ctx, client, device, fPath, fID, prepareResponse.SessionID, tkn, scheme, cfg.PIN, track, logger)
 				if err != nil {
 					logger.Errorf("Failed to upload file %s: %v", filepath.Base(fPath), err)
+					cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, File: name, Error: err.Error()})
 					errCh <- fmt.Errorf("failed to upload %s: %w", filepath.Base(fPath), err)
+					return
 				}
-			}(fileID, token, filePath, trackProgress)
+				cli.EmitEvent(cli.IPCEvent{Type: cli.EventFileComplete, File: name, Bytes: sz, Total: sz, Percent: 100})
+			}(fileID, token, filePath, trackProgress, displayName, fileSize)
 		} else {
 			logger.Warnf("Server responded with unknown file ID: %s", fileID)
 			continue
@@ -520,8 +579,10 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	}
 
 	wg.Wait()
-	mp.ForceComplete()
-	mp.Wait()
+	if mp != nil {
+		mp.ForceComplete()
+		mp.Wait()
+	}
 	close(errCh)
 
 	var uploadErrors []error
@@ -534,6 +595,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	}
 
 	logger.Info("All files uploaded successfully!")
+	cli.EmitEvent(cli.IPCEvent{Type: cli.EventSuccess})
 	return nil
 }
 
