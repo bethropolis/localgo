@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -45,13 +46,43 @@ func startTestIPC(t *testing.T, ctrl Controller, broker *events.Broker) (*IPCSer
 	if runtime.GOOS == "windows" {
 		t.Skip("unix control socket is not supported on Windows")
 	}
-	sockPath := filepath.Join(t.TempDir(), "ipc.sock")
+	// Deliberately NOT t.TempDir(): its macOS paths
+	// (/var/folders/.../T/TestName<random>/001) exceed the 104-byte sun_path
+	// limit and fail the bind with "invalid argument".
+	dir, err := os.MkdirTemp("", "lgipc")
+	if err != nil {
+		t.Fatalf("MkdirTemp failed: %v", err)
+	}
+	sockPath := filepath.Join(dir, "ipc.sock")
+	// Assert the constraint explicitly: t.TempDir() breaks this on macOS,
+	// and this guard makes the mistake fail on every platform.
+	if len(sockPath) >= maxUnixSocketPathLen {
+		t.Fatalf("test socket path too long (%d bytes): %s", len(sockPath), sockPath)
+	}
 	srv, err := startOnPath(sockPath, ctrl, broker)
 	if err != nil {
+		os.RemoveAll(dir)
 		t.Fatalf("startOnPath failed: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	t.Cleanup(func() {
+		_ = srv.Close()
+		os.RemoveAll(dir)
+	})
 	return srv, unixClient(sockPath)
+}
+
+func TestStartIPCRejectsOverlongPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix control socket is not supported on Windows")
+	}
+	long := filepath.Join(os.TempDir(), strings.Repeat("d", maxUnixSocketPathLen), "ipc.sock")
+	_, err := startOnPath(long, fakeController{pending: handlers.NewPendingRegistry(nil)}, events.NewBroker())
+	if err == nil {
+		t.Fatal("expected an error for an overlong socket path")
+	}
+	if !strings.Contains(err.Error(), "too long") {
+		t.Errorf("expected a 'too long' error, got %v", err)
+	}
 }
 
 func TestIPCStatusAndDevices(t *testing.T) {

@@ -58,6 +58,12 @@ func SocketPath() string {
 	return filepath.Join(cacheDir, "localgo", "ipc.sock")
 }
 
+// maxUnixSocketPathLen bounds a filesystem unix socket path. sun_path is
+// 108 bytes on Linux but only 104 on macOS/BSD, so the smaller limit is used
+// everywhere. Longer paths fail the bind with a cryptic
+// "bind: invalid argument", which is why this is checked up front.
+const maxUnixSocketPathLen = 104
+
 // IPCServer is a running control socket.
 type IPCServer struct {
 	listener net.Listener
@@ -92,6 +98,9 @@ func StartIPCServer(ctrl Controller, broker *events.Broker) (*IPCServer, error) 
 func startOnPath(sockPath string, ctrl Controller, broker *events.Broker) (*IPCServer, error) {
 	if runtime.GOOS == "windows" {
 		return nil, fmt.Errorf("IPC control socket is not supported on Windows yet (use --auto-accept)")
+	}
+	if len(sockPath) >= maxUnixSocketPathLen {
+		return nil, fmt.Errorf("IPC socket path is too long (%d bytes, max %d): %s\nset XDG_CACHE_HOME/HOME to a shorter path, or run without --ipc", len(sockPath), maxUnixSocketPathLen-1, sockPath)
 	}
 	if err := os.MkdirAll(filepath.Dir(sockPath), 0700); err != nil {
 		return nil, fmt.Errorf("IPC socket dir: %w", err)
