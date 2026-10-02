@@ -46,6 +46,11 @@ brew install bethropolis/localgo/localgo
   yay -S localgo-bin
 ```
 
+### Option 6b: Install via mise (any platform)
+```bash
+mise use -g github:bethropolis/localgo
+```
+
 ### Option 7: Install via Docker/podman
 ```bash
 podman run -d \
