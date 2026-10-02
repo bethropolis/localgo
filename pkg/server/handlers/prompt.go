@@ -10,10 +10,39 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/charmbracelet/huh"
+	"golang.org/x/term"
 )
+
+// promptTimeout bounds how long an accept prompt waits for input.
+// Expiry (or any prompt failure) fails closed: the transfer is rejected.
+const promptTimeout = 30 * time.Second
+
+// requireInteractiveTerminal reports whether an accept prompt can actually be
+// answered. Without a terminal on stdin (piped/backgrounded server, service
+// unit, non-TTY Termux session) huh would wait out its timeout invisible
+// while the sender hangs — fail closed immediately instead.
+func (h *ReceiveHandler) requireInteractiveTerminal() bool {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return true
+	}
+	h.logger.Warn("Rejecting transfer: no interactive terminal to prompt for acceptance (use --auto-accept or trusted fingerprints for headless receivers)")
+	fmt.Fprintf(os.Stderr, "\n%s Transfer automatically rejected (no interactive terminal).\n", cli.WarningStyle.Render(cli.IconWarning))
+	return false
+}
+
+// announcePrompt prints a plain-text banner on stderr before the interactive
+// prompt runs, so the pending question stays visible even if the TUI render
+// is lost among streaming server logs.
+func announcePrompt(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "\n━━ "+format+" (default: reject after %ds) ━━\n", append(args, int(promptTimeout.Seconds()))...)
+	os.Stderr.Sync()
+}
 
 func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files map[string]model.FileDto) bool {
 	if cli.IsContainer() {
+		return false
+	}
+	if !h.requireInteractiveTerminal() {
 		return false
 	}
 
@@ -60,6 +89,7 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 
 	var accept bool = true
 
+	announcePrompt("Incoming file transfer from %s — answer the prompt below", cli.Sanitize(sender.Alias))
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -71,7 +101,7 @@ func (h *ReceiveHandler) promptUserForAcceptance(sender model.DeviceInfo, files 
 		),
 	).WithTheme(huh.ThemeCharm())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), promptTimeout)
 	defer cancel()
 
 	err := form.RunWithContext(ctx)
@@ -87,6 +117,9 @@ func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) b
 	if cli.IsContainer() {
 		return false
 	}
+	if !h.requireInteractiveTerminal() {
+		return false
+	}
 	cli.Notify("LocalGo: Clipboard Message",
 		fmt.Sprintf("%s sent clipboard text (%d chars)", cli.Sanitize(alias), len(message)))
 
@@ -98,6 +131,7 @@ func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) b
 	desc := fmt.Sprintf("From: %s (IP: %s)\n\nClipboard:\n%s", cli.Sanitize(alias), remoteAddr, cli.Sanitize(truncated))
 
 	var accept bool = true
+	announcePrompt("Incoming clipboard message from %s — answer the prompt below", cli.Sanitize(alias))
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
@@ -109,7 +143,7 @@ func (h *ReceiveHandler) promptForClipboard(alias, remoteAddr, message string) b
 		),
 	).WithTheme(huh.ThemeCharm())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), promptTimeout)
 	defer cancel()
 
 	err := form.RunWithContext(ctx)

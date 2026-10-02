@@ -75,3 +75,13 @@ func zipDirToTemp(dir string) (string, error) {
 
 	return zipPathName, nil
 }
+
+// zipArchiveName returns the clean "<dir>.zip" name a compressed directory
+// is presented as to the receiver.
+func zipArchiveName(dir string) string {
+	base := filepath.Base(filepath.Clean(dir))
+	if base == "." || base == "/" || base == "\\" || base == "" {
+		return "archive.zip"
+	}
+	return base + ".zip"
+}

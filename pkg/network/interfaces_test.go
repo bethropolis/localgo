@@ -39,6 +39,32 @@ func TestGetLocalIPAddresses(t *testing.T) {
 	}
 }
 
+func TestEnumerateInterfaces(t *testing.T) {
+	ifaces, err := network.EnumerateInterfaces()
+	if err != nil {
+		t.Skipf("Failed to enumerate interfaces, skipping test: %v", err)
+	}
+
+	if len(ifaces) == 0 {
+		t.Skip("No interfaces available, skipping test")
+	}
+
+	for _, iface := range ifaces {
+		if iface.Name == "" {
+			t.Error("EnumerateInterfaces returned an interface with an empty name")
+		}
+		if _, err := network.InterfaceByName(iface.Name); err != nil {
+			t.Errorf("InterfaceByName(%q) failed for enumerated interface: %v", iface.Name, err)
+		}
+	}
+}
+
+func TestInterfaceByNameNotFound(t *testing.T) {
+	if _, err := network.InterfaceByName("localgo-nonexistent0"); err == nil {
+		t.Error("InterfaceByName() for a nonexistent interface should return an error")
+	}
+}
+
 func TestFormatAddress(t *testing.T) {
 	tests := []struct {
 		name     string

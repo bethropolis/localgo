@@ -1,0 +1,45 @@
+amends "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Builtins.pkl"
+// Using a coding agent? See https://hk.jdx.dev/agents
+
+local linters = new Mapping {
+    ["actionlint"] = Builtins.actionlint
+    ["dclint"] = Builtins.dclint
+    ["droast"] = Builtins.droast
+    ["go_fmt"] = Builtins.go_fmt
+    ["go_vet"] = Builtins.go_vet
+    ["golangci_lint"] = Builtins.golangci_lint
+    ["gomod_tidy"] = Builtins.gomod_tidy
+    ["hadolint"] = Builtins.hadolint
+    ["shellcheck"] = Builtins.shellcheck
+    ["shellharden"] = Builtins.shellharden
+    ["shfmt"] = Builtins.shfmt
+    ["zizmor"] = Builtins.zizmor
+}
+
+// check: read-only analysis only. Every mutating linter (go_fmt, gomod_tidy,
+// shellharden) lives in the fix hook instead, so pre-existing formatting
+// drift is never reported as a check failure.
+hooks = new Mapping {
+    ["check"] = new Hook {
+        steps = new Steps {
+            go_vet { glob = "**/*.go" }
+            golangci_lint { glob = "**/*.go" }
+            actionlint { glob = ".github/workflows/*.yml" }
+            zizmor { glob = ".github/workflows/*.yml" }
+            dclint { glob = "docker-compose*.yml" }
+            hadolint { glob = "**/Dockerfile*" }
+            droast { glob = "**/Dockerfile*" }
+            shellcheck { glob = "**/*.sh" }
+        }
+    }
+    // fix: mutations. go_fmt will also reformat files that were never gofmt'd
+    // (the repo carries pre-existing drift), so expect a large first run.
+    ["fix"] = new Hook {
+        steps = new Steps {
+            go_fmt { glob = "**/*.go" }
+            shellharden { glob = "**/*.sh" }
+            gomod_tidy
+        }
+    }
+}

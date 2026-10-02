@@ -114,3 +114,39 @@ func TestSendFiles_HappyPath(t *testing.T) {
 		t.Fatalf("SendToDevice failed: %v", err)
 	}
 }
+
+func TestApplyRemoteNameOverrides(t *testing.T) {
+	fileMap := map[string]string{
+		"/tmp/localgo-docs-123.zip": "localgo-docs-123.zip",
+		"/tmp/report.pdf":           "report.pdf",
+	}
+	overrides := map[string]string{
+		"/tmp/localgo-docs-123.zip": "docs.zip",
+		"/tmp/nonexistent.zip":      "ghost.zip",
+	}
+
+	applyRemoteNameOverrides(fileMap, overrides)
+
+	if got := fileMap["/tmp/localgo-docs-123.zip"]; got != "docs.zip" {
+		t.Errorf("expected override to docs.zip, got %q", got)
+	}
+	if got := fileMap["/tmp/report.pdf"]; got != "report.pdf" {
+		t.Errorf("expected untouched entry to stay report.pdf, got %q", got)
+	}
+	if _, ok := fileMap["/tmp/nonexistent.zip"]; ok {
+		t.Error("expected unknown override path to be ignored, not added")
+	}
+}
+
+func TestWithRemoteNameOption(t *testing.T) {
+	var sc sendConfig
+	WithRemoteName("/tmp/a.zip", "b.zip")(&sc)
+	WithRemoteName("/tmp/c.zip", "d.zip")(&sc)
+
+	if len(sc.remoteNames) != 2 {
+		t.Fatalf("expected 2 overrides, got %d", len(sc.remoteNames))
+	}
+	if sc.remoteNames["/tmp/a.zip"] != "b.zip" {
+		t.Errorf("expected b.zip, got %q", sc.remoteNames["/tmp/a.zip"])
+	}
+}

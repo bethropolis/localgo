@@ -16,6 +16,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/logging"
@@ -35,6 +36,31 @@ type Server struct {
 	historyLog      *history.Logger // closed in Shutdown()
 	shutdownCtx     context.Context
 	shutdownCancel  context.CancelFunc
+	// transferHook, when set before Start, routes transfer accept/reject
+	// decisions to an external controller (pkg/ipc) instead of the
+	// interactive terminal prompt.
+	transferHook    bool
+	pendingRegistry *handlers.PendingRegistry
+	// eventBroker, when set, receives transfer activity for IPC/SSE streaming.
+	eventBroker *events.Broker
+}
+
+// SetEventBroker enables streaming of transfer activity to IPC/SSE consumers.
+func (s *Server) SetEventBroker(broker *events.Broker) {
+	s.eventBroker = broker
+}
+
+// SetTransferHookEnabled routes transfer decisions to an external
+// controller instead of the interactive prompt. Must be called before Start.
+// The registry is available via PendingRegistry once the server is ready.
+func (s *Server) SetTransferHookEnabled(enabled bool) {
+	s.transferHook = enabled
+}
+
+// PendingRegistry returns the transfer-decision registry, or nil unless the
+// transfer hook was enabled before Start.
+func (s *Server) PendingRegistry() *handlers.PendingRegistry {
+	return s.pendingRegistry
 }
 
 // NewServer creates a new Server instance.
@@ -108,6 +134,10 @@ func (s *Server) configureRoutes() {
 	}
 
 	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.historyLog, s.shutdownCtx, s.logger)
+	receiveHandler.SetEventBroker(s.eventBroker)
+	if s.transferHook {
+		s.pendingRegistry = receiveHandler.EnableTransferHook()
+	}
 	s.router.HandleFunc("POST /api/localsend/v1/prepare-upload", receiveHandler.PrepareUploadHandlerV1)
 	s.router.HandleFunc("POST /api/localsend/v2/prepare-upload", receiveHandler.PrepareUploadHandlerV2)
 	s.router.HandleFunc("POST /api/localsend/v2/upload", receiveHandler.UploadHandlerV2)

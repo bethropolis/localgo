@@ -11,7 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -72,6 +74,75 @@ func TestPrepareUploadHandlerV2_Success(t *testing.T) {
 	}
 	if token, ok := respDto.Files["file1"]; !ok || token == "" {
 		t.Errorf("expected token for file1")
+	}
+}
+
+// TestPrepareUpload_PromptlessReceiver_RejectsFast verifies that a receiver
+// without auto-accept and without an interactive terminal rejects promptly
+// instead of waiting out the 30s prompt timeout invisible while the sender
+// hangs (seen on Termux, where the huh prompt never visibly renders).
+func TestPrepareUpload_PromptlessReceiver_RejectsFast(t *testing.T) {
+	// AutoAccept off + untrusted sender to reach the prompt path.
+	cfg := &config.Config{
+		AutoAccept: false,
+	}
+	handler, _, _ := setupReceiveHandler(t, cfg)
+
+	reqDto := model.PrepareUploadRequestDto{
+		Info: model.InfoDto{Alias: "TestSender"},
+		Files: map[string]model.FileDto{
+			"file1": {ID: "file1", FileName: "test.txt", Size: 10},
+		},
+	}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	start := time.Now()
+	handler.PrepareUploadHandlerV2(rr, req)
+	elapsed := time.Since(start)
+
+	if status := rr.Code; status != http.StatusForbidden {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusForbidden)
+	}
+	if elapsed >= 20*time.Second {
+		t.Errorf("promptless receiver took %v to reject; must fail fast, not wait out the prompt timeout", elapsed)
+	}
+}
+
+// TestPrepareUpload_ClipboardPromptlessReceiver_RejectsFast is the clipboard-
+// message counterpart: a Preview-embedded message to a promptless receiver
+// must also reject fast instead of hanging the sender.
+func TestPrepareUpload_ClipboardPromptlessReceiver_RejectsFast(t *testing.T) {
+	cfg := &config.Config{
+		AutoAccept: false,
+	}
+	handler, _, _ := setupReceiveHandler(t, cfg)
+
+	preview := "hello"
+	reqDto := model.PrepareUploadRequestDto{
+		Info: model.InfoDto{Alias: "TestSender"},
+		Files: map[string]model.FileDto{
+			"clip1": {ID: "clip1", FileName: "message.txt", Size: int64(len(preview)), FileType: "text/plain", Preview: &preview},
+		},
+	}
+	body, _ := json.Marshal(reqDto)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v2/prepare-upload", bytes.NewReader(body))
+	req.RemoteAddr = "192.168.1.100:12345"
+	rr := httptest.NewRecorder()
+
+	start := time.Now()
+	handler.PrepareUploadHandlerV2(rr, req)
+	elapsed := time.Since(start)
+
+	if status := rr.Code; status != http.StatusForbidden {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusForbidden)
+	}
+	if elapsed >= 20*time.Second {
+		t.Errorf("promptless receiver took %v to reject; must fail fast, not wait out the prompt timeout", elapsed)
 	}
 }
 
@@ -316,6 +387,147 @@ func TestUploadHandlerV2_TextPlain_NoClipboard(t *testing.T) {
 	}
 }
 
+// testClipboardSuccessStub returns a clipboard write command that always
+// succeeds, so tests can prove the handler does (or does not) invoke it.
+func testClipboardSuccessStub() string {
+	if runtime.GOOS == "windows" {
+		return "cmd /c exit 0"
+	}
+	return "true"
+}
+
+// TestUploadHandlerV2_TextPlain_RealFile_SavedToDisk verifies that a genuine
+// text FILE (no Preview) is saved to disk even when a working clipboard tool
+// is available. Regression test: the handler used to route every text/plain
+// upload to the clipboard, so both sides reported success while no file
+// appeared in the download directory (seen on Termux with termux-api).
+func TestUploadHandlerV2_TextPlain_RealFile_SavedToDisk(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "notes.txt", Size: 11, FileType: "text/plain"},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	body := "hello world"
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=f1&token="+token,
+		strings.NewReader(body),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	written, err := os.ReadFile(filepath.Join(tempDir, "notes.txt"))
+	if err != nil {
+		t.Fatalf("expected real text file to be saved to disk, not consumed by clipboard: %v", err)
+	}
+	if string(written) != body {
+		t.Errorf("file content mismatch: got %q, want %q", string(written), body)
+	}
+}
+
+// TestUploadHandlerV2_TextPlain_ClipboardMessage_Copied verifies that a genuine
+// clipboard message (full content embedded in Preview, as sent by
+// `send --clipboard`/`--stdin` and official clients) still goes to the
+// clipboard instead of being saved as a file.
+func TestUploadHandlerV2_TextPlain_ClipboardMessage_Copied(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	preview := "hello world"
+	files := map[string]model.FileDto{
+		"c1": {ID: "c1", FileName: "message.txt", Size: 11, FileType: "text/plain", Preview: &preview},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=c1&token="+token,
+		strings.NewReader(preview),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	// Clipboard messages must not land on disk.
+	if _, err := os.Stat(filepath.Join(tempDir, "message.txt")); !os.IsNotExist(err) {
+		t.Errorf("expected clipboard message to be copied, not saved as a file")
+	}
+}
+
+// TestUploadHandlerV2_TextPlain_ClipboardMessage_ClipboardFailure_SavesFile
+// verifies that a clipboard message still reaches the user as a file when the
+// clipboard tool itself fails.
+func TestUploadHandlerV2_TextPlain_ClipboardMessage_ClipboardFailure_SavesFile(t *testing.T) {
+	clipboard.OverrideProvider("localgo-test-nonexistent-tool", "")
+	cfg := &config.Config{
+		AutoAccept: true,
+	}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	preview := "hello world"
+	files := map[string]model.FileDto{
+		"c1": {ID: "c1", FileName: "message.txt", Size: 11, FileType: "text/plain", Preview: &preview},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=c1&token="+token,
+		strings.NewReader(preview),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	written, err := os.ReadFile(filepath.Join(tempDir, "message.txt"))
+	if err != nil {
+		t.Fatalf("expected clipboard fallback file to be saved to disk: %v", err)
+	}
+	if string(written) != preview {
+		t.Errorf("file content mismatch: got %q, want %q", string(written), preview)
+	}
+}
+
 func TestUploadHandlerV2_TextPlain_PathTraversal_Returns400(t *testing.T) {
 	cfg := &config.Config{
 		AutoAccept:  true,
@@ -468,5 +680,53 @@ func TestPrepareUploadHandlerV2_NegativeFileSize_Returns400(t *testing.T) {
 
 	if status := rr.Code; status != http.StatusBadRequest {
 		t.Errorf("expected 400 Bad Request for negative file size, got %v (body: %s)", status, rr.Body.String())
+	}
+}
+
+// TestUploadHandlerV2_ChecksumMismatch_Returns422 verifies a SHA-256 digest
+// mismatch is reported as 422 Unprocessable Entity (LocalSend v2.2 §4.2),
+// not a generic 500, and that the bad file is not left behind.
+func TestUploadHandlerV2_ChecksumMismatch_Returns422(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{AutoAccept: true, NoClipboard: true}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	wrongHash := "0000000000000000000000000000000000000000000000000000000000000000"
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "corrupt.bin", Size: 11, FileType: "application/octet-stream", SHA256: &wrongHash},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=f1&token="+token,
+		strings.NewReader("hello world"),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity on checksum mismatch, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	// The unverified payload must not be promoted into the download dir.
+	if _, err := os.Stat(filepath.Join(tempDir, "corrupt.bin")); !os.IsNotExist(err) {
+		t.Error("file with bad checksum must not be kept in the download directory")
+	}
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".tmp" {
+			t.Errorf("temporary file left behind: %s", e.Name())
+		}
 	}
 }

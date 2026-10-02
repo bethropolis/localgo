@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 )
 
 // multicastBurstCount is the number of rapid UDP multicast bursts sent.
@@ -34,7 +35,7 @@ func (md *MulticastDiscovery) SendDiscoveryAnnouncement() error {
 
 	var localAddr *net.UDPAddr
 	if md.config.InterfaceName != "" {
-		iface, err := net.InterfaceByName(md.config.InterfaceName)
+		iface, err := network.InterfaceByName(md.config.InterfaceName)
 		if err == nil {
 			addrs, err := iface.Addrs()
 			if err == nil {

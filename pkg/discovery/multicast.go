@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
+	"github.com/bethropolis/localgo/pkg/network"
 )
 
 // MulticastDiscovery implements UDP multicast-based device discovery
@@ -71,7 +73,7 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 
 	var targetIfaces []net.Interface
 	if md.config.InterfaceName != "" {
-		iface, err := net.InterfaceByName(md.config.InterfaceName)
+		iface, err := network.InterfaceByName(md.config.InterfaceName)
 		if err != nil {
 			return fmt.Errorf("multicast interface '%s' not found: %w", md.config.InterfaceName, err)
 		}
@@ -83,9 +85,14 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 		}
 		targetIfaces = append(targetIfaces, *iface)
 	} else {
-		allIfaces, err := net.Interfaces()
+		allIfaces, err := network.EnumerateInterfaces()
 		if err != nil {
-			return fmt.Errorf("failed to list network interfaces: %w", err)
+			if runtime.GOOS != "android" {
+				return fmt.Errorf("failed to list network interfaces: %w", err)
+			}
+			// Android/Termux where netlink is blocked by SELinux.
+			md.logger.Warnf("Failed to list network interfaces (%v); falling back to the default multicast interface", err)
+			return md.listenOnDefaultInterface(ctx, addr)
 		}
 		for _, iface := range allIfaces {
 			if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagMulticast) == 0 {
@@ -96,7 +103,14 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 	}
 
 	if len(targetIfaces) == 0 {
-		return fmt.Errorf("no suitable multicast interface found")
+		if runtime.GOOS != "android" {
+			return fmt.Errorf("no suitable multicast interface found")
+		}
+		// No usable multicast interface (e.g. Android on cellular, where the
+		// only visible interfaces don't support multicast). Fall back to the
+		// kernel's default multicast interface, which the sandbox permits.
+		md.logger.Warnf("No suitable multicast interface found; falling back to the default multicast interface")
+		return md.listenOnDefaultInterface(ctx, addr)
 	}
 
 	for _, iface := range targetIfaces {
@@ -124,6 +138,26 @@ func (md *MulticastDiscovery) StartListening(ctx context.Context) error {
 		return fmt.Errorf("failed to listen on any multicast interface")
 	}
 
+	return nil
+}
+
+// listenOnDefaultInterface binds a single multicast listener on the kernel's
+// default multicast interface (index 0). This is the only working option on
+// Android/Termux, where netlink-based interface enumeration is blocked and the
+// visible cellular interfaces reject multicast membership (ENODEV).
+func (md *MulticastDiscovery) listenOnDefaultInterface(ctx context.Context, addr *net.UDPAddr) error {
+	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on default multicast interface: %w", err)
+	}
+	_ = conn.SetReadBuffer(2048)
+
+	md.connsMu.Lock()
+	md.conns = append(md.conns, conn)
+	md.connsMu.Unlock()
+
+	go md.listenLoop(ctx, conn)
+	md.logger.Debugf("Multicast discovery listening on %s (default interface)", md.config.MulticastAddr)
 	return nil
 }
 

@@ -32,7 +32,7 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 - **Clipboard Integration** - Incoming text/plain transfers copied to clipboard instantly; send clipboard text directly
 - **Privacy Mode** - Anonymize device identity during discovery and transfer (`--private`)
 - **Metadata Preserved** - File timestamps preserved on transfer; EXIF/metadata stripping in private mode
-- **Cross-Platform** - Linux, macOS, Windows
+- **Cross-Platform** - Linux, macOS, Windows, and Android (Termux)
 
 ## Quick Start
 

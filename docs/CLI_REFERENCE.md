@@ -43,6 +43,49 @@ localgo serve [flags]
 | `--daemon`, `-d` | bool | false | Run server as a background daemon |
 | `--open` | bool | false | Open download directory after transfer completes |
 | `--iface` | string | — | Multicast network interface name |
+| `--ipc` | bool | false | Local control socket for third-party apps (status, peers, approve/reject transfers) |
+
+**IPC control socket (`--ipc`):** starts a Unix-domain socket (a 0700
+directory under the user cache dir, e.g. `~/.cache/localgo/ipc.sock`; on
+Windows use `--auto-accept`) so GUIs, tray apps, and scripts can drive the
+running server. Transfer approvals route to this socket instead of the
+interactive terminal prompt, which is ideal for headless daemons.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/status` | Alias, fingerprint, port, protocol, version, download dir, auto-accept, pending count |
+| `GET /v1/devices` | Recently discovered peers |
+| `GET /v1/pending` | Transfers awaiting a decision (each with a `pendingId`) |
+| `GET`/`POST /v1/transfer/accept?pendingId=ID` | Approve a pending transfer (404 if unknown/expired) |
+| `GET`/`POST /v1/transfer/reject?pendingId=ID` | Reject a pending transfer |
+| `GET /v1/events` | SSE stream of live activity (see below) |
+
+```bash
+localgo serve --ipc &
+# approve the oldest pending transfer
+curl -s --unix-socket ~/.cache/localgo/ipc.sock http://ipc/v1/pending
+curl -s --unix-socket ~/.cache/localgo/ipc.sock \
+  "http://ipc/v1/transfer/accept?pendingId=<ID>"
+
+# tail the event stream
+curl -N --unix-socket ~/.cache/localgo/ipc.sock http://ipc/v1/events
+```
+
+**Event stream (`GET /v1/events`):** `text/event-stream` of activity, each
+frame carrying a monotonic `id`, an `event` name, and a JSON `data` payload:
+
+| Event | Fired when |
+|-------|-----------|
+| `transfer_pending` | A transfer is awaiting an accept/reject decision |
+| `transfer_progress` | Upload progress (throttled to 1% steps) |
+| `transfer_complete` | A file finished saving (path, size, sender) |
+| `transfer_rejected` | A pending transfer was rejected or timed out |
+| `device_discovered` | A peer was found by discovery |
+
+A 15s `: keepalive` comment keeps idle connections open. Send
+`Last-Event-ID: <id>` (or `?lastEventId=<id>`) to replay events missed while
+disconnected; without it, a new connection starts live and does not receive
+history.
 
 **Exec Hook Placeholders:**
 | Placeholder | Description |
@@ -116,8 +159,10 @@ Sends one or more files to a destination device.
 
 **Usage:**
 ```bash
-localgo send --file FILE [flags]
+localgo send [FILES...] [flags]
 ```
+
+Files may be passed positionally, with `--file` (repeatable), or both.
 
 **Flags:**
 | Flag | Type | Default | Description |
@@ -134,6 +179,37 @@ localgo send --file FILE [flags]
 | `--stdin` | bool | false | Send text read from standard input (stdin) |
 | `--quick`, `-q` | bool | false | Fast discovery mode (skip cache probe, multicast burst only) |
 | `--pin` | string | — | PIN for sender authentication |
+| `--zip`, `-z` | bool | false | Zip directories before sending (directories require `--zip`) |
+| `--json` | bool | false | Machine-readable NDJSON progress events on stdout |
+
+**Directories:** passing a directory without `--zip` is an error; with `--zip` it
+is compressed to a temporary archive named `<dir>.zip` and removed after the
+transfer.
+
+**Machine-readable output (`--json`):** stdout carries only NDJSON events
+(`transfer_start`, `progress`, `file_complete`, `success`, `error`); progress
+bars and logs stay on stderr. Intended for wrappers (Python, Node, GUI shells):
+```bash
+localgo send report.pdf --to MyPhone --json
+# {"timestamp":1775080000000,"type":"transfer_start","file":"report.pdf","total":1048576}
+# {"timestamp":1775080000123,"type":"file_complete","file":"report.pdf","bytes":1048576,"total":1048576,"percent":100}
+# {"timestamp":1775080000130,"type":"success"}
+```
+
+**PIN challenge (401):** when the receiver demands a PIN, `send` prompts once on
+an interactive terminal and retries a single time. With `--json` it never
+prompts and instead emits `{"type":"pin_required"}` so a wrapper can supply the
+PIN itself (use `--pin` to pass it non-interactively).
+
+**Interrupting a transfer:** Ctrl+C (or `--timeout` expiring) cancels the
+uploads and immediately posts `/cancel` to the receiver — on a detached 1.5s
+context, so the receiver frees its session even though the transfer context is
+already dead. A successful transfer does not send `/cancel`.
+
+**Integrity failures (422):** if a receiver verifies a sender-declared SHA-256
+and it does not match, it answers `422 Unprocessable Entity` and discards the
+file; the sender reports it as an integrity failure rather than a generic
+upload error.
 
 **Discovery Logic:**
 1. **Direct IP** (`--ip`): Skips discovery entirely, sends directly to the given IP:port.

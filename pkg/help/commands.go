@@ -13,6 +13,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo serve --pin 123456 --alias MyDevice",
 				"localgo serve --dir /tmp/downloads --verbose",
 				"localgo serve --auto-accept --quiet",
+				"localgo serve --ipc",
 				"localgo serve --no-clipboard",
 				"localgo serve --exec 'notify-send \"Got: %f\"'",
 				"localgo serve --daemon",
@@ -34,6 +35,7 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--history", Type: "string", Default: "~/.local/share/localgo/history.jsonl", Description: "Path to transfer history JSONL file"},
 				{Name: "--exec", Type: "string", Default: "", Description: "Shell command to execute after each received file (use %f, %n, %s, %a, %i)"},
 				{Name: "--iface", Type: "string", Default: "", Description: "Multicast network interface name"},
+				{Name: "--ipc", Type: "bool", Default: "false", Description: "Local control socket for third-party apps (status, peers, approve/reject transfers)"},
 			},
 		},
 		"share": {
@@ -108,8 +110,10 @@ func GetCommandHelp(commandName string) *CommandHelp {
 		"send": {
 			Name:        "send",
 			Description: "Send a file or clipboard text to another LocalGo device",
-			Usage:       "localgo send [OPTIONS]",
+			Usage:       "localgo send [FILES...] [OPTIONS]",
 			Examples: []string{
+				"localgo send document.pdf --to MyPhone",
+				"localgo send photo1.jpg photo2.jpg --to MyPhone",
 				"localgo send --file document.pdf --to MyPhone",
 				"localgo send --ip 192.168.1.42 --file document.pdf",
 				"localgo send --ip 192.168.1.42:53317 --file document.pdf",
@@ -121,7 +125,10 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				"localgo send --file large.zip --quick",
 				"localgo send -q --file document.pdf --to Phone",
 				"localgo send --file secret.pdf --to MyPhone --pin 1234",
+				"localgo send --file ./my-folder --zip --to MyPhone",
+				"localgo send ./my-folder --zip --ip 192.168.1.42",
 				"localgo send (starts interactive clipboard or file picker if empty)",
+				"localgo send report.pdf --to MyPhone --json",
 			},
 			Flags: []FlagHelp{
 				{Name: "--file", Type: "string", Default: "", Description: "File or directory to send (optional, can be specified multiple times)"},
@@ -131,6 +138,8 @@ func GetCommandHelp(commandName string) *CommandHelp {
 				{Name: "--stdin", Type: "bool", Default: "false", Description: "Send text read from standard input (stdin)"},
 				{Name: "--quick, -q", Type: "bool", Default: "false", Description: "Skip subnet scan; use cache + multicast only for faster discovery"},
 				{Name: "--pin", Type: "string", Default: "", Description: "PIN for receiver authentication"},
+				{Name: "--zip, -z", Type: "bool", Default: "false", Description: "Zip directories before sending (directories require --zip)"},
+				{Name: "--json", Type: "bool", Default: "false", Description: "Machine-readable NDJSON progress events on stdout"},
 				{Name: "--port", Type: "int", Default: "auto-detect", Description: "Target device port"},
 				{Name: "--timeout", Type: "int", Default: "30", Description: "Send timeout in seconds"},
 				{Name: "--alias", Type: "string", Default: "from config", Description: "Sender alias"},

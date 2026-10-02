@@ -37,6 +37,21 @@ type ReceiveHandler struct {
 	historyLog     *history.Logger
 	promptMutex    sync.Mutex
 	shutdownCtx    context.Context
+	// pending, when non-nil, routes accept/reject decisions to an external
+	// controller (see EnableTransferHook, pkg/ipc) instead of the
+	// interactive terminal prompt.
+	pending *PendingRegistry
+	// broker, when non-nil, streams transfer activity to IPC/SSE consumers.
+	broker PublishBroker
+	// lastProgress throttles progress event publishing per file.
+	progressMu   sync.Mutex
+	lastProgress map[string]int64
+}
+
+// SetEventBroker enables streaming of transfer activity to IPC/SSE consumers.
+func (h *ReceiveHandler) SetEventBroker(broker PublishBroker) {
+	h.broker = broker
+	h.lastProgress = make(map[string]int64)
 }
 
 // NewReceiveHandler creates a new ReceiveHandler.
@@ -48,6 +63,16 @@ func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveServi
 		historyLog:     historyLog,
 		shutdownCtx:    shutdownCtx,
 	}
+}
+
+// EnableTransferHook routes transfer accept/reject decisions to an external
+// controller instead of the interactive terminal prompt. It returns the
+// registry the controller decides on (see pkg/ipc).
+func (h *ReceiveHandler) EnableTransferHook() *PendingRegistry {
+	if h.pending == nil {
+		h.pending = NewPendingRegistry(h.broker)
+	}
+	return h.pending
 }
 
 // PrepareUploadHandlerV2 handles POST /v2/prepare-upload requests.
@@ -115,10 +140,12 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 	// already present, Size matches Preview length). Fall through to the
 	// normal upload path otherwise.
 	var clipboardMessage string
-	for _, f := range requestDto.Files {
+	var clipboardFileID string
+	for id, f := range requestDto.Files {
 		if f.Preview != nil && *f.Preview != "" && strings.HasPrefix(f.FileType, "text/plain") {
 			if len(requestDto.Files) == 1 && f.Size == int64(len(*f.Preview)) {
 				clipboardMessage = *f.Preview
+				clipboardFileID = id
 			}
 			break
 		}
@@ -137,12 +164,35 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 				}
 			}
 			if !isTrusted {
-				h.promptMutex.Lock()
-				accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
-				h.promptMutex.Unlock()
-				if !accepted {
-					httputil.RespondError(w, http.StatusForbidden, "Rejected")
-					return
+				if h.pending != nil {
+					accepted := h.awaitIPCDecision(PendingTransfer{
+						SenderAlias: cli.Sanitize(requestDto.Info.Alias),
+						SenderIP:    senderIP,
+						Clipboard:   true,
+						Files: []PendingFile{{
+							ID:   clipboardFileID,
+							Name: "clipboard message",
+							Size: int64(len(clipboardMessage)),
+							Type: "text/plain",
+						}},
+					}, promptTimeout)
+					if !accepted {
+						httputil.RespondError(w, http.StatusForbidden, "Rejected")
+						return
+					}
+				} else {
+					// Never queue behind an active prompt: the sender would hang
+					// with no feedback. Fail fast so it can retry or surface it.
+					if !h.promptMutex.TryLock() {
+						httputil.RespondError(w, http.StatusConflict, "Another transfer is awaiting approval")
+						return
+					}
+					accepted := h.promptForClipboard(cli.Sanitize(requestDto.Info.Alias), r.RemoteAddr, clipboardMessage)
+					h.promptMutex.Unlock()
+					if !accepted {
+						httputil.RespondError(w, http.StatusForbidden, "Rejected")
+						return
+					}
 				}
 			}
 		}
@@ -219,10 +269,23 @@ func (h *ReceiveHandler) PrepareUploadHandlerV2(w http.ResponseWriter, r *http.R
 		}
 
 		if !isTrusted {
-			h.promptMutex.Lock()
-			accepted := h.promptUserForAcceptance(sender, requestDto.Files)
-			h.promptMutex.Unlock()
-
+			var accepted bool
+			if h.pending != nil {
+				accepted = h.awaitIPCDecision(PendingTransfer{
+					SenderAlias: sender.Alias,
+					SenderIP:    sender.IP,
+					Files:       pendingFilesFromDTO(requestDto.Files),
+				}, promptTimeout)
+			} else {
+				// Never queue behind an active prompt: the sender would hang
+				// with no feedback. Fail fast so it can retry or surface it.
+				if !h.promptMutex.TryLock() {
+					httputil.RespondError(w, http.StatusConflict, "Another transfer is awaiting approval")
+					return
+				}
+				accepted = h.promptUserForAcceptance(sender, requestDto.Files)
+				h.promptMutex.Unlock()
+			}
 			if !accepted {
 				h.logger.Infof("Transfer rejected by user")
 				httputil.RespondError(w, http.StatusForbidden, "Rejected") // 403 Forbidden
@@ -280,20 +343,31 @@ func (h *ReceiveHandler) CancelHandler(w http.ResponseWriter, r *http.Request) {
 			go func() {
 				var cmd string
 				var args []string
-				if runtime.GOOS == "windows" {
-					cmd = "explorer.exe"
-					args = []string{h.config.DownloadDir}
-				} else if runtime.GOOS == "darwin" {
-					cmd = "open"
-					args = []string{h.config.DownloadDir}
-				} else if _, err := exec.LookPath("xdg-open"); err == nil {
-					cmd = "xdg-open"
-					args = []string{h.config.DownloadDir}
-				} else {
-					h.logger.Debugf("xdg-open not found in PATH, skip opening download dir")
-					return
+				// On Android/Termux, prefer termux-open so the directory opens
+				// in a file manager rather than failing under XDG.
+				// (termux-* tools only exist on Android; skip the PATH scan elsewhere.)
+				if runtime.GOOS == "android" {
+					if _, err := exec.LookPath("termux-open"); err == nil {
+						cmd = "termux-open"
+						args = []string{h.config.DownloadDir}
+					}
 				}
-				exec.Command(cmd, args...).Run()
+				if cmd == "" {
+					if runtime.GOOS == "windows" {
+						cmd = "explorer.exe"
+						args = []string{h.config.DownloadDir}
+					} else if runtime.GOOS == "darwin" {
+						cmd = "open"
+						args = []string{h.config.DownloadDir}
+					} else if _, err := exec.LookPath("xdg-open"); err == nil {
+						cmd = "xdg-open"
+						args = []string{h.config.DownloadDir}
+					} else {
+						h.logger.Debugf("No opener found in PATH, skip opening download dir")
+						return
+					}
+					exec.Command(cmd, args...).Run()
+				}
 			}()
 		}
 	} else {

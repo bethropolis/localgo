@@ -6,9 +6,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -36,15 +38,29 @@ var (
 	sendstdin          bool
 	sendquick          bool
 	sendpin            string
+	sendzip            bool
+	sendjson           bool
 )
 
 var sendCmd = &cobra.Command{
-	Use:          "send",
+	Use:          "send [FILES...]",
 	Short:        "Send a file to another LocalGo device",
 	SilenceUsage: true,
+	Args:         cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		files := sendfiles
+		// Positional paths merge with --file (neither form wins).
+		files := append([]string{}, sendfiles...)
+		files = append(files, args...)
 		var sendOpts []send.SendOption
+
+		if sendjson {
+			cli.SetJSONMode(true)
+		}
+		sendLogger := logging.Global()
+		if cli.JSONMode() {
+			// Keep stdout pure NDJSON: library logs would corrupt the event stream.
+			sendLogger = logging.NewQuiet()
+		}
 
 		if sendclipboard && sendstdin {
 			return fmt.Errorf("cannot use both --clipboard and --stdin")
@@ -73,6 +89,9 @@ var sendCmd = &cobra.Command{
 		}
 
 		if len(files) == 0 && len(sendOpts) == 0 {
+			if cli.JSONMode() {
+				return fmt.Errorf("no file specified: pass files as arguments or use --file/--clipboard/--stdin with --json (no interactive picker)")
+			}
 			selected, err := cli.LaunchFilePicker()
 			if err == nil && selected != "" {
 				files = []string{selected}
@@ -80,7 +99,7 @@ var sendCmd = &cobra.Command{
 		}
 
 		if len(files) == 0 && len(sendOpts) == 0 {
-			return fmt.Errorf("no file specified: use --file flag, --clipboard, or select from the file browser")
+			return fmt.Errorf("no file specified: pass files as arguments, or use --file, --clipboard, or select from the file browser")
 		}
 
 		for _, file := range files {
@@ -88,6 +107,39 @@ var sendCmd = &cobra.Command{
 				return fmt.Errorf("file not found: %s", file)
 			}
 		}
+
+		// Handle directories: compress to a temp zip when --zip is set,
+		// otherwise fail with a hint (raw directory trees are never sent
+		// implicitly). Applies to both the --ip and discovery send paths.
+		var tempZips []string
+		defer func() {
+			for _, tz := range tempZips {
+				_ = os.Remove(tz)
+			}
+		}()
+
+		processedFiles := make([]string, 0, len(files))
+		for _, file := range files {
+			info, err := os.Stat(file)
+			if err != nil || !info.IsDir() {
+				processedFiles = append(processedFiles, file)
+				continue
+			}
+			if !sendzip {
+				return fmt.Errorf("'%s' is a directory; use --zip to compress and send it as an archive", file)
+			}
+			if !Cfg.Quiet {
+				cli.PrintInfo("Compressing directory '%s'...", filepath.Base(file))
+			}
+			zipPath, err := zipDirToTemp(file)
+			if err != nil {
+				return fmt.Errorf("failed to compress directory %s: %w", file, err)
+			}
+			tempZips = append(tempZips, zipPath)
+			processedFiles = append(processedFiles, zipPath)
+			sendOpts = append(sendOpts, send.WithRemoteName(zipPath, zipArchiveName(file)))
+		}
+		files = processedFiles
 
 		// Direct send via --ip: skip discovery entirely
 		if sendip != "" {
@@ -157,24 +209,28 @@ var sendCmd = &cobra.Command{
 			}
 			cli.PrintInfo("From: %s", fromAlias)
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
+			// Ctrl+C/SIGTERM cancels the transfer; the send pipeline then
+		// releases the receiver's session via /cancel.
+		ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(sendtimeout)*time.Second)
 			defer cancel()
 
 			// TOFU check: verify cached fingerprint matches before connecting
 		if device.Fingerprint != "" {
-			pc := discovery.NewPeerCache(logging.Global())
+			pc := discovery.NewPeerCache(sendLogger)
 			if err := send.VerifyDeviceFingerprint(pc, device); err != nil {
 				return err
 			}
 		}
 
-		if err := send.SendToDevice(ctx, Cfg, device, files, logging.Global(), sendOpts...); err != nil {
+		if err := send.SendToDevice(ctx, Cfg, device, files, sendLogger, sendOpts...); err != nil {
 				return fmt.Errorf("failed to send files: %w", err)
 		}
 
 		// Save fingerprint for TOFU on subsequent connections
 		if device.Fingerprint != "" {
-			pc := discovery.NewPeerCache(logging.Global())
+			pc := discovery.NewPeerCache(sendLogger)
 			pc.Save(device)
 		}
 
@@ -287,18 +343,22 @@ var sendCmd = &cobra.Command{
 			fromAlias = "Anonymous"
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
+		// Ctrl+C/SIGTERM cancels the transfer; the send pipeline then
+		// releases the receiver's session via /cancel.
+		ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(sendtimeout)*time.Second)
 		defer cancel()
 
 		var err error
 		if selectedDevice != nil {
 			cli.PrintInfo("To: %s (%s:%d)", selectedDevice.Alias, selectedDevice.IP, selectedDevice.Port)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, logging.Global(), sendOpts...)
+			err = send.SendToDevice(ctx, Cfg, selectedDevice, files, sendLogger, sendOpts...)
 		} else {
 			cli.PrintInfo("To: %s", target)
 			cli.PrintInfo("From: %s", fromAlias)
-			err = send.SendFiles(ctx, Cfg, files, target, sendport, logging.Global(), sendOpts...)
+			err = send.SendFiles(ctx, Cfg, files, target, sendport, sendLogger, sendOpts...)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to send files: %w", err)
@@ -323,6 +383,8 @@ func init() {
 	sendCmd.Flags().BoolVar(&sendstdin, "stdin", false, "Send text read from standard input (stdin)")
 	sendCmd.Flags().BoolVarP(&sendquick, "quick", "q", false, "Skip subnet scan; use cache + multicast only")
 	sendCmd.Flags().StringVar(&sendpin, "pin", "", "PIN for receiver authentication")
+	sendCmd.Flags().BoolVarP(&sendzip, "zip", "z", false, "Zip directories before sending")
+	sendCmd.Flags().BoolVar(&sendjson, "json", false, "Machine-readable NDJSON progress events on stdout")
 
 	sendCmd.RegisterFlagCompletionFunc("to", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		cache := discovery.NewPeerCache(nil)

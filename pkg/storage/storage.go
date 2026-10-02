@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -15,6 +16,11 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/logging"
 )
+
+// ErrChecksumMismatch reports that a stream's SHA-256 digest did not match
+// the digest the sender declared. Callers use errors.Is to map it to the
+// LocalSend v2.2 response code 422 (Unprocessable Entity).
+var ErrChecksumMismatch = errors.New("SHA-256 checksum mismatch")
 
 // Thread-safe pool of 32KB buffers for small files.
 var smallBufferPool = sync.Pool{
@@ -115,7 +121,7 @@ func SaveStreamToFileWithMetadata(stream io.Reader, filePath string, fileSize in
 	if hasher != nil {
 		calculatedHash := hex.EncodeToString(hasher.Sum(nil))
 		if calculatedHash != *expectedSha256 {
-			return fmt.Errorf("integrity violation: SHA-256 mismatch (got %s, expected %s)", calculatedHash, *expectedSha256)
+			return fmt.Errorf("%w: got %s, expected %s", ErrChecksumMismatch, calculatedHash, *expectedSha256)
 		}
 		if logger != nil {
 			logger.Infow("SHA-256 integrity verified", "path", filePath)

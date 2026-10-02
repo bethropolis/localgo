@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/bethropolis/localgo/pkg/clipboard"
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/model"
@@ -113,10 +114,13 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- Progress Callback ---
+	// Progress events are published regardless of the TUI so SSE consumers
+	// see them even in --quiet mode; they are throttled to whole percents.
 	onProgress := func(bytesWritten int64) {
 		if trackProgress != nil {
 			trackProgress(bytesWritten)
 		}
+		h.publishProgress(rawFileName, bytesWritten, dto.Size)
 	}
 
 	// --- Body Size Limit ---
@@ -137,7 +141,14 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	}
 
 	// --- Text/Clipboard Handling ---
-	if strings.HasPrefix(dto.FileType, "text/plain") && !h.config.NoClipboard {
+	// Only treat the upload as a clipboard message when the sender embedded
+	// the full content in Preview (the LocalSend clipboard-message signal,
+	// also used by `send --clipboard`/`--stdin`). A real text FILE (no
+	// Preview, or a Preview smaller than the payload such as a thumbnail)
+	// must always land on disk — otherwise both sides report success while
+	// no file appears in the download directory.
+	isClipboardMessage := dto.Preview != nil && int64(len(*dto.Preview)) >= dto.Size
+	if strings.HasPrefix(dto.FileType, "text/plain") && isClipboardMessage && !h.config.NoClipboard {
 		limited := io.LimitReader(bodyReader, maxTextSize+1)
 		textBytes, readErr := io.ReadAll(limited)
 
@@ -186,6 +197,16 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	// --- Binary File Save ---
 	err = storage.SaveStreamToFileWithMetadata(bodyReader, destinationPath, dto.Size, modified, accessed, dto.SHA256, onProgress, h.logger)
 	if err != nil {
+		// A digest mismatch is not a server error: the payload arrived intact
+		// but does not match what the sender declared. LocalSend v2.2 §4.2
+		// requires 422 Unprocessable Entity for this case.
+		if errors.Is(err, storage.ErrChecksumMismatch) {
+			h.logger.Errorf("Integrity check failed for %s (ID: %s): %v", dto.FileName, reqFileId, err)
+			h.receiveService.FailFile(reqSessionId, reqFileId)
+			h.logTransfer(sender.Alias, sender.IP, rawFileName, destinationPath, dto.Size, dto.FileType, history.StatusFailed)
+			httputil.RespondError(w, http.StatusUnprocessableEntity, "Checksum mismatch: file failed integrity verification")
+			return
+		}
 		h.logger.Errorf("Error saving file %s (ID: %s): %v", dto.FileName, reqFileId, err)
 		h.receiveService.FailFile(reqSessionId, reqFileId)
 		h.logTransfer(sender.Alias, sender.IP, rawFileName, destinationPath, dto.Size, dto.FileType, history.StatusFailed)
@@ -198,7 +219,57 @@ func (h *ReceiveHandler) UploadHandlerV2(w http.ResponseWriter, r *http.Request)
 	h.receiveService.CompleteFile(reqSessionId, reqFileId)
 	h.logTransfer(sender.Alias, sender.IP, rawFileName, destinationPath, dto.Size, dto.FileType, history.StatusReceived)
 	h.runExecHook(destinationPath, rawFileName, sender.Alias, sender.IP, dto.Size)
+	h.publishComplete(rawFileName, sender.Alias, sender.IP, destinationPath, dto.Size, dto.FileType)
 	w.WriteHeader(http.StatusOK)
+}
+
+// progressEventStep is the minimum percent change between published progress
+// events, keeping SSE traffic bounded for large files.
+const progressEventStep = 1
+
+// publishProgress streams a throttled progress event for a file.
+func (h *ReceiveHandler) publishProgress(fileName string, written, total int64) {
+	if h.broker == nil {
+		return
+	}
+	var percent float64
+	if total > 0 {
+		percent = float64(written) / float64(total) * 100
+		marker := int64(percent / progressEventStep)
+		h.progressMu.Lock()
+		prev, seen := h.lastProgress[fileName]
+		// Always publish the final byte count.
+		if seen && marker == prev && written < total {
+			h.progressMu.Unlock()
+			return
+		}
+		h.lastProgress[fileName] = marker
+		h.progressMu.Unlock()
+	}
+	h.broker.Publish(events.TypeTransferProgress, map[string]interface{}{
+		"file":    fileName,
+		"bytes":   written,
+		"total":   total,
+		"percent": percent,
+	})
+}
+
+// publishComplete streams the terminal event for a finished transfer.
+func (h *ReceiveHandler) publishComplete(fileName, senderAlias, senderIP, path string, size int64, fileType string) {
+	if h.broker == nil {
+		return
+	}
+	h.progressMu.Lock()
+	delete(h.lastProgress, fileName)
+	h.progressMu.Unlock()
+	h.broker.Publish(events.TypeTransferComplete, map[string]interface{}{
+		"file":        fileName,
+		"senderAlias": senderAlias,
+		"senderIp":    senderIP,
+		"path":        path,
+		"size":        size,
+		"fileType":    fileType,
+	})
 }
 
 // saveTextAsFileTo saves text content as a file when clipboard is unavailable or text is too large.
