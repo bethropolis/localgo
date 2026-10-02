@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/google/uuid"
 )
@@ -34,18 +35,27 @@ type pendingEntry struct {
 	decided  bool
 }
 
+// PublishBroker is implemented by the events broker; the receive handler uses
+// it to stream activity to IPC/SSE consumers. It is satisfied by
+// *events.Broker and kept as an interface to avoid a package cycle.
+type PublishBroker interface {
+	Publish(eventType string, data interface{})
+}
+
 // PendingRegistry tracks transfers awaiting an external (IPC) decision.
 // Every entry is removed by its awaiting handler — including on timeout and
 // shutdown — so Decide on an unknown ID simply reports false instead of
 // blocking or leaking.
 type PendingRegistry struct {
-	mu    sync.Mutex
-	items map[string]*pendingEntry
+	mu     sync.Mutex
+	items  map[string]*pendingEntry
+	broker PublishBroker
 }
 
-// NewPendingRegistry creates an empty pending-transfer registry.
-func NewPendingRegistry() *PendingRegistry {
-	return &PendingRegistry{items: make(map[string]*pendingEntry)}
+// NewPendingRegistry creates an empty pending-transfer registry. broker may
+// be nil, in which case no events are published.
+func NewPendingRegistry(broker PublishBroker) *PendingRegistry {
+	return &PendingRegistry{items: make(map[string]*pendingEntry), broker: broker}
 }
 
 // Add registers a transfer and returns its ID plus the decision channel.
@@ -58,7 +68,24 @@ func (r *PendingRegistry) Add(t PendingTransfer) (string, <-chan bool) {
 	r.mu.Lock()
 	r.items[id] = &pendingEntry{transfer: t, decide: ch}
 	r.mu.Unlock()
+	r.publish(events.TypeTransferPending, t)
 	return id, ch
+}
+
+// publish forwards an event to the broker, tolerating a nil broker.
+func (r *PendingRegistry) publish(eventType string, data interface{}) {
+	if r == nil || r.broker == nil {
+		return
+	}
+	r.broker.Publish(eventType, data)
+}
+
+// publishEvent forwards an event from the handler, tolerating a nil broker.
+func (h *ReceiveHandler) publishEvent(eventType string, data interface{}) {
+	if h == nil || h.broker == nil {
+		return
+	}
+	h.broker.Publish(eventType, data)
 }
 
 // Remove drops a pending transfer. Safe to call for unknown IDs.
@@ -121,9 +148,13 @@ func (h *ReceiveHandler) awaitIPCDecision(t PendingTransfer, timeout time.Durati
 	os.Stderr.Sync()
 	select {
 	case accept := <-ch:
+		if !accept {
+			h.publishEvent(events.TypeTransferRejected, map[string]string{"pendingId": id})
+		}
 		return accept
 	case <-time.After(timeout):
 		h.logger.Warnf("External decision timeout for %s, rejecting", id)
+		h.publishEvent(events.TypeTransferRejected, map[string]string{"pendingId": id, "reason": "timeout"})
 		return false
 	case <-h.shutdownCtx.Done():
 		return false

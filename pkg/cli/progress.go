@@ -55,6 +55,18 @@ func (mp *MultiProgress) AddBar(name string, size int64) func(int64) {
 	}
 }
 
+// Abort force-finishes every bar. It is required on the error path:
+// bars created with EnableTriggerComplete only complete when their progress
+// reaches the total, so a cancelled or failed upload would otherwise make
+// Wait block forever.
+func (mp *MultiProgress) Abort() {
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	for _, bar := range mp.bars {
+		bar.Abort(true)
+	}
+}
+
 func (mp *MultiProgress) ForceComplete() {
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
@@ -63,6 +75,8 @@ func (mp *MultiProgress) ForceComplete() {
 	}
 }
 
+// Wait blocks until all bars finish. Abort must be called first on failure
+// paths, otherwise it can block indefinitely.
 func (mp *MultiProgress) Wait() {
 	mp.pool.Wait()
 
@@ -76,7 +90,6 @@ func (mp *MultiProgress) Wait() {
 			fmt.Fprintf(os.Stderr, "\033[F\033[K")
 		}
 	}
-	fmt.Fprintf(os.Stderr, "%s Files transferred successfully\n", IconCheck)
 }
 
 func truncateName(name string, maxLen int) string {

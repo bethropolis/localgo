@@ -26,11 +26,13 @@ func JSONMode() bool { return jsonMode.Load() }
 type EventType string
 
 const (
-	EventTransferStart EventType = "transfer_start"
-	EventProgress      EventType = "progress"
-	EventFileComplete  EventType = "file_complete"
-	EventSuccess       EventType = "success"
-	EventError         EventType = "error"
+	EventTransferStart     EventType = "transfer_start"
+	EventProgress          EventType = "progress"
+	EventFileComplete      EventType = "file_complete"
+	EventSuccess           EventType = "success"
+	EventError             EventType = "error"
+	EventPINRequired       EventType = "pin_required"
+	EventTransferCancelled EventType = "transfer_cancelled"
 )
 
 // IPCEvent is a single newline-delimited JSON event on stdout.

@@ -16,7 +16,7 @@ import (
 )
 
 func TestPendingRegistryDecideRoundTrip(t *testing.T) {
-	reg := handlers.NewPendingRegistry()
+	reg := handlers.NewPendingRegistry(nil)
 
 	id, ch := reg.Add(handlers.PendingTransfer{SenderAlias: "Phone", Files: []handlers.PendingFile{
 		{ID: "f1", Name: "a.txt", Size: 3, Type: "text/plain"},
@@ -53,7 +53,7 @@ func TestPendingRegistryDecideRoundTrip(t *testing.T) {
 }
 
 func TestPendingRegistryDecideUnknown(t *testing.T) {
-	reg := handlers.NewPendingRegistry()
+	reg := handlers.NewPendingRegistry(nil)
 	if reg.Decide("nope", true) {
 		t.Error("expected Decide on unknown ID to report false")
 	}

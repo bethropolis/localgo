@@ -682,3 +682,51 @@ func TestPrepareUploadHandlerV2_NegativeFileSize_Returns400(t *testing.T) {
 		t.Errorf("expected 400 Bad Request for negative file size, got %v (body: %s)", status, rr.Body.String())
 	}
 }
+
+// TestUploadHandlerV2_ChecksumMismatch_Returns422 verifies a SHA-256 digest
+// mismatch is reported as 422 Unprocessable Entity (LocalSend v2.2 §4.2),
+// not a generic 500, and that the bad file is not left behind.
+func TestUploadHandlerV2_ChecksumMismatch_Returns422(t *testing.T) {
+	clipboard.OverrideProvider(testClipboardSuccessStub(), "")
+	cfg := &config.Config{AutoAccept: true, NoClipboard: true}
+	handler, receiveService, tempDir := setupReceiveHandler(t, cfg)
+
+	wrongHash := "0000000000000000000000000000000000000000000000000000000000000000"
+	files := map[string]model.FileDto{
+		"f1": {ID: "f1", FileName: "corrupt.bin", Size: 11, FileType: "application/octet-stream", SHA256: &wrongHash},
+	}
+	session, _ := receiveService.CreateSession(model.DeviceInfo{IP: "127.0.0.1"}, files)
+
+	var token string
+	for _, f := range session.Files {
+		token = f.Token
+		break
+	}
+
+	req, _ := http.NewRequest(http.MethodPost,
+		"/v2/upload?sessionId="+session.SessionID+"&fileId=f1&token="+token,
+		strings.NewReader("hello world"),
+	)
+	req.RemoteAddr = "127.0.0.1:9999"
+	rr := httptest.NewRecorder()
+
+	handler.UploadHandlerV2(rr, req)
+
+	if status := rr.Code; status != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity on checksum mismatch, got %v (body: %s)", status, rr.Body.String())
+	}
+
+	// The unverified payload must not be promoted into the download dir.
+	if _, err := os.Stat(filepath.Join(tempDir, "corrupt.bin")); !os.IsNotExist(err) {
+		t.Error("file with bad checksum must not be kept in the download directory")
+	}
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".tmp" {
+			t.Errorf("temporary file left behind: %s", e.Name())
+		}
+	}
+}

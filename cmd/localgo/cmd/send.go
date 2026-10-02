@@ -6,9 +6,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -207,7 +209,11 @@ var sendCmd = &cobra.Command{
 			}
 			cli.PrintInfo("From: %s", fromAlias)
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
+			// Ctrl+C/SIGTERM cancels the transfer; the send pipeline then
+		// releases the receiver's session via /cancel.
+		ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(sendtimeout)*time.Second)
 			defer cancel()
 
 			// TOFU check: verify cached fingerprint matches before connecting
@@ -337,7 +343,11 @@ var sendCmd = &cobra.Command{
 			fromAlias = "Anonymous"
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(sendtimeout)*time.Second)
+		// Ctrl+C/SIGTERM cancels the transfer; the send pipeline then
+		// releases the receiver's session via /cancel.
+		ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(sendtimeout)*time.Second)
 		defer cancel()
 
 		var err error

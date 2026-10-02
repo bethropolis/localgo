@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/ipc"
@@ -188,8 +189,13 @@ var serveCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
+		// Event broker feeds the IPC/SSE stream. It exists even without --ipc
+		// so the receive handler has a single, consistent publish path.
+		eventBroker := events.NewBroker()
+
 		// Start server first to determine the actual port
 		srv := server.NewServer(Cfg, logging.Global())
+		srv.SetEventBroker(eventBroker)
 		if serveipc {
 			srv.SetTransferHookEnabled(true)
 		}
@@ -240,7 +246,7 @@ var serveCmd = &cobra.Command{
 				return fmt.Errorf("transfer hook not initialized")
 			}
 			var err error
-			ipcSrv, err = ipc.StartIPCServer(ipcController{pending: reg, peers: peerCache})
+			ipcSrv, err = ipc.StartIPCServer(ipcController{pending: reg, peers: peerCache}, eventBroker)
 			if err != nil {
 				return fmt.Errorf("failed to start IPC control socket: %w", err)
 			}
@@ -252,11 +258,18 @@ var serveCmd = &cobra.Command{
 		}
 
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
+			alias := device.Alias
+			if Cfg.Private {
+				alias = cli.AnonymizedAlias(device)
+			}
+			eventBroker.Publish(events.TypeDeviceDiscovered, map[string]interface{}{
+				"alias":       alias,
+				"ip":          device.IP,
+				"port":        device.Port,
+				"deviceModel": device.DeviceModel,
+				"deviceType":  device.DeviceType,
+			})
 			if !servequiet {
-				alias := device.Alias
-				if Cfg.Private {
-					alias = cli.AnonymizedAlias(device)
-				}
 				logging.Global().Infof("Device discovered: %s (%s)", alias, device.IP)
 				cli.PrintSuccess("Device discovered: %s (%s)", alias, device.IP)
 			}

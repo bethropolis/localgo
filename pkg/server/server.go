@@ -16,6 +16,7 @@ import (
 
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/history"
 	"github.com/bethropolis/localgo/pkg/httputil"
 	"github.com/bethropolis/localgo/pkg/logging"
@@ -40,6 +41,13 @@ type Server struct {
 	// interactive terminal prompt.
 	transferHook    bool
 	pendingRegistry *handlers.PendingRegistry
+	// eventBroker, when set, receives transfer activity for IPC/SSE streaming.
+	eventBroker *events.Broker
+}
+
+// SetEventBroker enables streaming of transfer activity to IPC/SSE consumers.
+func (s *Server) SetEventBroker(broker *events.Broker) {
+	s.eventBroker = broker
 }
 
 // SetTransferHookEnabled routes transfer decisions to an external
@@ -126,6 +134,7 @@ func (s *Server) configureRoutes() {
 	}
 
 	receiveHandler := handlers.NewReceiveHandler(s.config, s.receiveService, s.historyLog, s.shutdownCtx, s.logger)
+	receiveHandler.SetEventBroker(s.eventBroker)
 	if s.transferHook {
 		s.pendingRegistry = receiveHandler.EnableTransferHook()
 	}

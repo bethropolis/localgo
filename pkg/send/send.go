@@ -7,24 +7,28 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/discovery"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/metadata"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/network"
 	"github.com/google/uuid"
-	"github.com/bethropolis/localgo/pkg/logging"
 )
 
 // SendOption configures the send pipeline.
@@ -453,43 +457,27 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		return fmt.Errorf("failed to marshal prepare dto: %w", err)
 	}
 
-	baseURL := fmt.Sprintf("%s://%s/api/localsend/v2/prepare-upload", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)))
-	if cfg.PIN != "" {
-		baseURL += "?pin=" + cfg.PIN
-	}
-	url := baseURL
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+	prepareResponse, err := doPrepare(ctx, client, device, scheme, cfg, jsonData, logger)
 	if err != nil {
-		return fmt.Errorf("failed to create prepare request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send prepare request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// 204 No Content means the receiver accepted a clipboard message
-	// and no file upload is needed (content was in the Preview field).
-	if resp.StatusCode == http.StatusNoContent {
-		logger.Info("Clipboard message accepted by receiver, no upload needed")
-		cli.EmitEvent(cli.IPCEvent{Type: cli.EventSuccess, Data: "clipboard message accepted, no upload needed"})
-		return nil
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("prepare request failed with status: %s", resp.Status)
+		if errors.Is(err, errClipboardAccepted) {
+			logger.Info("Clipboard message accepted by receiver, no upload needed")
+			cli.EmitEvent(cli.IPCEvent{Type: cli.EventSuccess, Data: "clipboard message accepted, no upload needed"})
+			return nil
+		}
 		cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, Error: err.Error()})
 		return err
 	}
 
-	var prepareResponse model.PrepareUploadResponseDto
-	if err := json.NewDecoder(resp.Body).Decode(&prepareResponse); err != nil {
-		err := fmt.Errorf("failed to decode prepare response: %w", err)
-		cli.EmitEvent(cli.IPCEvent{Type: cli.EventError, Error: err.Error()})
-		return err
-	}
+	// Release the receiver's session as soon as the transfer ends abnormally
+	// (Ctrl+C, --timeout, upload error) instead of leaving it blocked until
+	// its own timeout expires. Uses a detached context because the caller's
+	// context is already cancelled at that point.
+	var transferOK atomic.Bool
+	defer func() {
+		if !transferOK.Load() && prepareResponse.SessionID != "" {
+			releaseReceiverSession(client, device, scheme, prepareResponse.SessionID, logger)
+		}
+	}()
 
 	// Progress bars render on stderr; in JSON mode stdout must stay pure
 	// NDJSON, so skip the TUI and emit track events instead.
@@ -579,10 +567,6 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	}
 
 	wg.Wait()
-	if mp != nil {
-		mp.ForceComplete()
-		mp.Wait()
-	}
 	close(errCh)
 
 	var uploadErrors []error
@@ -590,13 +574,118 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		uploadErrors = append(uploadErrors, err)
 	}
 
+	if mp != nil {
+		if len(uploadErrors) > 0 {
+			// Bars never reach their total on a failed/cancelled upload, so
+			// abort them or Wait would block forever.
+			mp.Abort()
+		} else {
+			mp.ForceComplete()
+		}
+		mp.Wait()
+	}
+
 	if len(uploadErrors) > 0 {
 		return fmt.Errorf("encountered %d upload errors, first error: %w", len(uploadErrors), uploadErrors[0])
 	}
 
+	if mp != nil {
+		fmt.Fprintf(os.Stderr, "%s Files transferred successfully\n", cli.IconCheck)
+	}
 	logger.Info("All files uploaded successfully!")
+	transferOK.Store(true)
 	cli.EmitEvent(cli.IPCEvent{Type: cli.EventSuccess})
 	return nil
+}
+
+// errClipboardAccepted signals the receiver consumed a clipboard message
+// (HTTP 204), so no file upload is needed.
+var errClipboardAccepted = errors.New("clipboard message accepted by receiver")
+
+// postPrepare performs one /prepare-upload request and returns its status
+// code plus body. The body is always drained and closed so a retry is safe.
+func postPrepare(ctx context.Context, client *http.Client, device *model.Device, scheme, pin string, jsonData []byte) (int, []byte, error) {
+	endpoint := fmt.Sprintf("%s://%s/api/localsend/v2/prepare-upload", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)))
+	if pin != "" {
+		endpoint += "?pin=" + url.QueryEscape(pin)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to create prepare request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, nil, fmt.Errorf("prepare request cancelled: %w", ctx.Err())
+		}
+		return 0, nil, fmt.Errorf("failed to send prepare request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("failed to read prepare response: %w", err)
+	}
+	return resp.StatusCode, body, nil
+}
+
+// doPrepare runs /prepare-upload, handling the receiver's PIN challenge: on
+// 401 it asks for a PIN once (interactive TTY only) and retries a single time.
+func doPrepare(ctx context.Context, client *http.Client, device *model.Device, scheme string, cfg *config.Config, jsonData []byte, logger *logging.Logger) (*model.PrepareUploadResponseDto, error) {
+	status, body, err := postPrepare(ctx, client, device, scheme, cfg.PIN, jsonData)
+	if err != nil {
+		return nil, err
+	}
+
+	if status == http.StatusUnauthorized {
+		pin, ok := promptForPIN(fmt.Sprintf("%s requires a PIN", device.Alias))
+		if !ok {
+			return nil, fmt.Errorf("prepare request failed with status: %s (PIN required)", http.StatusText(status))
+		}
+		logger.Infof("Retrying prepare-upload with receiver-provided PIN")
+		if status, body, err = postPrepare(ctx, client, device, scheme, pin, jsonData); err != nil {
+			return nil, err
+		}
+	}
+
+	switch status {
+	case http.StatusNoContent:
+		return nil, errClipboardAccepted
+	case http.StatusOK:
+		// fall through to decode
+	default:
+		return nil, fmt.Errorf("prepare request failed with status: %d %s", status, http.StatusText(status))
+	}
+
+	var prepareResponse model.PrepareUploadResponseDto
+	if err := json.Unmarshal(body, &prepareResponse); err != nil {
+		return nil, fmt.Errorf("failed to decode prepare response: %w", err)
+	}
+	return &prepareResponse, nil
+}
+
+// releaseReceiverSession posts /cancel on a detached 1.5s context so an
+// interrupted or failed transfer frees the receiver's session immediately
+// (the caller's own context is already cancelled at this point).
+func releaseReceiverSession(client *http.Client, device *model.Device, scheme, sessionID string, logger *logging.Logger) {
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	endpoint := fmt.Sprintf("%s://%s/api/localsend/v2/cancel?sessionId=%s", scheme, net.JoinHostPort(device.IP, strconv.Itoa(device.Port)), url.QueryEscape(sessionID))
+	req, err := http.NewRequestWithContext(cancelCtx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		logger.Warnf("Failed to build receiver cancel request: %v", err)
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Warnf("Failed to cancel session %s on receiver: %v", sessionID, err)
+		return
+	}
+	defer resp.Body.Close()
+	logger.Infof("Cancelled session %s on receiver (%s)", sessionID, resp.Status)
+	cli.EmitEvent(cli.IPCEvent{Type: cli.EventTransferCancelled, Data: map[string]string{"sessionId": sessionID}})
 }
 
 

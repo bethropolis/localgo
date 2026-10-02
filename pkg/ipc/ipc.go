@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/bethropolis/localgo/pkg/events"
 	"github.com/bethropolis/localgo/pkg/model"
 	"github.com/bethropolis/localgo/pkg/server/handlers"
 )
@@ -79,15 +80,16 @@ func (s *IPCServer) Close() error {
 	return err
 }
 
-// StartIPCServer starts the control socket for ctrl. Callers own the
-// returned server and must Close it on shutdown.
-func StartIPCServer(ctrl Controller) (*IPCServer, error) {
-	return startOnPath(SocketPath(), ctrl)
+// StartIPCServer starts the control socket for ctrl, streaming broker
+// activity on GET /v1/events. Callers own the returned server and must Close
+// it on shutdown.
+func StartIPCServer(ctrl Controller, broker *events.Broker) (*IPCServer, error) {
+	return startOnPath(SocketPath(), ctrl, broker)
 }
 
 // startOnPath binds the control socket at an explicit path (used by tests
 // to stay hermetic instead of touching the real user cache dir).
-func startOnPath(sockPath string, ctrl Controller) (*IPCServer, error) {
+func startOnPath(sockPath string, ctrl Controller, broker *events.Broker) (*IPCServer, error) {
 	if runtime.GOOS == "windows" {
 		return nil, fmt.Errorf("IPC control socket is not supported on Windows yet (use --auto-accept)")
 	}
@@ -100,6 +102,9 @@ func startOnPath(sockPath string, ctrl Controller) (*IPCServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("IPC socket listen: %w", err)
 	}
+
+	srv := &http.Server{}
+	ipcSrv := &IPCServer{sockPath: sockPath, srv: srv}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/status", func(w http.ResponseWriter, r *http.Request) {
@@ -132,9 +137,12 @@ func startOnPath(sockPath string, ctrl Controller) (*IPCServer, error) {
 	mux.HandleFunc("POST /v1/transfer/reject", func(w http.ResponseWriter, r *http.Request) {
 		decide(w, r, ctrl, false)
 	})
+	// Server-sent events: transfer_pending, transfer_progress,
+	// transfer_complete, transfer_rejected, device_discovered.
+	mux.HandleFunc("GET /v1/events", ipcSrv.handleEvents(broker))
 
-	srv := &http.Server{Handler: mux}
-	ipcSrv := &IPCServer{listener: listener, sockPath: sockPath, srv: srv}
+	srv.Handler = mux
+	ipcSrv.listener = listener
 	go func() {
 		_ = srv.Serve(listener)
 	}()

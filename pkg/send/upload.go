@@ -88,6 +88,9 @@ func uploadStream(ctx context.Context, client *http.Client, device *model.Device
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnprocessableEntity {
+			return fmt.Errorf("upload rejected: receiver failed integrity verification (422 Unprocessable Entity)")
+		}
 		return fmt.Errorf("upload request failed with status: %s", resp.Status)
 	}
 

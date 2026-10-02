@@ -82,7 +82,7 @@ func (s *ReceiveService) cleanupLoop() {
 			for id, session := range s.sessions {
 				if time.Since(session.CreatedAt) > 10*time.Minute {
 					if session.Progress != nil {
-						session.Progress.ForceComplete()
+						session.Progress.Abort()
 						go session.Progress.Wait()
 					}
 					delete(s.sessions, id)
@@ -175,8 +175,10 @@ func (s *ReceiveService) CloseSession(sessionID string) {
 	s.sessionMutex.Unlock()
 
 	if ok && session.Progress != nil {
-		session.Progress.ForceComplete()
-		session.Progress.Wait()
+		// A cancelled/partial transfer's bars never reach their total, so
+		// abort them instead of force-completing (which would block here).
+		session.Progress.Abort()
+		go session.Progress.Wait()
 	}
 }
 
@@ -268,7 +270,7 @@ func (s *ReceiveService) CloseAllSessions() {
 
 	for id, session := range s.sessions {
 		if session.Progress != nil {
-			session.Progress.ForceComplete()
+			session.Progress.Abort()
 			go session.Progress.Wait()
 		}
 		delete(s.sessions, id)
@@ -290,9 +292,10 @@ func (s *ReceiveService) RemoveFileFromSession(sessionID, fileID string) {
 	}
 	s.sessionMutex.Unlock()
 
-	// Gracefully stop the progress bar rendering goroutine when the session ends
+	// A file removed without completing its bar would never finish, so abort
+	// rather than force-complete (which would leak the renderer goroutine).
 	if sessionEmpty && session.Progress != nil {
-		session.Progress.ForceComplete()
+		session.Progress.Abort()
 		go session.Progress.Wait()
 	}
 }

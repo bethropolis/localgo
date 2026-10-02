@@ -58,6 +58,7 @@ interactive terminal prompt, which is ideal for headless daemons.
 | `GET /v1/pending` | Transfers awaiting a decision (each with a `pendingId`) |
 | `GET`/`POST /v1/transfer/accept?pendingId=ID` | Approve a pending transfer (404 if unknown/expired) |
 | `GET`/`POST /v1/transfer/reject?pendingId=ID` | Reject a pending transfer |
+| `GET /v1/events` | SSE stream of live activity (see below) |
 
 ```bash
 localgo serve --ipc &
@@ -65,7 +66,26 @@ localgo serve --ipc &
 curl -s --unix-socket ~/.cache/localgo/ipc.sock http://ipc/v1/pending
 curl -s --unix-socket ~/.cache/localgo/ipc.sock \
   "http://ipc/v1/transfer/accept?pendingId=<ID>"
+
+# tail the event stream
+curl -N --unix-socket ~/.cache/localgo/ipc.sock http://ipc/v1/events
 ```
+
+**Event stream (`GET /v1/events`):** `text/event-stream` of activity, each
+frame carrying a monotonic `id`, an `event` name, and a JSON `data` payload:
+
+| Event | Fired when |
+|-------|-----------|
+| `transfer_pending` | A transfer is awaiting an accept/reject decision |
+| `transfer_progress` | Upload progress (throttled to 1% steps) |
+| `transfer_complete` | A file finished saving (path, size, sender) |
+| `transfer_rejected` | A pending transfer was rejected or timed out |
+| `device_discovered` | A peer was found by discovery |
+
+A 15s `: keepalive` comment keeps idle connections open. Send
+`Last-Event-ID: <id>` (or `?lastEventId=<id>`) to replay events missed while
+disconnected; without it, a new connection starts live and does not receive
+history.
 
 **Exec Hook Placeholders:**
 | Placeholder | Description |
@@ -175,6 +195,21 @@ localgo send report.pdf --to MyPhone --json
 # {"timestamp":1775080000123,"type":"file_complete","file":"report.pdf","bytes":1048576,"total":1048576,"percent":100}
 # {"timestamp":1775080000130,"type":"success"}
 ```
+
+**PIN challenge (401):** when the receiver demands a PIN, `send` prompts once on
+an interactive terminal and retries a single time. With `--json` it never
+prompts and instead emits `{"type":"pin_required"}` so a wrapper can supply the
+PIN itself (use `--pin` to pass it non-interactively).
+
+**Interrupting a transfer:** Ctrl+C (or `--timeout` expiring) cancels the
+uploads and immediately posts `/cancel` to the receiver — on a detached 1.5s
+context, so the receiver frees its session even though the transfer context is
+already dead. A successful transfer does not send `/cancel`.
+
+**Integrity failures (422):** if a receiver verifies a sender-declared SHA-256
+and it does not match, it answers `422 Unprocessable Entity` and discards the
+file; the sender reports it as an integrity failure rather than a generic
+upload error.
 
 **Discovery Logic:**
 1. **Direct IP** (`--ip`): Skips discovery entirely, sends directly to the given IP:port.

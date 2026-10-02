@@ -41,6 +41,17 @@ type ReceiveHandler struct {
 	// controller (see EnableTransferHook, pkg/ipc) instead of the
 	// interactive terminal prompt.
 	pending *PendingRegistry
+	// broker, when non-nil, streams transfer activity to IPC/SSE consumers.
+	broker PublishBroker
+	// lastProgress throttles progress event publishing per file.
+	progressMu   sync.Mutex
+	lastProgress map[string]int64
+}
+
+// SetEventBroker enables streaming of transfer activity to IPC/SSE consumers.
+func (h *ReceiveHandler) SetEventBroker(broker PublishBroker) {
+	h.broker = broker
+	h.lastProgress = make(map[string]int64)
 }
 
 // NewReceiveHandler creates a new ReceiveHandler.
@@ -59,7 +70,7 @@ func NewReceiveHandler(cfg *config.Config, receiveService *services.ReceiveServi
 // registry the controller decides on (see pkg/ipc).
 func (h *ReceiveHandler) EnableTransferHook() *PendingRegistry {
 	if h.pending == nil {
-		h.pending = NewPendingRegistry()
+		h.pending = NewPendingRegistry(h.broker)
 	}
 	return h.pending
 }
