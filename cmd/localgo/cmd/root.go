@@ -7,6 +7,7 @@ import (
 	"github.com/bethropolis/localgo/pkg/cli"
 	"github.com/bethropolis/localgo/pkg/clipboard"
 	"github.com/bethropolis/localgo/pkg/config"
+	"github.com/bethropolis/localgo/pkg/discovery"
 	"github.com/bethropolis/localgo/pkg/help"
 	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/spf13/cobra"
@@ -64,6 +65,13 @@ var rootCmd = &cobra.Command{
 		}
 		if Cfg.SecurityContext == nil {
 			return fmt.Errorf("security context is missing after loading config")
+		}
+
+		// Present our certificate to peers that request one (protocol v2.2 apps).
+		if certFn, err := Cfg.SecurityContext.ClientCertificateFunc(); err != nil {
+			logging.Global().Warnf("Could not load client TLS certificate: %v", err)
+		} else {
+			discovery.SetClientCertificate(certFn)
 		}
 
 		if privateMode {
