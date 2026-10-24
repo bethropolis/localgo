@@ -23,7 +23,7 @@ Handles application configuration.
     - `LoadConfig()`: Loads settings from environment variables and defaults.
     - Manages the "Security Context" (TLS certificates).
     - Generates separate `RegisterDto` (discovery) and `InfoDto` (server info) structures.
-    - `ProtocolVersion` constant set to `"2.0"`.
+    - `ProtocolVersion` constant set to `"2.2"`.
 - **`viper.go`**: Initializes Viper for YAML config file support and environment variable binding.
 - **`dto.go`**: DTO conversion methods (`ToMulticastDto`, `ToRegisterDto`, `ToInfoDto`).
 

@@ -142,7 +142,7 @@ type FileDto struct {
 	Metadata *FileMetadata `json:"metadata,omitempty"` // Use pointer for nullable
 }
 
-// FileMetadata holds optional file metadata (added in v2.1)
+// FileMetadata holds optional file metadata (added in v2.2)
 type FileMetadata struct {
 	Modified *string `json:"modified,omitempty"` // Using string for ISO 8601 format
 	Accessed *string `json:"accessed,omitempty"` // Using string for ISO 8601 format

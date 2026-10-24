@@ -118,16 +118,6 @@ homebrew_casks:
       zsh: scripts/zsh_completion.zsh
       fish: scripts/fish_completion.fish
 
-
-    # Remove Gatekeeper quarantine flag on macOS 
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr",
-              args: ["-dr", "com.apple.quarantine", "#{staged_path}/localgo"]
-          end
-
     repository:
       owner: bethropolis
       name: homebrew-tap

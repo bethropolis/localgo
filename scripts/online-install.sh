@@ -469,7 +469,7 @@ print_summary() {
 # ── Main ───────────────────────────────────────────────────────────
 main() {
     echo "  ◆ LocalGo Online Installer"
-    echo "    LocalSend v2.1 Protocol CLI"
+    echo "    LocalSend v2.2 Protocol CLI"
     echo "    ─────────────────────────────────"
     echo
 

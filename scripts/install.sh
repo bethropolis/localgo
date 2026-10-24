@@ -508,7 +508,7 @@ show_post_install() {
 # Main installation function
 main() {
     echo "  ◆ LocalGo Installer"
-    echo "    LocalSend v2.1 Protocol CLI Client"
+    echo "    LocalSend v2.2 Protocol CLI Client"
     echo "    ─────────────────────────────────"
     echo
 

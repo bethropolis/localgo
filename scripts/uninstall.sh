@@ -550,7 +550,7 @@ verify_removal() {
 # Main uninstall function
 main() {
     echo "  ◆ LocalGo Uninstaller"
-    echo "    LocalSend v2.1 Protocol CLI Client"
+    echo "    LocalSend v2.2 Protocol CLI Client"
     echo "    ─────────────────────────────────"
     echo
 

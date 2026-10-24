@@ -28,7 +28,7 @@ type FlagHelp struct {
 // ShowMainUsage displays the main help screen with colored output
 func ShowMainUsage() {
 	header := cli.HeaderStyle.Render("LocalGo CLI")
-	subheader := cli.InfoStyle.Render("LocalSend v2.1 Protocol Implementation")
+	subheader := cli.InfoStyle.Render("LocalSend v2.2 Protocol Implementation")
 
 	fmt.Printf("%s - %s\n\n", header, subheader)
 
@@ -206,7 +206,5 @@ func ShowVersion(version, commit, date string) {
 		date)
 	fmt.Printf("%s %s\n",
 		cli.HighlightStyle.Render("Protocol:"),
-		cli.SuccessStyle.Render("LocalSend v2.1"))
+		cli.SuccessStyle.Render("LocalSend v2.2"))
 }
-
-

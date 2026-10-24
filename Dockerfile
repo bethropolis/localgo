@@ -2,7 +2,7 @@
 FROM alpine:3.21
 
 LABEL org.opencontainers.image.title="LocalGo"
-LABEL org.opencontainers.image.description="LocalSend v2.1 Protocol Implementation in Go"
+LABEL org.opencontainers.image.description="LocalSend v2.2 Protocol Implementation in Go"
 LABEL org.opencontainers.image.url="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.source="https://github.com/bethropolis/localgo"
 LABEL org.opencontainers.image.license="MIT"

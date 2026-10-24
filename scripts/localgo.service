@@ -8,7 +8,7 @@
 # Config:  /etc/localgo/localgo.env
 
 [Unit]
-Description=LocalGo - LocalSend v2.1 Protocol Implementation
+Description=LocalGo - LocalSend v2.2 Protocol Implementation
 Documentation=https://github.com/bethropolis/localgo
 After=network.target network-online.target
 Wants=network-online.target

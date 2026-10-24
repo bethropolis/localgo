@@ -1,4 +1,4 @@
-# LocalSend Protocol v2.1
+# LocalSend Protocol v2.2
 
 **English** | [简体中文](./README-zh-CN.md)
 
@@ -256,6 +256,9 @@ Response
 No body
 ```
 
+If the `sha256` of the file was provided in [`/prepare-upload`](#41-preparation-metadata-only),
+then the receiver should verify the received data against it and respond with `422` on a mismatch.
+
 Errors
 
 | HTTP code | Message                     |
@@ -263,6 +266,7 @@ Errors
 | 400       | Missing parameters          |
 | 403       | Invalid token or IP address |
 | 409       | Blocked by another session  |
+| 422       | Checksum mismatch (sha256)  |
 | 500       | Unknown error by receiver   |
 
 ### 4.3 Cancel

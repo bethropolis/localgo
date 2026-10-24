@@ -15,7 +15,7 @@ import (
 
 var (
 	versionFlag bool
-	privateMode  bool
+	privateMode bool
 	noColor     bool
 )
 
@@ -29,7 +29,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "localgo",
-	Short: "LocalGo - LocalSend v2.1 Protocol Implementation",
+	Short: "LocalGo - LocalSend v2.2 Protocol Implementation",
 	Run: func(cmd *cobra.Command, args []string) {
 		if versionFlag {
 			help.ShowVersion(Version, GitCommit, BuildDate)

@@ -17,32 +17,32 @@ import (
 const (
 	DefaultPort           = 53317
 	DefaultMulticastGroup = "224.0.0.167"
-	ProtocolVersion       = "2.1"
+	ProtocolVersion       = "2.2"
 	DefaultSecurityDir    = ".localgo_security"
 	DefaultSecurityFile   = "context.json"
 )
 
 type Config struct {
-	Alias             string                        `json:"alias"`
-	Port              int                           `json:"port"`
-	HttpsEnabled      bool                          `json:"https_enabled"`
-	MulticastGroup    string                        `json:"multicast_group"`
-	DeviceModel       *string                       `json:"deviceModel"`
-	DeviceType        model.DeviceType              `json:"deviceType"`
-	SecurityContext   *crypto.StoredSecurityContext `json:"-"`
-	SecurityPath      string                        `json:"-"`
-	PIN               string                        `json:"-"`
-	DownloadDir       string                        `json:"-"`
-	AutoAccept        bool                          `json:"-"`
-	RandomFingerprint string                        `json:"-"`
-	MaxBodySize       int64                         `json:"-"`
-	NoClipboard       bool                          `json:"-"` // skip clipboard; save text as a file instead
-	HistoryFile       string                        `json:"-"` // path to transfer history jsonl file
-	Quiet             bool                          `json:"-"` // quiet mode - minimal output
-	ExecHook          string                        `json:"-"` // shell command to run after receiving file
-	OpenDir           bool                          `json:"-"` // open download directory after transfer
-	Concurrency       int                           `json:"-"` // max parallel uploads (0 = use default)
-	MulticastInterface string                        `json:"-"` // multicast network interface name
+	Alias               string                        `json:"alias"`
+	Port                int                           `json:"port"`
+	HttpsEnabled        bool                          `json:"https_enabled"`
+	MulticastGroup      string                        `json:"multicast_group"`
+	DeviceModel         *string                       `json:"deviceModel"`
+	DeviceType          model.DeviceType              `json:"deviceType"`
+	SecurityContext     *crypto.StoredSecurityContext `json:"-"`
+	SecurityPath        string                        `json:"-"`
+	PIN                 string                        `json:"-"`
+	DownloadDir         string                        `json:"-"`
+	AutoAccept          bool                          `json:"-"`
+	RandomFingerprint   string                        `json:"-"`
+	MaxBodySize         int64                         `json:"-"`
+	NoClipboard         bool                          `json:"-"` // skip clipboard; save text as a file instead
+	HistoryFile         string                        `json:"-"` // path to transfer history jsonl file
+	Quiet               bool                          `json:"-"` // quiet mode - minimal output
+	ExecHook            string                        `json:"-"` // shell command to run after receiving file
+	OpenDir             bool                          `json:"-"` // open download directory after transfer
+	Concurrency         int                           `json:"-"` // max parallel uploads (0 = use default)
+	MulticastInterface  string                        `json:"-"` // multicast network interface name
 	Private             bool                          `json:"-"` // anonymize device identities
 	DiscoveryStrategy   string                        `json:"-"` // discovery strategy: "full" (default) or "fast" (skip subnet scan)
 	FileConflictResolve string                        `json:"-"` // conflict resolution: "rename" (default), "overwrite", "skip"
@@ -219,35 +219,35 @@ func LoadConfig(src *Source, logger *logging.Logger) (*Config, error) {
 	trustedFingerprints := src.GetStringSlice("trusted_fingerprints")
 
 	cfg := &Config{
-		Alias:              alias,
-		Port:               port,
-		MulticastGroup:     multicastGroup,
-		HttpsEnabled:       HttpsEnabled,
-		SecurityContext:    securityContext,
-		SecurityPath:       securityFilePath,
-		DeviceModel:        &deviceModel,
-		DeviceType:         deviceType,
-		DownloadDir:        downloadDir,
-		AutoAccept:         autoAccept,
-		RandomFingerprint:  generateRandomID(64),
-		MaxBodySize:        maxBodySize,
-		NoClipboard:        noClipboard,
-		HistoryFile:        historyFile,
-		Quiet:              quiet,
-		ExecHook:           execHook,
-		Concurrency:        concurrency,
-		MulticastInterface: multicastInterface,
-		DiscoveryStrategy:  discoveryStrategy,
+		Alias:               alias,
+		Port:                port,
+		MulticastGroup:      multicastGroup,
+		HttpsEnabled:        HttpsEnabled,
+		SecurityContext:     securityContext,
+		SecurityPath:        securityFilePath,
+		DeviceModel:         &deviceModel,
+		DeviceType:          deviceType,
+		DownloadDir:         downloadDir,
+		AutoAccept:          autoAccept,
+		RandomFingerprint:   generateRandomID(64),
+		MaxBodySize:         maxBodySize,
+		NoClipboard:         noClipboard,
+		HistoryFile:         historyFile,
+		Quiet:               quiet,
+		ExecHook:            execHook,
+		Concurrency:         concurrency,
+		MulticastInterface:  multicastInterface,
+		DiscoveryStrategy:   discoveryStrategy,
 		FileConflictResolve: fileConflictResolve,
-		BindAddress:        bindAddress,
-		StaticPeers:        staticPeers,
+		BindAddress:         bindAddress,
+		StaticPeers:         staticPeers,
 		TrustedFingerprints: trustedFingerprints,
-		Shell:              shell,
-		ClipboardWriteCmd:  clipboardWriteCmd,
-		ClipboardReadCmd:   clipboardReadCmd,
-		CustomTLSCertPath:  customTLSCertPath,
-		CustomTLSKeyPath:   customTLSKeyPath,
-		NotificationCmd:    notificationCmd,
+		Shell:               shell,
+		ClipboardWriteCmd:   clipboardWriteCmd,
+		ClipboardReadCmd:    clipboardReadCmd,
+		CustomTLSCertPath:   customTLSCertPath,
+		CustomTLSKeyPath:    customTLSKeyPath,
+		NotificationCmd:     notificationCmd,
 	}
 
 	return cfg, nil

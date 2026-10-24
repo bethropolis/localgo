@@ -118,7 +118,7 @@ func TestDiscoveryHandler_RegisterHandler(t *testing.T) {
 
 	registerDto := model.RegisterDto{
 		Alias:       "RemoteDevice",
-		Version:     "2.1",
+		Version:     "2.2",
 		Fingerprint: "remotefp123",
 		Port:        53317,
 		Protocol:    model.ProtocolTypeHTTPS,
