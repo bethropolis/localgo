@@ -4,7 +4,6 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,9 +51,7 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 				Timeout:   500 * time.Millisecond,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
+			TLSClientConfig: clientTLSConfig(),
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   1 * time.Second,

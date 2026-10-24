@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
@@ -23,6 +24,21 @@ type StoredSecurityContext struct {
 	PrivateKey      string `json:"privateKey"`
 	Certificate     string `json:"certificate"`
 	CertificateHash string `json:"certificateHash"`
+}
+
+// ClientCertificateFunc returns a tls.Config.GetClientCertificate callback that
+// always presents the stored certificate. LocalSend apps (protocol v2.2) ask
+// every HTTPS client for a certificate and drop the handshake without one, but
+// they advertise a CA list our self-signed certificate can never satisfy, so
+// tls.Config.Certificates would silently send nothing.
+func (c *StoredSecurityContext) ClientCertificateFunc() (func(*tls.CertificateRequestInfo) (*tls.Certificate, error), error) {
+	cert, err := tls.X509KeyPair([]byte(c.Certificate), []byte(c.PrivateKey))
+	if err != nil {
+		return nil, err
+	}
+	return func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		return &cert, nil
+	}, nil
 }
 
 // GenerateKeys generates a new RSA key pair.
@@ -53,7 +69,7 @@ func generateSelfSignedCertificate(privKey *rsa.PrivateKey, alias string) ([]byt
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privKey.PublicKey, privKey)

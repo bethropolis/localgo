@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -240,7 +239,7 @@ func ProbeCached(ctx context.Context, cache *PeerCache, onFound func(*model.Devi
 		Timeout: 2 * time.Second,
 	}
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: clientTLSConfig(),
 	}
 	client.Transport = tr
 	defer tr.CloseIdleConnections()

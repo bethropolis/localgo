@@ -70,6 +70,11 @@ scoop bucket add bethropolis https://github.com/bethropolis/scoop-bucket
 scoop install localgo
 ```
 
+#### using mise (any platform)
+```bash
+mise use -g github:bethropolis/localgo
+```
+
 #### using docker / podman
 ```bash
 mkdir -p localgo/downloads localgo/config
