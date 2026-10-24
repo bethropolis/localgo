@@ -1,7 +1,11 @@
 package crypto
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -152,5 +156,82 @@ func TestStoredSecurityContextJSON(t *testing.T) {
 
 	if loaded.PrivateKey != ctx.PrivateKey {
 		t.Error("PrivateKey mismatch")
+	}
+}
+
+// newClientCertServer starts a TLS server that, like LocalSend v2.2 apps,
+// requires a client certificate and advertises a CA list that a self-signed
+// client certificate can never satisfy.
+func newClientCertServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	serverCtx, err := GenerateSecurityContext("server", testLogger)
+	if err != nil {
+		t.Fatalf("GenerateSecurityContext failed: %v", err)
+	}
+	serverCert, err := tls.X509KeyPair([]byte(serverCtx.Certificate), []byte(serverCtx.PrivateKey))
+	if err != nil {
+		t.Fatalf("X509KeyPair failed: %v", err)
+	}
+	// The pool only needs to be non-empty so the server sends a CA list.
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM([]byte(serverCtx.Certificate))
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv.TLS = &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAnyClientCert,
+		ClientCAs:    pool,
+	}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestClientCertificateFunc(t *testing.T) {
+	srv := newClientCertServer(t)
+	clientCtx, err := GenerateSecurityContext("client", testLogger)
+	if err != nil {
+		t.Fatalf("GenerateSecurityContext failed: %v", err)
+	}
+
+	t.Run("static Certificates is dropped by the CA filter", func(t *testing.T) {
+		cert, err := tls.X509KeyPair([]byte(clientCtx.Certificate), []byte(clientCtx.PrivateKey))
+		if err != nil {
+			t.Fatalf("X509KeyPair failed: %v", err)
+		}
+		client := &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, Certificates: []tls.Certificate{cert}},
+		}}
+		if resp, err := client.Get(srv.URL); err == nil {
+			resp.Body.Close()
+			t.Fatal("expected the handshake to fail without a presented client certificate")
+		}
+	})
+
+	t.Run("GetClientCertificate presents the certificate", func(t *testing.T) {
+		fn, err := clientCtx.ClientCertificateFunc()
+		if err != nil {
+			t.Fatalf("ClientCertificateFunc failed: %v", err)
+		}
+		client := &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, GetClientCertificate: fn},
+		}}
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+	})
+}
+
+func TestClientCertificateFuncInvalidPEM(t *testing.T) {
+	bad := &StoredSecurityContext{Certificate: "nope", PrivateKey: "nope"}
+	if _, err := bad.ClientCertificateFunc(); err == nil {
+		t.Fatal("expected an error for invalid PEM")
 	}
 }

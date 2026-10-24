@@ -255,10 +255,21 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	client := &http.Client{}
 	scheme := "http"
 
+	// Present our certificate as a TLS client certificate (required by
+	// LocalSend protocol v2.2 receivers). Without it the handshake is dropped.
+	var getClientCert func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	if cfg.SecurityContext != nil {
+		fn, err := cfg.SecurityContext.ClientCertificateFunc()
+		if err != nil {
+			logger.Warnf("Could not load client TLS certificate: %v", err)
+		}
+		getClientCert = fn
+	}
+
 	if device.Protocol == "" {
 		addr := net.JoinHostPort(device.IP, strconv.Itoa(device.Port))
 		dialer := &net.Dialer{Timeout: 2 * time.Second}
-		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true})
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true, GetClientCertificate: getClientCert})
 		if err == nil {
 			conn.Close()
 			device.Protocol = model.ProtocolTypeHTTPS
@@ -273,7 +284,7 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 		infoClient := &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true, GetClientCertificate: getClientCert},
 			},
 		}
 		defer infoClient.CloseIdleConnections()
@@ -289,7 +300,8 @@ func SendToDevice(ctx context.Context, cfg *config.Config, device *model.Device,
 	if device.Protocol == model.ProtocolTypeHTTPS {
 		scheme = "https"
 		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify:   true,
+			GetClientCertificate: getClientCert,
 		}
 		if device.Fingerprint != "" {
 			expectedFingerprint := device.Fingerprint
