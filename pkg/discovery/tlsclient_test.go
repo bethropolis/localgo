@@ -14,6 +14,10 @@ import (
 
 func TestClientTLSConfigPresentsCertificate(t *testing.T) {
 	log := logging.NewQuiet()
+	clientCtx, err := crypto.GenerateSecurityContext("client", log)
+	if err != nil {
+		t.Fatalf("GenerateSecurityContext failed: %v", err)
+	}
 	serverCtx, err := crypto.GenerateSecurityContext("server", log)
 	if err != nil {
 		t.Fatalf("GenerateSecurityContext failed: %v", err)
@@ -23,10 +27,10 @@ func TestClientTLSConfigPresentsCertificate(t *testing.T) {
 		t.Fatalf("X509KeyPair failed: %v", err)
 	}
 	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM([]byte(serverCtx.Certificate))
+	pool.AppendCertsFromPEM([]byte(clientCtx.Certificate))
 
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	srv.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAnyClientCert, ClientCAs: pool}
+	srv.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: pool}
 	srv.StartTLS()
 	defer srv.Close()
 
@@ -44,10 +48,6 @@ func TestClientTLSConfigPresentsCertificate(t *testing.T) {
 		t.Fatal("expected failure when no client certificate is configured")
 	}
 
-	clientCtx, err := crypto.GenerateSecurityContext("client", log)
-	if err != nil {
-		t.Fatalf("GenerateSecurityContext failed: %v", err)
-	}
 	fn, err := clientCtx.ClientCertificateFunc()
 	if err != nil {
 		t.Fatalf("ClientCertificateFunc failed: %v", err)
