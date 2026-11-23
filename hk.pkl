@@ -2,10 +2,21 @@ amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Builtins.pkl"
 // Using a coding agent? See https://hk.jdx.dev/agents
 
+// Report every failing step in one run instead of stopping at the first one:
+// the linters below carry pre-existing findings and one failure should not hide
+// the rest.
+fail_fast = false
+
+// droast ships as `dockerfile-roast` in the pinned mise tool, so the builtin's
+// `droast` command needs the name the project actually installs.
+local droast = (Builtins.droast) {
+    check = "dockerfile-roast {{files}}"
+    fix = "dockerfile-roast --fix {{files}}"
+}
+
 // check: the full read-only set. Run it deliberately (`hk check --all`); it
 // still reports a pre-existing backlog, and some of these tools are optional
-// locally, so skip the ones you do not have with `HK_SKIP_STEPS=dclint,droast`
-// or install them from the project's tool list.
+// locally, so skip the ones you do not have with `HK_SKIP_STEPS=dclint,droast`.
 local checks = new Mapping<String, Step> {
     ["go_vet"] = Builtins.go_vet
     ["golangci_lint"] = Builtins.golangci_lint
@@ -13,7 +24,7 @@ local checks = new Mapping<String, Step> {
     ["zizmor"] = Builtins.zizmor
     ["dclint"] = Builtins.dclint
     ["hadolint"] = Builtins.hadolint
-    ["droast"] = Builtins.droast
+    ["droast"] = droast
     ["shellcheck"] = Builtins.shellcheck
 }
 

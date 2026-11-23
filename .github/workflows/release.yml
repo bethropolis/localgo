@@ -48,7 +48,7 @@ jobs:
           mkdir -p "$HOME/.secrets"
           printf '%s' "$AUR_SSH_KEY_CONTENT" > "$HOME/.secrets/aur_key"
           chmod 600 "$HOME/.secrets/aur_key"
-          echo "AUR_SSH_KEY=$HOME/.secrets/aur_key" >> $GITHUB_ENV
+          echo "AUR_SSH_KEY=$HOME/.secrets/aur_key" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
