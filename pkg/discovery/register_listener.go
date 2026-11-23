@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/config"
@@ -48,6 +49,9 @@ type RegisterListener struct {
 	Port int
 	// Protocol is the scheme to put in the multicast announcement.
 	Protocol model.ProtocolType
+	// PreferredPortErr reports why PreferredPort was not used, so callers can warn that a firewall which only
+	// allows that port will drop the answers. Nil when the preferred port was used, or none was requested.
+	PreferredPortErr error
 
 	server *http.Server
 }
@@ -55,16 +59,22 @@ type RegisterListener struct {
 // StartRegisterListener listens on PreferredPort, or on a free TCP port if that is taken, and serves /register
 // until Close is called.
 func StartRegisterListener(cfg RegisterListenerConfig) (*RegisterListener, error) {
+	l := &RegisterListener{}
+
 	var ln net.Listener
 	var err error
 	if cfg.PreferredPort > 0 {
-		ln, err = net.Listen("tcp", net.JoinHostPort(cfg.BindAddress, fmt.Sprint(cfg.PreferredPort)))
+		ln, err = net.Listen("tcp", net.JoinHostPort(cfg.BindAddress, strconv.Itoa(cfg.PreferredPort)))
+		if err != nil {
+			// Typically the port is held by a running server; a free port still works on the same network.
+			l.PreferredPortErr = err
+		}
 	}
 	if ln == nil {
 		ln, err = net.Listen("tcp", net.JoinHostPort(cfg.BindAddress, "0"))
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to listen for register requests: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("failed to listen for register requests: %w", err)
+		}
 	}
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
@@ -81,15 +91,18 @@ func StartRegisterListener(cfg RegisterListenerConfig) (*RegisterListener, error
 		})
 	}
 
+	// The info we answer with has to describe this listener: when the preferred port was taken, peers can only
+	// reach us on the fallback port, so that is the one they must be told about.
+	cfg.Info.Port = tcpAddr.Port
+	cfg.Info.Protocol = protocol
+
 	mux := http.NewServeMux()
 	mux.HandleFunc(registerRouteV1, cfg.handleRegister)
 	mux.HandleFunc(registerRouteV2, cfg.handleRegister)
 
-	l := &RegisterListener{
-		Port:     tcpAddr.Port,
-		Protocol: protocol,
-		server:   &http.Server{Handler: mux, ReadHeaderTimeout: registerHeaderWait},
-	}
+	l.Port = tcpAddr.Port
+	l.Protocol = protocol
+	l.server = &http.Server{Handler: mux, ReadHeaderTimeout: registerHeaderWait}
 	go func() { _ = l.server.Serve(ln) }()
 
 	return l, nil
@@ -132,6 +145,8 @@ func (l *RegisterListener) Close() {
 }
 
 func (cfg RegisterListenerConfig) handleRegister(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
 	var dto model.RegisterDto
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRegisterBody)).Decode(&dto); err != nil {
 		httputil.RespondError(w, http.StatusBadRequest, "Request body malformed")
@@ -143,13 +158,8 @@ func (cfg RegisterListenerConfig) handleRegister(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-
 	if cfg.OnDevice != nil {
-		cfg.OnDevice(model.NewDevice(dto, net.ParseIP(ip), dto.Port, dto.Protocol == model.ProtocolTypeHTTPS))
+		cfg.OnDevice(model.NewDevice(dto, httputil.RemoteIP(r), dto.Port, dto.Protocol == model.ProtocolTypeHTTPS))
 	}
 
 	httputil.RespondJSON(w, http.StatusOK, cfg.Info)

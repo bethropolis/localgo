@@ -105,6 +105,8 @@ func TestRegisterListener_ReportsRegisteringDevice(t *testing.T) {
 			require.NoError(t, json.Unmarshal(body, &info))
 			assert.Equal(t, "Me", info.Alias)
 			assert.Equal(t, testSelfFingerprint, info.Fingerprint)
+			assert.Equal(t, l.Port, info.Port, "the answer must describe the port peers actually reached")
+			assert.Equal(t, l.Protocol, info.Protocol)
 
 			devices := got.all()
 			require.Len(t, devices, 1)
@@ -169,13 +171,15 @@ func TestRegisterListener_PreferredPort(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 	assert.Equal(t, free, l.Port)
+	assert.NoError(t, l.PreferredPortErr)
 
-	// The port is taken now (by l): a second listener must fall back to another one.
+	// A second listener asking for the same port must fall back, and say why.
 	other, err := StartRegisterListener(RegisterListenerConfig{BindAddress: "127.0.0.1", PreferredPort: free})
 	require.NoError(t, err)
 	defer other.Close()
 	assert.NotEqual(t, free, other.Port)
 	assert.NotZero(t, other.Port)
+	assert.Error(t, other.PreferredPortErr, "callers need to know a firewall may block the fallback port")
 }
 
 func TestStartRegisterListenerForConfig_RefusesCustomTLS(t *testing.T) {
@@ -218,4 +222,20 @@ func TestService_AddDevice(t *testing.T) {
 
 	assert.Equal(t, device, svc.GetDevice("peer-fingerprint"))
 	assert.NotNil(t, cache.GetByFingerprint("peer-fingerprint"), "the device must also reach the peer cache")
+}
+
+func TestService_AddDevice_IgnoresUnkeyableDevices(t *testing.T) {
+	cache := &PeerCache{
+		filePath: filepath.Join(t.TempDir(), "peers.json"),
+		peers:    make(map[string]*model.Device),
+		logger:   logging.NewQuiet(),
+	}
+	svc := NewService(DefaultServiceConfig(), &MockMulticastDiscovery{}, testLoggerService)
+	svc.SetPeerCache(cache)
+
+	svc.AddDevice(nil)
+	svc.AddDevice(&model.Device{Alias: "NoFingerprint", IP: "192.168.1.51", LastSeen: time.Now()})
+
+	assert.Empty(t, svc.GetDevices(), "a device without a fingerprint cannot be keyed")
+	assert.Empty(t, cache.GetPeers(), "and must not poison the peer cache")
 }

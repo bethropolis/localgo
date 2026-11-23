@@ -32,13 +32,6 @@ var discoverCmd = &cobra.Command{
 			cli.PrintHeader("Discovering devices")
 			cli.PrintInfo("Timeout: %ds", discovertimeout)
 			cli.PrintInfo("Multicast group: %s", Cfg.MulticastGroup)
-			cli.PrintInfo("Port: %d", Cfg.Port)
-			cli.PrintInfo("Protocol: %s", func() string {
-				if Cfg.HttpsEnabled {
-					return "HTTPS"
-				}
-				return "HTTP"
-			}())
 		}
 
 		// Initialize discovery service
@@ -56,8 +49,19 @@ var discoverCmd = &cobra.Command{
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logging.Global())
 		discoverySvc.SetPeerCache(peerCache)
 
-		// LocalSend clients answer an announcement with an HTTP /register request, not over UDP. Listen for it on a
-		// free port and put that port in the announcement, so the answers reach this process.
+		discoverySvc.AddDeviceHandler(func(device *model.Device) {
+			if !discoverquiet {
+				alias := device.Alias
+				if Cfg.Private {
+					alias = cli.AnonymizedAlias(device)
+				}
+				logging.Global().Infof("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
+				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
+			}
+		})
+
+		// LocalSend clients answer an announcement with an HTTP /register request, not over UDP. Listen for it and put
+		// that port in the announcement, so the answers reach this process.
 		announceDto := Cfg.ToMulticastDto(false)
 		registerListener, listenErr := discovery.StartRegisterListenerForConfig(Cfg, discoverySvc.AddDevice)
 		if listenErr != nil {
@@ -69,18 +73,16 @@ var discoverCmd = &cobra.Command{
 			defer registerListener.Close()
 			announceDto.Port = registerListener.Port
 			announceDto.Protocol = registerListener.Protocol
+			if registerListener.PreferredPortErr != nil && !discoverquiet {
+				cli.PrintWarning("Port %d is in use; replies will arrive on %d, which a firewall that only opens %d may block",
+					Cfg.Port, registerListener.Port, Cfg.Port)
+			}
 		}
 
-		discoverySvc.AddDeviceHandler(func(device *model.Device) {
-			if !discoverquiet {
-				alias := device.Alias
-				if Cfg.Private {
-					alias = cli.AnonymizedAlias(device)
-				}
-				logging.Global().Infof("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
-				cli.PrintSuccess("Found: %s (%s) [%s] Port: %d", alias, device.IP, device.Protocol, device.Port)
-			}
-		})
+		if !discoverquiet {
+			cli.PrintInfo("Port: %d", announceDto.Port)
+			cli.PrintInfo("Protocol: %s", announceDto.Protocol)
+		}
 
 		// Perform discovery
 		discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discovertimeout)*time.Second)
