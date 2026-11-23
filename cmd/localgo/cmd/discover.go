@@ -56,6 +56,21 @@ var discoverCmd = &cobra.Command{
 		discoverySvc := discovery.NewService(discoverySvcConfig, multicast, logging.Global())
 		discoverySvc.SetPeerCache(peerCache)
 
+		// LocalSend clients answer an announcement with an HTTP /register request, not over UDP. Listen for it on a
+		// free port and put that port in the announcement, so the answers reach this process.
+		announceDto := Cfg.ToMulticastDto(false)
+		registerListener, listenErr := discovery.StartRegisterListenerForConfig(Cfg, discoverySvc.AddDevice)
+		if listenErr != nil {
+			logging.Global().Warnf("Cannot receive HTTP replies, only UDP answers will be seen: %v", listenErr)
+			if !discoverquiet {
+				cli.PrintWarning("Cannot receive HTTP replies, only UDP answers will be seen: %v", listenErr)
+			}
+		} else {
+			defer registerListener.Close()
+			announceDto.Port = registerListener.Port
+			announceDto.Protocol = registerListener.Protocol
+		}
+
 		discoverySvc.AddDeviceHandler(func(device *model.Device) {
 			if !discoverquiet {
 				alias := device.Alias
@@ -78,11 +93,11 @@ var discoverCmd = &cobra.Command{
 			_ = spinner.New().
 				Title(fmt.Sprintf("Searching for devices on multicast group %s...", Cfg.MulticastGroup)).
 				Action(func() {
-			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, announceDto)
 				}).
 				Run()
 		} else {
-			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, announceDto)
 		}
 
 		if discErr != nil && !discoverquiet {

@@ -43,6 +43,7 @@ The HTTP/S server that listens for incoming files and discovery requests.
 Implements the logic to find other LocalSend devices.
 - **`service.go`**: The high-level coordinator. Starts both Multicast listening and periodic announcements.
 - **`multicast.go`**: Handles UDP Multicast packets on `224.0.0.167:53317`. On announcement, sends HTTP `POST /register` response; falls back to UDP unicast.
+- **`register_listener.go`**: A short-lived `POST /register` endpoint for one-off discovery (`discover`, interactive `send`). LocalSend apps answer an announcement over HTTP, so without it those runs cannot see them.
 - **`http_discovery.go`**: The "Smart Scanner". Iterates through target IPs and sends `POST /api/localsend/v2/register` to find active devices.
 - **`peer_cache.go`**: Persistent peer cache for recently discovered devices.
 
