@@ -51,7 +51,7 @@ func TestService_Start(t *testing.T) {
 
 	dto := model.MulticastDto{
 		Alias:       "test-alias",
-		Version:     "2.1",
+		Version:     "2.2",
 		Fingerprint: "test-fingerprint",
 		Port:        12345,
 		DeviceType:  model.DeviceTypeDesktop,

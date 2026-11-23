@@ -238,7 +238,7 @@ func TestConfig_Constants(t *testing.T) {
 		t.Errorf("Expected DefaultMulticastGroup '224.0.0.167', got '%s'", DefaultMulticastGroup)
 	}
 
-	if ProtocolVersion != "2.1" {
-		t.Errorf("Expected ProtocolVersion '2.1', got '%s'", ProtocolVersion)
+	if ProtocolVersion != "2.2" {
+		t.Errorf("Expected ProtocolVersion '2.2', got '%s'", ProtocolVersion)
 	}
 }

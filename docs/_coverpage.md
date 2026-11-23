@@ -1,6 +1,6 @@
 # LocalGo
 
-**LocalSend v2.1 Protocol — LAN file transfer CLI**
+**LocalSend v2.2 Protocol — LAN file transfer CLI**
 
 One-line installation:
 

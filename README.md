@@ -1,14 +1,14 @@
 # LocalGo
 
 [![Go Version](https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Protocol](https://img.shields.io/badge/LocalSend-v2.1-4CAF50?style=for-the-badge&logo=protocol.ai&logoColor=white)](https://github.com/localsend/protocol)
+[![Protocol](https://img.shields.io/badge/LocalSend-v2.2-4CAF50?style=for-the-badge&logo=protocol.ai&logoColor=white)](https://github.com/localsend/protocol)
 [![License](https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge&logoColor=black)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bethropolis/localgo?style=for-the-badge&logo=github&color=181717&logoColor=white)](https://github.com/bethropolis/localgo/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/bethropolis/localgo/ci.yml?style=for-the-badge&logo=githubactions&logoColor=white&label=build)](https://github.com/bethropolis/localgo/actions/workflows/ci.yml)
 [![GHCR](https://img.shields.io/badge/container-ghcr.io-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/bethropolis/localgo/pkgs/container/localgo)
 [![Platforms](https://img.shields.io/badge/Platforms-Linux%20%7C%20macOS%20%7C%20Windows-6e40c9?style=for-the-badge&logoColor=white)](https://github.com/bethropolis/localgo)
 
-A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform file sharing.
+A Go implementation of the LocalSend v2.2 protocol for secure, cross-platform file sharing.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ## Features
 
-- **Complete LocalSend v2.1 Protocol** - Works with LocalSend apps (v3 planned)
+- **Complete LocalSend v2.2 Protocol** - Works with LocalSend apps (v3 planned)
 - **Secure** - HTTPS with auto-generated certificates, PIN-protected transfers, fingerprint TOFU verification
 - **Fast Discovery** - Multicast UDP + HTTP fallback + CIDR range scanning
 - **Multi-file Transfers** - Send multiple files concurrently with progress bars
@@ -38,7 +38,7 @@ A Go implementation of the LocalSend v2.1 protocol for secure, cross-platform fi
 
 ### Installation
 
-#### Quick install (macOS, Linux)
+#### Quick install (macOS, Linux, Termux)
 ```bash
 curl -fsSL https://bethropolis.github.io/localgo/install.sh | bash
 ```
@@ -204,6 +204,56 @@ Detailed guides available in [docs/](docs/):
 - [Container](docs/CONTAINER.md) - Container deployment
 - [CLI Reference](docs/CLI_REFERENCE.md) - Command details
 - [Deployment](docs/DEPLOYMENT.md) - Production setup
+
+## Firewall Setup
+
+LocalGo uses the configured port for both file transfers and device discovery. The default port is `53317`:
+
+- TCP `53317` for HTTP/HTTPS requests and file transfers.
+- UDP `53317` for multicast discovery.
+
+Allow these ports on the machine running `localgo serve`. Restrict the rules to your local network when possible, and do not expose LocalGo directly to the public Internet.
+
+### Linux with UFW
+
+Allow the default port from your LAN (replace the subnet if needed):
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 53317 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 53317 proto udp
+sudo ufw reload
+```
+
+For a host that should accept connections from any local interface, use the included profile:
+
+```bash
+sudo ufw app update LocalGo
+sudo ufw allow LocalGo
+```
+
+### Windows
+
+Run PowerShell as Administrator:
+
+```powershell
+New-NetFirewallRule -DisplayName "LocalGo TCP" -Direction Inbound -Protocol TCP -LocalPort 53317 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "LocalGo UDP" -Direction Inbound -Protocol UDP -LocalPort 53317 -Action Allow -Profile Private
+```
+
+### macOS
+
+When macOS asks whether `localgo` may accept incoming connections, choose **Allow**. If the prompt does not appear, open **System Settings > Network > Firewall > Options**, add the LocalGo executable, and allow incoming connections.
+
+### Custom ports and containers
+
+If you use a custom port, allow that TCP and UDP port instead of `53317` and configure the same port on every participating device. For Docker or Podman without host networking, publish both protocols, for example:
+
+```bash
+docker run -p 53317:53317/tcp -p 53317:53317/udp \
+  ghcr.io/bethropolis/localgo:latest
+```
+
+If discovery still fails after opening the ports, confirm that the host and peer are on the same LAN, multicast is available on the network, and LocalGo is not bound only to an unreachable interface.
 
 ## Troubleshooting
 
