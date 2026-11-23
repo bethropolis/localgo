@@ -187,6 +187,7 @@ func TestIPCEventsStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseline := broker.SubscriberCount()
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET /v1/events failed: %v", err)
@@ -197,6 +198,7 @@ func TestIPCEventsStream(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("expected text/event-stream, got %q", ct)
 	}
+	waitForSubscriber(t, broker, baseline)
 
 	// Publish after subscribing so we only assert on the live stream.
 	id, _ := reg.Add(handlers.PendingTransfer{
