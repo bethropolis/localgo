@@ -237,7 +237,7 @@ localgo send --file secret.pdf --to MyPhone --pin 1234
 
 ## `localgo discover`
 
-Passive/active discovery tool. Sends an announcement and listens for responses via multicast.
+Passive/active discovery tool. Sends an announcement and collects the responses. LocalSend apps answer an announcement with an HTTP `POST /register` request rather than over UDP, so `discover` listens for those on the configured port (`53317` by default) while it runs, as well as for multicast announcements. If the port is taken, for example by a running `serve`, it uses a free port instead; a firewall that only opens `53317` will then block the answers.
 
 **Usage:**
 ```bash

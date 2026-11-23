@@ -26,6 +26,14 @@ func DiscoverDevices(ctx context.Context, serviceCfg *ServiceConfig, appCfg *con
 	svc := NewService(serviceCfg, multicast, nil)
 	svc.SetPeerCache(peerCache)
 
+	// LocalSend clients answer an announcement with an HTTP /register request, not over UDP. Without a listener
+	// for it they stay invisible. If it cannot start, discovery continues with the multicast listener only.
+	if listener, err := StartRegisterListenerForConfig(appCfg, svc.AddDevice); err == nil {
+		defer listener.Close()
+		multicastDto.Port = listener.Port
+		multicastDto.Protocol = listener.Protocol
+	}
+
 	if err := svc.Start(ctx, multicastDto); err != nil {
 		return nil, err
 	}
