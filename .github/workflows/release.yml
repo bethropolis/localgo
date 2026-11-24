@@ -46,8 +46,16 @@ jobs:
         if: env.AUR_SSH_KEY_CONTENT != ''
         run: |
           mkdir -p "$HOME/.secrets"
-          printf '%s' "$AUR_SSH_KEY_CONTENT" > "$HOME/.secrets/aur_key"
+          # Trailing newline: ssh is lenient, but a key pasted without one is a
+          # common way to end up with "error in libcrypto" instead of a clean error.
+          printf '%s\n' "$AUR_SSH_KEY_CONTENT" > "$HOME/.secrets/aur_key"
           chmod 600 "$HOME/.secrets/aur_key"
+          # Fail here with an actionable message rather than halfway through the
+          # GoReleaser run, after the GitHub release has been published.
+          if ! ssh-keygen -y -f "$HOME/.secrets/aur_key" < /dev/null > /dev/null 2>&1; then
+            echo "::error::AUR_SSH_KEY is not a usable private key (expected an unencrypted OpenSSH or PEM key, with header and footer)"
+            exit 1
+          fi
           echo "AUR_SSH_KEY=$HOME/.secrets/aur_key" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
