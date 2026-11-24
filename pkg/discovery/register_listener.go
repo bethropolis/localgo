@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bethropolis/localgo/pkg/config"
 	"github.com/bethropolis/localgo/pkg/httputil"
+	"github.com/bethropolis/localgo/pkg/logging"
 	"github.com/bethropolis/localgo/pkg/model"
 )
 
@@ -102,10 +105,24 @@ func StartRegisterListener(cfg RegisterListenerConfig) (*RegisterListener, error
 
 	l.Port = tcpAddr.Port
 	l.Protocol = protocol
-	l.server = &http.Server{Handler: mux, ReadHeaderTimeout: registerHeaderWait}
+	l.server = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: registerHeaderWait,
+		// Handshake failures are routine here: a peer that gives up mid-handshake
+		// (a slow Wi-Fi link is enough) is nothing the user can act on.
+		ErrorLog: log.New(handshakeLogWriter{}, "", 0),
+	}
 	go func() { _ = l.server.Serve(ln) }()
 
 	return l, nil
+}
+
+// handshakeLogWriter sends net/http's TLS handshake complaints to the debug log.
+type handshakeLogWriter struct{}
+
+func (handshakeLogWriter) Write(p []byte) (int, error) {
+	logging.Global().Debugf("%s", strings.TrimRight(string(p), "\n"))
+	return len(p), nil
 }
 
 // StartRegisterListenerForConfig starts a RegisterListener that answers as the device described by appCfg.
