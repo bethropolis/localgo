@@ -187,6 +187,25 @@ func (s *Service) GetDevice(id string) *model.Device {
 	return nil
 }
 
+// AddDevice records a device learned outside the multicast listener, for example from an HTTP /register request.
+// Like a multicast discovery, it is also saved to the peer cache.
+func (s *Service) AddDevice(device *model.Device) {
+	if device == nil {
+		s.logger.Debugf("Ignoring nil discovered device")
+		return
+	}
+	if device.Fingerprint == "" {
+		// Without a fingerprint the device cannot be keyed, deduplicated or reached later.
+		s.logger.Debugf("Ignoring discovered device without a fingerprint (ip=%s)", device.IP)
+		return
+	}
+
+	if s.peerCache != nil {
+		s.peerCache.Save(device)
+	}
+	s.updateDevice(device)
+}
+
 // AddDeviceHandler adds a handler for device discovery events
 func (s *Service) AddDeviceHandler(handler func(*model.Device)) {
 	s.handlersMutex.Lock()

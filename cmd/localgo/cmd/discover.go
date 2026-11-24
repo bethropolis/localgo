@@ -32,13 +32,6 @@ var discoverCmd = &cobra.Command{
 			cli.PrintHeader("Discovering devices")
 			cli.PrintInfo("Timeout: %ds", discovertimeout)
 			cli.PrintInfo("Multicast group: %s", Cfg.MulticastGroup)
-			cli.PrintInfo("Port: %d", Cfg.Port)
-			cli.PrintInfo("Protocol: %s", func() string {
-				if Cfg.HttpsEnabled {
-					return "HTTPS"
-				}
-				return "HTTP"
-			}())
 		}
 
 		// Initialize discovery service
@@ -67,6 +60,30 @@ var discoverCmd = &cobra.Command{
 			}
 		})
 
+		// LocalSend clients answer an announcement with an HTTP /register request, not over UDP. Listen for it and put
+		// that port in the announcement, so the answers reach this process.
+		announceDto := Cfg.ToMulticastDto(false)
+		registerListener, listenErr := discovery.StartRegisterListenerForConfig(Cfg, discoverySvc.AddDevice)
+		if listenErr != nil {
+			logging.Global().Warnf("Cannot receive HTTP replies, only UDP answers will be seen: %v", listenErr)
+			if !discoverquiet {
+				cli.PrintWarning("Cannot receive HTTP replies, only UDP answers will be seen: %v", listenErr)
+			}
+		} else {
+			defer registerListener.Close()
+			announceDto.Port = registerListener.Port
+			announceDto.Protocol = registerListener.Protocol
+			if registerListener.PreferredPortErr != nil && !discoverquiet {
+				cli.PrintWarning("Port %d is in use; replies will arrive on %d, which a firewall that only opens %d may block",
+					Cfg.Port, registerListener.Port, Cfg.Port)
+			}
+		}
+
+		if !discoverquiet {
+			cli.PrintInfo("Port: %d", announceDto.Port)
+			cli.PrintInfo("Protocol: %s", announceDto.Protocol)
+		}
+
 		// Perform discovery
 		discoverCtx, cancel := context.WithTimeout(context.Background(), time.Duration(discovertimeout)*time.Second)
 		defer cancel()
@@ -78,11 +95,11 @@ var discoverCmd = &cobra.Command{
 			_ = spinner.New().
 				Title(fmt.Sprintf("Searching for devices on multicast group %s...", Cfg.MulticastGroup)).
 				Action(func() {
-			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, announceDto)
 				}).
 				Run()
 		} else {
-			foundDevices, discErr = discoverySvc.Discover(discoverCtx, Cfg.ToMulticastDto(false))
+			foundDevices, discErr = discoverySvc.Discover(discoverCtx, announceDto)
 		}
 
 		if discErr != nil && !discoverquiet {

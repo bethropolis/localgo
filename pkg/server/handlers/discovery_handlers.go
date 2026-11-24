@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 
 	"github.com/bethropolis/localgo/pkg/cli"
@@ -101,12 +100,7 @@ func (h *DiscoveryHandler) RegisterHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		ip = r.RemoteAddr
-	}
-
-	device := model.NewDevice(requestDto, net.ParseIP(ip), requestDto.Port, requestDto.Protocol == model.ProtocolTypeHTTPS)
+	device := model.NewDevice(requestDto, httputil.RemoteIP(r), requestDto.Port, requestDto.Protocol == model.ProtocolTypeHTTPS)
 	h.registryService.RegisterDevice(device)
 
 	h.logger.Infof("Received /register request from %s: Alias=%s, Fingerprint=%.8s...", r.RemoteAddr, cli.Sanitize(requestDto.Alias), requestDto.Fingerprint)

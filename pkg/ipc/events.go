@@ -25,6 +25,11 @@ func (s *IPCServer) handleEvents(broker *events.Broker) http.HandlerFunc {
 			return
 		}
 
+		// Subscribe before writing the response headers: a client returns from its request as soon as those arrive,
+		// and an event published in between would be lost while the stream looks healthy.
+		ch, unsubscribe := broker.Subscribe()
+		defer unsubscribe()
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -47,10 +52,6 @@ func (s *IPCServer) handleEvents(broker *events.Broker) http.HandlerFunc {
 				lastID, resume = parsed, true
 			}
 		}
-
-		// Subscribe before replaying so no event is lost in between.
-		ch, unsubscribe := broker.Subscribe()
-		defer unsubscribe()
 
 		if resume {
 			for _, evt := range broker.HistorySince(lastID) {

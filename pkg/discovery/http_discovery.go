@@ -22,9 +22,16 @@ type HTTPDiscoveryConfig struct {
 	RequestTimeout time.Duration
 }
 
+// preProbeTimeout bounds the TCP pre-probe before a register request is sent.
+// Wi-Fi peers on a busy access point routinely take 200-500 ms to accept a
+// connection; a shorter probe hides them from the subnet scan entirely.
+const preProbeTimeout = 1 * time.Second
+
 func DefaultHTTPDiscoveryConfig() *HTTPDiscoveryConfig {
 	return &HTTPDiscoveryConfig{
-		RequestTimeout: 2 * time.Second,
+		// Peers answer slowly on Wi-Fi: a register is TCP + TLS + request, which
+		// is over a second on a network with a few hundred milliseconds of RTT.
+		RequestTimeout: 5 * time.Second,
 	}
 }
 
@@ -48,13 +55,13 @@ func NewHTTPDiscovery(config *HTTPDiscoveryConfig, dto model.RegisterDto, handle
 		Timeout: config.RequestTimeout,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout:   500 * time.Millisecond,
+				Timeout:   preProbeTimeout,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
-			TLSClientConfig: clientTLSConfig(),
+			TLSClientConfig:       clientTLSConfig(),
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   1 * time.Second,
+			TLSHandshakeTimeout:   3 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
@@ -132,7 +139,7 @@ func (hd *HTTPDiscovery) RegisterWithDevice(ctx context.Context, ip net.IP, port
 // tcpPreProbe performs a quick TCP dial to check if a host is reachable.
 func tcpPreProbe(ctx context.Context, ip net.IP, port int) bool {
 	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
-	dialer := net.Dialer{Timeout: 150 * time.Millisecond}
+	dialer := net.Dialer{Timeout: preProbeTimeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return false
